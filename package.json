@@ -1,0 +1,20 @@
+{
+  "name": "chores",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "check-types": "turbo run check-types",
+    "test:ci": "turbo run test:ci --affected"
+  },
+  "devDependencies": {
+    "prettier": "3.9.6",
+    "turbo": "^2.10.13",
+    "typescript": "7.0.2"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24"
+  }
+}
