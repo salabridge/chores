@@ -1,10 +1,10 @@
 {
-  "extends": "$app/tsconfig",
-  "compilerOptions": {
-    "rewriteRelativeImportExtensions": true,
-    "sourceMap": true,
-    "strict": true
-  },
-  "include": ["src"],
-  "exclude": ["src/service-worker.ts"]
+	"extends": "$app/tsconfig",
+	"compilerOptions": {
+		"rewriteRelativeImportExtensions": true,
+		"sourceMap": true,
+		"strict": true
+	},
+	"include": ["src"],
+	"exclude": ["src/service-worker.ts"]
 }
