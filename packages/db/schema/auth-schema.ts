@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { pgSchema, text, timestamp, boolean, index } from 'drizzle-orm/pg-core';
+import { boolean, index, pgSchema, text, timestamp } from 'drizzle-orm/pg-core';
 
 export const neonAuthSchema = pgSchema('neon_auth');
 

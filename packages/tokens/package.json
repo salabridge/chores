@@ -1,25 +1,25 @@
 {
-  "name": "@chores/tokens",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "main": "./dist/tokens.css",
-  "exports": {
-    ".": "./dist/tokens.css",
-    "./css": "./dist/tokens.css",
-    "./tailwind": "./dist/tailwind.css"
-  },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "dev": "node --watch src/build.ts",
-    "build": "node src/build.ts",
-    "test": "vitest run",
-    "test:ci": "vitest run",
-    "lint": "echo 'Add lint script here'"
-  },
-  "devDependencies": {
-    "vitest": "^4.1.8"
-  }
+	"name": "@chores/tokens",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"main": "./dist/tokens.css",
+	"exports": {
+		".": "./dist/tokens.css",
+		"./css": "./dist/tokens.css",
+		"./tailwind": "./dist/tailwind.css"
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"dev": "node --watch src/build.ts",
+		"build": "node src/build.ts",
+		"test": "vitest run",
+		"test:ci": "vitest run",
+		"lint": "echo 'Add lint script here'"
+	},
+	"devDependencies": {
+		"vitest": "^4.1.8"
+	}
 }
