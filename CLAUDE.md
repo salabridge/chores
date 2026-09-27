@@ -10,16 +10,21 @@ this worktree root (`main/`):
 - `pnpm install` — install all workspace dependencies.
 - `pnpm run build` — build all apps/packages via Turborepo (`turbo run build`).
 - `pnpm run dev` — run all apps/packages in dev mode (persistent, uncached).
-- `pnpm run lint` — runs `turbo run lint`, but no workspace currently defines a real
-  `lint` script (`apps/web` has none; `packages/tokens`'s is a stub `echo`), so this is
-  presently a no-op.
+- `pnpm run check` / `pnpm run check:fix` — Biome lint + format + import sorting over
+  the whole repo (report only / apply fixes).
+- `pnpm run lint` / `pnpm run lint:fix` — Biome lint only.
+- `pnpm run format` — Biome format with `--write`.
 - `pnpm run check-types` — runs `turbo run check-types`, but no workspace defines that
-  script either (`apps/web` uses `check`/`svelte-check` instead — see below), so this is
-  also currently a no-op.
+  script (`apps/web` uses `check`/`svelte-check` instead — see below), so this is
+  currently a no-op.
 
-There is no root-level `format` or `test` script yet, even though `prettier` is a root
-devDependency and `apps/web` has real test scripts. To scope a command to a single
-workspace, use Turborepo's filter flag or pnpm's, e.g.:
+**Biome is the only linter/formatter** (no ESLint or Prettier). It's configured once in
+the root [biome.json](biome.json) and run from the root rather than per-workspace through
+Turborepo, so don't add `lint`/`format` scripts to individual packages. It respects
+`.gitignore` files (including nested ones like `apps/web/.gitignore`).
+
+There is no root-level `test` script yet, even though `apps/web` has real test scripts.
+To scope a command to a single workspace, use Turborepo's filter flag or pnpm's, e.g.:
 
 - `turbo run build --filter=web`
 - `pnpm --filter web check` — typecheck `apps/web` (`svelte-kit sync && svelte-check`).

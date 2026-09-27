@@ -1,20 +1,24 @@
 {
-  "name": "chores",
-  "private": true,
-  "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "check-types": "turbo run check-types",
-    "test:ci": "turbo run test:ci --affected"
-  },
-  "devDependencies": {
-    "prettier": "3.9.6",
-    "turbo": "^2.10.13",
-    "typescript": "7.0.2"
-  },
-  "packageManager": "pnpm@11.25.0",
-  "engines": {
-    "node": ">=24"
-  }
+	"name": "chores",
+	"private": true,
+	"scripts": {
+		"build": "turbo run build",
+		"dev": "turbo run dev",
+		"lint": "biome lint .",
+		"lint:fix": "biome lint --write .",
+		"format": "biome format --write .",
+		"check": "biome check .",
+		"check:fix": "biome check --write .",
+		"check-types": "turbo run check-types",
+		"test:ci": "turbo run test:ci --affected"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.14",
+		"turbo": "^2.10.13",
+		"typescript": "7.0.2"
+	},
+	"packageManager": "pnpm@11.25.0",
+	"engines": {
+		"node": ">=24"
+	}
 }

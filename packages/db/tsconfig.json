@@ -1,0 +1,13 @@
+{
+	"include": ["drizzle.config.ts", "schema/*"],
+	"compilerOptions": {
+		"strict": true,
+		"sourceMap": true,
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"skipLibCheck": true,
+		"types": ["@types/node"]
+	}
+}
