@@ -4,15 +4,20 @@
 	"version": "0.1.0",
 	"type": "module",
 	"scripts": {
-		"db:migrate": "drizzle-kit migrate"
+		"db:migrate": "drizzle-kit migrate",
+		"db:generate": "drizzle-kit generate",
+		"test:rls": "node --env-file=.env scripts/rls-smoke.ts"
 	},
 	"exports": {
 		".": "./schema/schema.ts",
 		"./schema": "./schema/schema.ts",
-		"./auth": "./schema/auth-schema.ts"
+		"./auth": "./schema/auth-schema.ts",
+		"./rls": "./src/authenticated-db.ts"
 	},
 	"dependencies": {
-		"drizzle-orm": "catalog:"
+		"@neondatabase/serverless": "^1.1.0",
+		"drizzle-orm": "catalog:",
+		"jose": "^6.2.12"
 	},
 	"devDependencies": {
 		"@types/node": "^26.6.3",

@@ -31,6 +31,7 @@ const db = drizzle(process.env.DATABASE_URL!, { schema });
 | `@chore/db`        | `schema/schema.ts`       | Every table and relation          |
 | `@chore/db/schema` | `schema/schema.ts`       | Same as above                     |
 | `@chore/db/auth`   | `schema/auth-schema.ts`  | Only the Neon Auth tables         |
+| `@chore/db/rls`    | `src/authenticated-db.ts`| `createAuthenticatedDb()` (RLS)   |
 
 The exports point straight at the `.ts` source; there's no build step. This
 works for anything that compiles TypeScript itself (Vite/SvelteKit, `tsx`,
@@ -41,12 +42,17 @@ script that emits to `dist/` and point `exports` there.
 
 - **`schema/auth-schema.ts`**: tables in the `neon_auth` Postgres schema
   (`user`, `session`, `verification`, etc). **Neon Auth owns these tables.**
-  They're defined here only so we can query and join against them with types;
-  don't change them to alter the database.
+  They're defined here only so we can query, join, and reference them with
+  types; don't change them to alter the database. They must match the live
+  schema exactly: ids are `uuid` and column names are camelCase.
 - **`schema/index.ts`**: re-exports the tables *we* own, in the `public`
-  schema. Each table lives in its own `*.table.ts` file.
-- **`schema/schema.ts`**: the entry point. It re-exports both of the above.
-  Consumers and drizzle-kit both read from this file.
+  schema (`households`, `household_members`, `chores`). Each table lives in its
+  own `*.table.ts` file. drizzle-kit reads only this file, so it never tries to
+  create the `neon_auth` tables; FKs into them are still generated.
+- **`schema/rls.ts`**: the `authenticated_backend` role and SQL helpers the
+  RLS policies use.
+- **`schema/schema.ts`**: the entry point for consumers. It re-exports both
+  `auth-schema.ts` and `index.ts`.
 
 ### Adding a table
 
@@ -76,6 +82,64 @@ pnpm exec drizzle-kit studio     # browse the data
 
 `drizzle.config.ts` sets `schemaFilter: ['public']`, so drizzle-kit only
 manages the `public` schema and leaves Neon's `neon_auth` tables alone.
+
+## Row-level security
+
+Every domain table has RLS enabled, with policies for the `authenticated_backend`
+role. Access follows household membership:
+
+| Table               | Read                  | Write                                                           |
+| ------------------- | --------------------- | --------------------------------------------------------------- |
+| `households`        | members (and creator) | anyone can create one (and becomes owner); owners update/delete |
+| `household_members` | members               | owners add/change/remove; anyone can remove themselves          |
+| `chores`            | members               | members; `assigned_to` must also be a member of the household   |
+
+Postgres identifies the user from the verified Neon Auth JWT. Roles and
+functions that drizzle-kit can't manage are in hand-written migrations:
+`0000_rls_prereqs.sql` creates the role and the `app.*` helper functions
+(`app.current_user_id()` reads `sub` from `request.jwt.claims`).
+`0002_rls_grants_and_triggers.sql` adds grants and the trigger that makes a
+household's creator its owner.
+
+**Two connection strings** (see `.env.example`):
+
+- `DATABASE_URL` uses `neondb_owner`, which has `BYPASSRLS`. Use it only for
+  migrations and admin work.
+- `DATABASE_AUTHENTICATED_URL` uses `authenticated_backend`, so RLS applies. Use
+  it for everything a user does. The role is created without a password; on a
+  new branch, set one with the owner connection
+  (`ALTER ROLE authenticated_backend WITH PASSWORD '...'`) and put it in `.env`.
+  Never commit it.
+
+Query as a user with `withAuth`. It verifies the JWT against Neon Auth's JWKS,
+then runs your callback in a transaction with the claims set:
+
+```ts
+import { createAuthenticatedDb } from '@chore/db/rls';
+import { chores } from '@chore/db';
+
+const db = createAuthenticatedDb({
+	connectionString: process.env.DATABASE_AUTHENTICATED_URL!,
+	authUrl: process.env.NEON_AUTH_URL!,
+});
+
+// token: from authClient.token() or the set-auth-jwt header
+const mine = await db.withAuth(token, (tx) => tx.select().from(chores));
+```
+
+With no claims set, `app.current_user_id()` is NULL, so every policy denies
+access.
+
+### Smoke test
+
+```sh
+pnpm run test:rls
+```
+
+This runs against the branch in `.env`, so use a dev branch. It signs up two
+throwaway users through Neon Auth and marks them verified. It then gets real
+JWTs and checks that each policy allows or denies correctly, and that the FKs
+into `neon_auth.user` hold. It deletes everything it created when it finishes.
 
 ## Type checking
 

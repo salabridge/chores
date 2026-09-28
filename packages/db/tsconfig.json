@@ -1,5 +1,5 @@
 {
-	"include": ["drizzle.config.ts", "schema/*"],
+	"include": ["drizzle.config.ts", "schema/*", "src/*", "scripts/*"],
 	"compilerOptions": {
 		"strict": true,
 		"sourceMap": true,
