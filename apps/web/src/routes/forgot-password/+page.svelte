@@ -1,6 +1,6 @@
 <script lang="ts">
-	import shield from '#lib/assets/icons/shield.svg';
-	import { sendSignInCode } from '#lib/auth.remote.js';
+	import key from '#lib/assets/icons/key.svg';
+	import { requestPasswordReset } from '#lib/auth.remote.js';
 	import AuthHeading from '#lib/components/auth/AuthHeading.svelte';
 	import AuthShell from '#lib/components/auth/AuthShell.svelte';
 	import BackLink from '#lib/components/auth/BackLink.svelte';
@@ -8,41 +8,34 @@
 	import IconBadge from '#lib/components/auth/IconBadge.svelte';
 	import SubmitButton from '#lib/components/auth/SubmitButton.svelte';
 	import TextField from '#lib/components/auth/TextField.svelte';
-
-	let { data } = $props();
-
-	// See login/+page.svelte for why the submitted value wins.
-	const redirectTo = $derived(
-		sendSignInCode.fields.redirectTo.value() || data.redirectTo,
-	);
 </script>
 
-<svelte:head><title>Sign in with a code · ChoreLoop</title></svelte:head>
+<svelte:head><title>Reset password · ChoreLoop</title></svelte:head>
 
 <AuthShell>
 	<div class="flex flex-col gap-32">
 		<BackLink href="/login" label="Back to sign in" />
 		<div class="flex flex-col gap-16">
-			<IconBadge src={shield} />
-			<AuthHeading title="Sign in with a code">
-				Enter your email and we'll send you a 6-digit code to sign in with.
+			<IconBadge src={key} />
+			<AuthHeading title="Reset password">
+				Enter the email associated with your account and we'll send you a
+				6-digit verification code.
 			</AuthHeading>
 		</div>
 
-		<form {...sendSignInCode} class="flex flex-col gap-32">
-			<input {...sendSignInCode.fields.redirectTo.as('hidden', redirectTo)} />
+		<form {...requestPasswordReset} class="flex flex-col gap-32">
 			<div class="flex flex-col gap-16">
-				<FormAlert issues={sendSignInCode.fields.issues()} />
+				<FormAlert issues={requestPasswordReset.fields.issues()} />
 				<TextField
-					{...sendSignInCode.fields.email.as('email')}
+					{...requestPasswordReset.fields.email.as('email')}
 					label="Email address"
 					autocomplete="email"
 					placeholder="you@example.com"
 					required
 				/>
 			</div>
-			<SubmitButton pending={sendSignInCode.pending > 0}>
-				Send sign-in code
+			<SubmitButton pending={requestPasswordReset.pending > 0}>
+				Send verification code
 			</SubmitButton>
 		</form>
 	</div>

@@ -1,5 +1,11 @@
 <script lang="ts">
 	import { signIn } from '#lib/auth.remote.js';
+	import AuthHeading from '#lib/components/auth/AuthHeading.svelte';
+	import AuthShell from '#lib/components/auth/AuthShell.svelte';
+	import FormAlert from '#lib/components/auth/FormAlert.svelte';
+	import Logo from '#lib/components/auth/Logo.svelte';
+	import SubmitButton from '#lib/components/auth/SubmitButton.svelte';
+	import TextField from '#lib/components/auth/TextField.svelte';
 
 	let { data } = $props();
 
@@ -10,26 +16,64 @@
 	);
 </script>
 
-<!-- Bare-bones until the real sign-in UI lands (SB-11). -->
-<form {...signIn}>
-	<input {...signIn.fields.redirectTo.as('hidden', redirectTo)} />
-	<label>
-		Email
-		<input {...signIn.fields.email.as('email')} autocomplete="email" required />
-	</label>
-	<label>
-		Password
-		<input
-			{...signIn.fields._password.as('password')}
-			autocomplete="current-password"
-			required
-		/>
-	</label>
-	{#each signIn.fields.allIssues() ?? [] as issue}
-		<p role="alert">{issue.message}</p>
-	{/each}
-	<button type="submit">Sign in</button>
-</form>
+<svelte:head><title>Sign in · ChoreLoop</title></svelte:head>
 
-<p><a href="/login/code">Email me a sign-in code instead</a></p>
-<p>New here? <a href="/signup">Create an account</a></p>
+<AuthShell pinFooter={false}>
+	<div class="flex flex-col gap-32">
+		<Logo />
+		<AuthHeading title="Welcome back">
+			Sign in to keep your household's chores on track.
+		</AuthHeading>
+
+		<form {...signIn} class="flex flex-col gap-32">
+			<input {...signIn.fields.redirectTo.as('hidden', redirectTo)} />
+			<div class="flex flex-col gap-16">
+				{#if data.passwordReset}
+					<FormAlert
+						tone="status"
+						issues={[{ message: 'Password updated. Sign in with your new password.' }]}
+					/>
+				{/if}
+				<FormAlert issues={signIn.fields.issues()} />
+				<TextField
+					{...signIn.fields.email.as('email')}
+					label="Email address"
+					autocomplete="email"
+					placeholder="you@example.com"
+					required
+				/>
+				<TextField
+					{...signIn.fields._password.as('password')}
+					label="Password"
+					autocomplete="current-password"
+					required
+				/>
+				<div class="flex justify-end">
+					<a
+						href="/forgot-password"
+						class="text-[14px] font-semibold text-text-orange"
+					>
+						Forgot?
+					</a>
+				</div>
+			</div>
+			<SubmitButton pending={signIn.pending > 0}>Sign In</SubmitButton>
+		</form>
+
+		<a
+			href="/login/code{data.redirectTo === '/'
+				? ''
+				: `?redirectTo=${encodeURIComponent(data.redirectTo)}`}"
+			class="text-center text-[14px] font-semibold text-text-orange"
+		>
+			Email me a sign-in code instead
+		</a>
+	</div>
+
+	{#snippet footer()}
+		<p>
+			<span class="text-text-secondary">Don't have an account?</span>
+			<a href="/signup" class="font-semibold text-text-orange">Sign up</a>
+		</p>
+	{/snippet}
+</AuthShell>
