@@ -5,6 +5,6 @@ export const variables = defineEnvVars({
 		public: false,
 	},
 	NEON_AUTH_URL: {
-		public: true,
+		public: false,
 	},
 });

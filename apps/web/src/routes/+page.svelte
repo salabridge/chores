@@ -1,21 +1,12 @@
-<script lang='ts'>
-  import { authClient } from '#lib/client.js';
-
-  const session = authClient.useSession();
-  let email = $state('');
-  let otp = $state('');
+<script lang="ts">
+	let { data } = $props();
 </script>
 
-May the forces I fight never win against my spirit.
+<p>May the forces I fight never win against my spirit.</p>
 
-<form onsubmit={async (e) => {
-  e.preventDefault();
-  const { error } = await authClient.emailOtp.verifyEmail({ email, otp });
-  if (error) console.error(error);
-}}>
-  <input type="email" bind:value={email} placeholder="email">
-  <input type="text" bind:value={otp} placeholder="code">
-  <button type="submit">Submit</button>
-</form>
+{#if data.user}
+	<p>Signed in as {data.user.email}. <a href="/account">Account</a></p>
+{:else}
+	<p><a href="/login">Sign in</a> or <a href="/signup">create an account</a></p>
+{/if}
 
-<pre>{JSON.stringify($session)}</pre>
