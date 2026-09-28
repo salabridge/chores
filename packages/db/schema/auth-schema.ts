@@ -1,79 +1,88 @@
 import { relations } from 'drizzle-orm';
-import { boolean, index, pgSchema, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, pgSchema, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
+// Mirrors the tables Neon Auth creates and owns in the `neon_auth` schema.
+// Column names are camelCase in the database, and ids are uuids. Keep this in
+// sync with the live schema; drizzle-kit never migrates it (see drizzle.config.ts).
 export const neonAuthSchema = pgSchema('neon_auth');
 
 export const user = neonAuthSchema.table('user', {
-	id: text('id').primaryKey(),
+	id: uuid('id').primaryKey(),
 	name: text('name').notNull(),
 	email: text('email').notNull().unique(),
-	emailVerified: boolean('email_verified').default(false).notNull(),
+	emailVerified: boolean('emailVerified').default(false).notNull(),
 	image: text('image'),
-	createdAt: timestamp('created_at').defaultNow().notNull(),
-	updatedAt: timestamp('updated_at')
+	createdAt: timestamp('createdAt', { withTimezone: true })
 		.defaultNow()
+		.notNull(),
+	updatedAt: timestamp('updatedAt', { withTimezone: true })
+		.defaultNow()
+		.$onUpdate(() => /* @__PURE__ */ new Date())
+		.notNull(),
+	role: text('role'),
+	banned: boolean('banned'),
+	banReason: text('banReason'),
+	banExpires: timestamp('banExpires', { withTimezone: true }),
+});
+
+export const session = neonAuthSchema.table('session', {
+	id: uuid('id').primaryKey(),
+	expiresAt: timestamp('expiresAt', { withTimezone: true }).notNull(),
+	token: text('token').notNull().unique(),
+	createdAt: timestamp('createdAt', { withTimezone: true })
+		.defaultNow()
+		.notNull(),
+	updatedAt: timestamp('updatedAt', { withTimezone: true })
+		.$onUpdate(() => /* @__PURE__ */ new Date())
+		.notNull(),
+	ipAddress: text('ipAddress'),
+	userAgent: text('userAgent'),
+	userId: uuid('userId')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	impersonatedBy: text('impersonatedBy'),
+	activeOrganizationId: text('activeOrganizationId'),
+});
+
+export const account = neonAuthSchema.table('account', {
+	id: uuid('id').primaryKey(),
+	accountId: text('accountId').notNull(),
+	providerId: text('providerId').notNull(),
+	userId: uuid('userId')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	accessToken: text('accessToken'),
+	refreshToken: text('refreshToken'),
+	idToken: text('idToken'),
+	accessTokenExpiresAt: timestamp('accessTokenExpiresAt', {
+		withTimezone: true,
+	}),
+	refreshTokenExpiresAt: timestamp('refreshTokenExpiresAt', {
+		withTimezone: true,
+	}),
+	scope: text('scope'),
+	password: text('password'),
+	createdAt: timestamp('createdAt', { withTimezone: true })
+		.defaultNow()
+		.notNull(),
+	updatedAt: timestamp('updatedAt', { withTimezone: true })
 		.$onUpdate(() => /* @__PURE__ */ new Date())
 		.notNull(),
 });
 
-export const session = neonAuthSchema.table(
-	'session',
-	{
-		id: text('id').primaryKey(),
-		expiresAt: timestamp('expires_at').notNull(),
-		token: text('token').notNull().unique(),
-		createdAt: timestamp('created_at').defaultNow().notNull(),
-		updatedAt: timestamp('updated_at')
-			.$onUpdate(() => /* @__PURE__ */ new Date())
-			.notNull(),
-		ipAddress: text('ip_address'),
-		userAgent: text('user_agent'),
-		userId: text('user_id')
-			.notNull()
-			.references(() => user.id, { onDelete: 'cascade' }),
-	},
-	(table) => [index('session_userId_idx').on(table.userId)],
-);
-
-export const account = neonAuthSchema.table(
-	'account',
-	{
-		id: text('id').primaryKey(),
-		accountId: text('account_id').notNull(),
-		providerId: text('provider_id').notNull(),
-		userId: text('user_id')
-			.notNull()
-			.references(() => user.id, { onDelete: 'cascade' }),
-		accessToken: text('access_token'),
-		refreshToken: text('refresh_token'),
-		idToken: text('id_token'),
-		accessTokenExpiresAt: timestamp('access_token_expires_at'),
-		refreshTokenExpiresAt: timestamp('refresh_token_expires_at'),
-		scope: text('scope'),
-		password: text('password'),
-		createdAt: timestamp('created_at').defaultNow().notNull(),
-		updatedAt: timestamp('updated_at')
-			.$onUpdate(() => /* @__PURE__ */ new Date())
-			.notNull(),
-	},
-	(table) => [index('account_userId_idx').on(table.userId)],
-);
-
-export const verification = neonAuthSchema.table(
-	'verification',
-	{
-		id: text('id').primaryKey(),
-		identifier: text('identifier').notNull(),
-		value: text('value').notNull(),
-		expiresAt: timestamp('expires_at').notNull(),
-		createdAt: timestamp('created_at').defaultNow().notNull(),
-		updatedAt: timestamp('updated_at')
-			.defaultNow()
-			.$onUpdate(() => /* @__PURE__ */ new Date())
-			.notNull(),
-	},
-	(table) => [index('verification_identifier_idx').on(table.identifier)],
-);
+export const verification = neonAuthSchema.table('verification', {
+	id: uuid('id').primaryKey(),
+	identifier: text('identifier').notNull(),
+	value: text('value').notNull(),
+	expiresAt: timestamp('expiresAt', { withTimezone: true }).notNull(),
+	createdAt: timestamp('createdAt', { withTimezone: true })
+		.defaultNow()
+		.notNull(),
+	updatedAt: timestamp('updatedAt', { withTimezone: true })
+		.defaultNow()
+		.$onUpdate(() => /* @__PURE__ */ new Date())
+		.notNull(),
+});
 
 export const userRelations = relations(user, ({ many }) => ({
 	sessions: many(session),

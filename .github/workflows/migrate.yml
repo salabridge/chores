@@ -1,0 +1,45 @@
+name: Migrate
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to run migrations against
+        required: true
+        type: choice
+        options:
+          - dev
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 24
+
+jobs:
+  migrate:
+    name: Migrate (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter @chore/db
+
+      - name: Migrate
+        run: pnpm --filter @chore/db db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
