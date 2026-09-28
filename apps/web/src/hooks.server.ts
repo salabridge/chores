@@ -1,20 +1,30 @@
-import { svelteKitHandler } from 'better-auth/svelte-kit';
-import { auth } from '#lib/server/auth.js';
-import { building } from '$app/env';
+import type { Handle } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
+import { fetchSession, hasSessionCookie, signInUrl } from '#lib/server/auth.js';
 
-export async function handle({ event, resolve }) {
-	// Fetch current session from Better Auth
-	const session = await auth.api.getSession({
-		headers: event.request.headers,
-	});
+export const handle: Handle = async ({ event, resolve }) => {
+	event.locals.user = null;
+	event.locals.session = null;
 
-	console.info('Session info', session);
-
-	// Make session and user available on server
-	if (session) {
-		event.locals.session = session.session;
-		event.locals.user = session.user;
+	if (hasSessionCookie(event.cookies)) {
+		try {
+			const current = await fetchSession();
+			if (current) {
+				event.locals.user = current.user;
+				event.locals.session = current.session;
+			}
+		} catch (error) {
+			// Treat an unreachable auth server as signed out rather than 500ing
+			// every page.
+			console.error('Could not load session from Neon Auth', error);
+		}
 	}
 
-	return svelteKitHandler({ event, resolve, auth, building });
-}
+	// Guarding here (not in a layout load) also covers `__data.json` requests
+	// and endpoints under the group, which a layout load can be skipped for.
+	if (event.route.id?.startsWith('/(protected)') && !event.locals.user) {
+		redirect(303, signInUrl(event.url));
+	}
+
+	return resolve(event);
+};
