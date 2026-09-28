@@ -4,18 +4,32 @@
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", ".env*"]
+			"inputs": ["$TURBO_DEFAULT$", ".env*"],
+			"env": ["FIGMA_API_TOKEN", "FIGMA_FILE_KEY"],
+			"passThroughEnv": ["DATABASE_URL", "NEON_AUTH_URL"]
 		},
 		"test:ci": {
 			"cache": false,
-			"dependsOn": ["^test:ci"]
+			"dependsOn": ["^test:ci"],
+			"passThroughEnv": [
+				"DATABASE_URL",
+				"DATABASE_AUTHENTICATED_URL",
+				"NEON_AUTH_URL"
+			]
 		},
 		"check-types": {
 			"dependsOn": ["^check-types"]
 		},
 		"dev": {
 			"cache": false,
-			"persistent": true
+			"persistent": true,
+			"passThroughEnv": [
+				"DATABASE_URL",
+				"DATABASE_AUTHENTICATED_URL",
+				"NEON_AUTH_URL",
+				"FIGMA_API_TOKEN",
+				"FIGMA_FILE_KEY"
+			]
 		}
 	}
 }
