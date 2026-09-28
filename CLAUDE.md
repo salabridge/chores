@@ -26,15 +26,25 @@ Turborepo, so don't add `lint`/`format` scripts to individual packages. It respe
 There is no root-level `test` script yet, even though `apps/web` has real test scripts.
 To scope a command to a single workspace, use Turborepo's filter flag or pnpm's, e.g.:
 
-- `turbo run build --filter=web`
-- `pnpm --filter web check` — typecheck `apps/web` (`svelte-kit sync && svelte-check`).
-- `pnpm --filter web test` — run `apps/web`'s vitest (unit + browser) suite, then its
-  Playwright e2e suite (`test:unit` then `test:e2e`).
+- `turbo run build --filter=@chore/web`
+- `pnpm --filter @chore/web check` — typecheck `apps/web` (`svelte-kit sync && svelte-check`).
+- `pnpm --filter @chore/web test:unit` / `test:e2e` — `apps/web`'s vitest (unit + browser)
+  suite / Playwright e2e suite (`test:ci` runs both).
 
 `packages/tokens` fetches live from the Figma REST API on every build, so its
 `build` script requires a `FIGMA_API_TOKEN` env var (Enterprise-org personal
 access token with `file_variables:read`) — see
 [packages/tokens/README.md](packages/tokens/README.md).
+
+## Environment variables
+
+Documented in the root [README.md](README.md#environment-variables): what each var is,
+where to get it from Neon, CI secrets, and preview branches. Secrets live only in
+per-workspace `.env` files (`apps/web/.env`, `packages/db/.env`), which are gitignored;
+`.env.example` files are the committed templates — keep them in sync when adding a var.
+Turborepo runs in strict env mode, so new vars must also be declared in
+[turbo.json](turbo.json) (`env` if they affect build output, else `passThroughEnv`).
+Never commit real connection strings or the Neon Auth `secret_server_key`.
 
 ## Architecture
 
@@ -42,7 +52,7 @@ This is a **Turborepo monorepo** (root scaffolded via `create-turbo`), with task
 orchestration/caching defined in [turbo.json](turbo.json) and workspaces declared in
 [pnpm-workspace.yaml](pnpm-workspace.yaml) (`apps/*` and `packages/*`):
 
-- `apps/web` (`web`) — SvelteKit app (Svelte 5, runes forced project-wide via
+- `apps/web` (`@chore/web`) — SvelteKit app (Svelte 5, runes forced project-wide via
   `compilerOptions.runes` in [vite.config.ts](apps/web/vite.config.ts)), built with Vite,
   Tailwind CSS v4, `adapter-auto`, and SvelteKit's experimental `async`/`remoteFunctions`
   flags enabled. Testing is already wired up: Vitest with two projects (`client` — browser
@@ -59,10 +69,10 @@ Build outputs are cached per-task based on the `inputs`/`outputs` globs in
 [turbo.json](turbo.json) — note `build` currently has no `outputs` glob configured, so
 nothing is actually cached across runs yet.
 
-`apps/web` is still an unmodified SvelteKit starter (the default routes/demo content from
-the SvelteKit CLI) — none of this reflects actual chores-app functionality yet. The root
-[README.md](README.md) also still describes the original `create-turbo` Next.js starter
-layout (docs/web/ui/eslint-config/typescript-config) and hasn't been updated to match.
+`apps/web` has the auth flows (sign-up, sign-in, OTP, password reset, account) built on
+Neon Auth via a server-side relay in `src/lib/server/auth.ts`; there's no household/chore
+UI yet. `packages/db` (`@chore/db`) holds the Drizzle schema, migrations, and RLS — see
+[packages/db/README.md](packages/db/README.md).
 
 ## Repository layout
 
@@ -79,5 +89,4 @@ layout, and `prune-worktrees` for cleaning up worktrees whose branch has already
 
 ## Remote
 
-- `origin` → `git@github.com:salabridge/chores.git` (no commits pushed yet — this
-  Turborepo scaffold has not been committed).
+- `origin` → `git@github.com:salabridge/chores.git`.
