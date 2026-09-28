@@ -7,6 +7,7 @@ import {
 	neonAuth,
 	safeRedirectTarget,
 	sendCode,
+	setPendingCode,
 	verifyUrl,
 } from '#lib/server/auth.js';
 import { form, getRequestEvent, query } from '$app/server';
@@ -45,6 +46,7 @@ export const signUp = form(
 		name: string;
 		email: string;
 		_password: string;
+		terms?: boolean;
 		redirectTo?: string;
 	}) => {
 		const name = String(data.name ?? '').trim();
@@ -52,6 +54,9 @@ export const signUp = form(
 		const password = String(data._password ?? '');
 		if (!name || !email || !password) {
 			invalid('Enter your name, email and a password.');
+		}
+		if (data.terms !== true) {
+			invalid('Agree to the Terms of Service and Privacy Policy to continue.');
 		}
 		const redirectTo = safeRedirectTarget(data.redirectTo);
 
@@ -100,8 +105,9 @@ export const sendSignInCode = form(
 	},
 );
 
-/** Checks the code emailed by `sendCode`. Both purposes end signed in: Neon
- * auto-signs-in after verification, and its cookies are relayed as usual. */
+/** Checks the code emailed by `sendCode`. Sign-in and email verification end
+ * signed in (Neon auto-signs-in after verification, and its cookies are relayed
+ * as usual); a password-reset code moves on to choosing a new password. */
 export const verifyCode = form(
 	'unchecked',
 	async (data: { otp: string; redirectTo?: string }) => {
@@ -112,24 +118,93 @@ export const verifyCode = form(
 		const otp = String(data.otp ?? '').trim();
 		if (!otp) invalid('Enter the code from your email.');
 
-		const { email } = pending;
+		const { email, purpose } = pending;
 		const { error } =
-			pending.purpose === 'sign-in'
+			purpose === 'sign-in'
 				? await neonAuth.signIn.emailOtp({ email, otp })
-				: await neonAuth.emailOtp.verifyEmail({ email, otp });
+				: purpose === 'forget-password'
+					? // Only checks the code; `resetPassword` consumes it.
+						await neonAuth.emailOtp.checkVerificationOtp({
+							email,
+							otp,
+							type: purpose,
+						})
+					: await neonAuth.emailOtp.verifyEmail({ email, otp });
+		if (error) invalid(codeErrorMessage(error.code));
+
+		if (purpose === 'forget-password') {
+			setPendingCode(cookies, { email, purpose, otp });
+			redirect(303, '/reset-password');
+		}
+		clearPendingCode(cookies);
+		redirect(303, safeRedirectTarget(data.redirectTo));
+	},
+);
+
+function codeErrorMessage(code: string | undefined) {
+	switch (code) {
+		case 'TOO_MANY_ATTEMPTS':
+			return 'Too many attempts. Send a new code.';
+		case 'OTP_EXPIRED':
+			return 'That code has expired. Send a new one.';
+		default:
+			return 'That code is not right.';
+	}
+}
+
+/** First step of resetting a forgotten password: email a one-time code. Neon
+ * answers the same whether or not the account exists, so this doesn't reveal
+ * which emails are registered. */
+export const requestPasswordReset = form(
+	'unchecked',
+	async (data: { email: string }) => {
+		const email = String(data.email ?? '').trim();
+		if (!email) invalid('Enter your email.');
+
+		if (await sendCode(email, 'forget-password')) {
+			invalid('Could not send a code to that email.');
+		}
+		redirect(303, '/verify');
+	},
+);
+
+/** Last step of a password reset, once `verifyCode` has checked the code.
+ * Doesn't sign in, so the new password gets used straight away. */
+export const resetPassword = form(
+	'unchecked',
+	async (data: { _password: string }) => {
+		const { cookies } = getRequestEvent();
+		const pending = getPendingCode(cookies);
+		if (pending?.purpose !== 'forget-password' || !pending.otp) {
+			redirect(303, '/forgot-password');
+		}
+
+		const password = String(data._password ?? '');
+		if (!password) invalid('Choose a new password.');
+
+		const { email, otp } = pending;
+		const { error } = await neonAuth.emailOtp.resetPassword({
+			email,
+			otp,
+			password,
+		});
 		if (error) {
-			if (error.code === 'TOO_MANY_ATTEMPTS') {
-				invalid('Too many attempts. Send a new code.');
+			switch (error.code) {
+				case 'PASSWORD_TOO_SHORT':
+					invalid('That password is too short.');
+					break;
+				case 'PASSWORD_TOO_LONG':
+					invalid('That password is too long.');
+					break;
+				default:
+					// The code expired or was used up between checking it and now.
+					clearPendingCode(cookies);
+					invalid(`${codeErrorMessage(error.code)} Start the reset again.`);
 			}
-			invalid(
-				error.code === 'OTP_EXPIRED'
-					? 'That code has expired. Send a new one.'
-					: 'That code is not right.',
-			);
 		}
 
 		clearPendingCode(cookies);
-		redirect(303, safeRedirectTarget(data.redirectTo));
+		redirect(303, '/login?reset=1');
 	},
 );
 

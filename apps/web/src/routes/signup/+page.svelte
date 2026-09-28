@@ -1,5 +1,12 @@
 <script lang="ts">
+	import check from '#lib/assets/icons/check.svg';
 	import { signUp } from '#lib/auth.remote.js';
+	import AuthHeading from '#lib/components/auth/AuthHeading.svelte';
+	import AuthShell from '#lib/components/auth/AuthShell.svelte';
+	import FormAlert from '#lib/components/auth/FormAlert.svelte';
+	import Logo from '#lib/components/auth/Logo.svelte';
+	import SubmitButton from '#lib/components/auth/SubmitButton.svelte';
+	import TextField from '#lib/components/auth/TextField.svelte';
 
 	let { data } = $props();
 
@@ -9,30 +16,73 @@
 	);
 </script>
 
-<!-- Bare-bones until the real sign-in UI lands (SB-11). -->
-<form {...signUp}>
-	<input {...signUp.fields.redirectTo.as('hidden', redirectTo)} />
-	<label>
-		Name
-		<input {...signUp.fields.name.as('text')} autocomplete="name" required />
-	</label>
-	<label>
-		Email
-		<input {...signUp.fields.email.as('email')} autocomplete="email" required />
-	</label>
-	<label>
-		Password
-		<input
-			{...signUp.fields._password.as('password')}
-			autocomplete="new-password"
-			minlength="8"
-			required
-		/>
-	</label>
-	{#each signUp.fields.allIssues() ?? [] as issue}
-		<p role="alert">{issue.message}</p>
-	{/each}
-	<button type="submit">Create account</button>
-</form>
+<svelte:head><title>Create account · ChoreLoop</title></svelte:head>
 
-<p>Already have an account? <a href="/login">Sign in</a></p>
+<AuthShell>
+	<div class="flex flex-col gap-24">
+		<Logo />
+		<AuthHeading title="Create account">
+			Get your household set up and start sharing the chores.
+		</AuthHeading>
+
+		<form {...signUp} class="flex flex-col gap-24">
+			<input {...signUp.fields.redirectTo.as('hidden', redirectTo)} />
+			<div class="flex flex-col gap-14">
+				<FormAlert issues={signUp.fields.issues()} />
+				<TextField
+					{...signUp.fields.name.as('text')}
+					label="Full name"
+					autocomplete="name"
+					placeholder="First and last name"
+					required
+				/>
+				<TextField
+					{...signUp.fields.email.as('email')}
+					label="Email"
+					autocomplete="email"
+					placeholder="you@example.com"
+					required
+				/>
+				<TextField
+					{...signUp.fields._password.as('password')}
+					label="Choose password"
+					autocomplete="new-password"
+					placeholder="At least 8 characters"
+					minlength={8}
+					maxlength={128}
+					required
+				/>
+				<label class="flex items-start gap-10 pt-4 text-[13px] leading-[1.4]">
+					<input
+						{...signUp.fields.terms.as('checkbox')}
+						required
+						class="peer sr-only"
+					/>
+					<span
+						class="flex size-[20px] shrink-0 items-center justify-center rounded-md border-2 border-border-orange bg-surface-accent-orange-subtle peer-focus-visible:ring-2 peer-focus-visible:ring-border-orange/30 peer-checked:[&>img]:visible"
+					>
+						<img src={check} alt="" width="10" height="10" class="invisible" />
+					</span>
+					<span class="text-text-secondary">
+						I agree to the
+						<a href="/terms" class="font-semibold text-text-orange">
+							Terms of Service
+						</a>
+						and
+						<a href="/privacy" class="font-semibold text-text-orange">
+							Privacy Policy
+						</a>
+					</span>
+				</label>
+			</div>
+			<SubmitButton pending={signUp.pending > 0}>Create free account</SubmitButton>
+		</form>
+	</div>
+
+	{#snippet footer()}
+		<p>
+			<span class="text-text-secondary">Already have an account?</span>
+			<a href="/login" class="font-semibold text-text-orange">Sign in</a>
+		</p>
+	{/snippet}
+</AuthShell>

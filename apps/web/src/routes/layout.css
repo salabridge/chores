@@ -1,1 +1,15 @@
 @import "tailwindcss";
+@import "@chores/tokens/tailwind";
+@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/outfit";
+
+@theme {
+	--font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+	--font-display: "Outfit Variable", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+	body {
+		@apply bg-background-base font-sans text-text-primary antialiased;
+	}
+}

@@ -128,17 +128,25 @@ export async function fetchSession(): Promise<{
 	return { user: data.user, session };
 }
 
-/** What an emailed code is for: finishing sign-up or signing in. */
-export type CodePurpose = 'email-verification' | 'sign-in';
+/** What an emailed code is for: finishing sign-up, signing in, or resetting a
+ * forgotten password. */
+export type CodePurpose = 'email-verification' | 'sign-in' | 'forget-password';
+
+const CODE_PURPOSES: readonly string[] = [
+	'email-verification',
+	'sign-in',
+	'forget-password',
+] satisfies CodePurpose[];
+
+/** `otp` is only set once a password-reset code has been checked, since the
+ * reset itself needs it again alongside the new password. */
+export type PendingCode = { email: string; purpose: CodePurpose; otp?: string };
 
 /** Remembers who we just emailed a code to between the send and verify steps,
  * so the address stays out of the URL. */
 const PENDING_CODE = 'pending-code';
 
-export function setPendingCode(
-	cookies: Cookies,
-	pending: { email: string; purpose: CodePurpose },
-) {
+export function setPendingCode(cookies: Cookies, pending: PendingCode) {
 	cookies.set(PENDING_CODE, JSON.stringify(pending), {
 		path: '/',
 		httpOnly: true,
@@ -149,16 +157,13 @@ export function setPendingCode(
 	});
 }
 
-export function getPendingCode(
-	cookies: Cookies,
-): { email: string; purpose: CodePurpose } | null {
+export function getPendingCode(cookies: Cookies): PendingCode | null {
 	try {
-		const { email, purpose } = JSON.parse(cookies.get(PENDING_CODE) ?? '');
-		if (
-			typeof email === 'string' &&
-			(purpose === 'email-verification' || purpose === 'sign-in')
-		) {
-			return { email, purpose };
+		const { email, purpose, otp } = JSON.parse(cookies.get(PENDING_CODE) ?? '');
+		if (typeof email === 'string' && CODE_PURPOSES.includes(purpose)) {
+			return typeof otp === 'string'
+				? { email, purpose, otp }
+				: { email, purpose };
 		}
 	} catch {
 		// Missing or tampered with; treat as no pending code.
