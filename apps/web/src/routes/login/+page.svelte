@@ -5,7 +5,9 @@
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import Logo from '#lib/components/ui/Logo.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
+	import SocialSignIn from '#lib/components/ui/SocialSignIn.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
+	import { SOCIAL_SIGN_IN_ENABLED } from '#lib/config.js';
 
 	let { data } = $props();
 
@@ -59,6 +61,11 @@
 			</div>
 			<PrimaryButton type="submit" pending={signIn.pending > 0}>Sign In</PrimaryButton>
 		</form>
+
+		{#if SOCIAL_SIGN_IN_ENABLED}
+			<!-- TODO(oauth): call signIn.social({ provider, callbackURL: redirectTo }) once providers are enabled. -->
+			<SocialSignIn onchoose={() => {}} />
+		{/if}
 
 		<a
 			href="/login/code{data.redirectTo === '/'
