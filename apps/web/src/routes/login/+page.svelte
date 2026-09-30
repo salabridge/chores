@@ -4,8 +4,8 @@
 	import AuthShell from '#lib/components/auth/AuthShell.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import Logo from '#lib/components/auth/Logo.svelte';
-	import TextField from '#lib/components/auth/TextField.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
+	import TextInput from '#lib/components/ui/TextInput.svelte';
 
 	let { data } = $props();
 
@@ -35,14 +35,14 @@
 					/>
 				{/if}
 				<FormAlert issues={signIn.fields.issues()} />
-				<TextField
+				<TextInput
 					{...signIn.fields.email.as('email')}
 					label="Email address"
 					autocomplete="email"
 					placeholder="you@example.com"
 					required
 				/>
-				<TextField
+				<TextInput
 					{...signIn.fields._password.as('password')}
 					label="Password"
 					autocomplete="current-password"

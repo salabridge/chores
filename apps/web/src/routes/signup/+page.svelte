@@ -5,8 +5,8 @@
 	import AuthShell from '#lib/components/auth/AuthShell.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import Logo from '#lib/components/auth/Logo.svelte';
-	import TextField from '#lib/components/auth/TextField.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
+	import TextInput from '#lib/components/ui/TextInput.svelte';
 
 	let { data } = $props();
 
@@ -29,21 +29,21 @@
 			<input {...signUp.fields.redirectTo.as('hidden', redirectTo)} />
 			<div class="flex flex-col gap-14">
 				<FormAlert issues={signUp.fields.issues()} />
-				<TextField
+				<TextInput
 					{...signUp.fields.name.as('text')}
 					label="Full name"
 					autocomplete="name"
 					placeholder="First and last name"
 					required
 				/>
-				<TextField
+				<TextInput
 					{...signUp.fields.email.as('email')}
 					label="Email"
 					autocomplete="email"
 					placeholder="you@example.com"
 					required
 				/>
-				<TextField
+				<TextInput
 					{...signUp.fields._password.as('password')}
 					label="Choose password"
 					autocomplete="new-password"

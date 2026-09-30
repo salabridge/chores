@@ -6,8 +6,8 @@
 	import BackLink from '#lib/components/auth/BackLink.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import IconBadge from '#lib/components/auth/IconBadge.svelte';
-	import TextField from '#lib/components/auth/TextField.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
+	import TextInput from '#lib/components/ui/TextInput.svelte';
 </script>
 
 <svelte:head><title>Reset password · ChoreLoop</title></svelte:head>
@@ -26,7 +26,7 @@
 		<form {...requestPasswordReset} class="flex flex-col gap-32">
 			<div class="flex flex-col gap-16">
 				<FormAlert issues={requestPasswordReset.fields.issues()} />
-				<TextField
+				<TextInput
 					{...requestPasswordReset.fields.email.as('email')}
 					label="Email address"
 					autocomplete="email"
