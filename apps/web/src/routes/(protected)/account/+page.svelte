@@ -2,7 +2,7 @@
 	import { signOut } from '#lib/auth.remote.js';
 	import AuthHeading from '#lib/components/auth/AuthHeading.svelte';
 	import AuthShell from '#lib/components/auth/AuthShell.svelte';
-	import Logo from '#lib/components/auth/Logo.svelte';
+	import Logo from '#lib/components/ui/Logo.svelte';
 
 	let { data } = $props();
 </script>
