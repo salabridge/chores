@@ -7,7 +7,7 @@
 	import CodeInput from '#lib/components/auth/CodeInput.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import IconBadge from '#lib/components/auth/IconBadge.svelte';
-	import SubmitButton from '#lib/components/auth/SubmitButton.svelte';
+	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 
 	let { data } = $props();
 
@@ -64,7 +64,7 @@
 				label="6-digit code"
 				required
 			/>
-			<SubmitButton pending={verifyCode.pending > 0}>Verify code</SubmitButton>
+			<PrimaryButton type="submit" pending={verifyCode.pending > 0}>Verify code</PrimaryButton>
 		</form>
 	</div>
 

@@ -5,8 +5,8 @@
 	import AuthShell from '#lib/components/auth/AuthShell.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import Logo from '#lib/components/auth/Logo.svelte';
-	import SubmitButton from '#lib/components/auth/SubmitButton.svelte';
 	import TextField from '#lib/components/auth/TextField.svelte';
+	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 
 	let { data } = $props();
 
@@ -75,7 +75,7 @@
 					</span>
 				</label>
 			</div>
-			<SubmitButton pending={signUp.pending > 0}>Create free account</SubmitButton>
+			<PrimaryButton type="submit" pending={signUp.pending > 0}>Create free account</PrimaryButton>
 		</form>
 	</div>
 
