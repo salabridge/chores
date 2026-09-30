@@ -6,8 +6,8 @@
 	import BackLink from '#lib/components/auth/BackLink.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import IconBadge from '#lib/components/auth/IconBadge.svelte';
-	import SubmitButton from '#lib/components/auth/SubmitButton.svelte';
 	import TextField from '#lib/components/auth/TextField.svelte';
+	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 
 	let { data } = $props();
 
@@ -41,9 +41,9 @@
 					required
 				/>
 			</div>
-			<SubmitButton pending={sendSignInCode.pending > 0}>
+			<PrimaryButton type="submit" pending={sendSignInCode.pending > 0}>
 				Send sign-in code
-			</SubmitButton>
+			</PrimaryButton>
 		</form>
 	</div>
 </AuthShell>

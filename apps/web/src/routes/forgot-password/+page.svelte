@@ -6,8 +6,8 @@
 	import BackLink from '#lib/components/auth/BackLink.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import IconBadge from '#lib/components/auth/IconBadge.svelte';
-	import SubmitButton from '#lib/components/auth/SubmitButton.svelte';
 	import TextField from '#lib/components/auth/TextField.svelte';
+	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 </script>
 
 <svelte:head><title>Reset password · ChoreLoop</title></svelte:head>
@@ -34,9 +34,9 @@
 					required
 				/>
 			</div>
-			<SubmitButton pending={requestPasswordReset.pending > 0}>
+			<PrimaryButton type="submit" pending={requestPasswordReset.pending > 0}>
 				Send verification code
-			</SubmitButton>
+			</PrimaryButton>
 		</form>
 	</div>
 </AuthShell>

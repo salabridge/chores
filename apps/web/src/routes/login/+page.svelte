@@ -4,8 +4,8 @@
 	import AuthShell from '#lib/components/auth/AuthShell.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import Logo from '#lib/components/auth/Logo.svelte';
-	import SubmitButton from '#lib/components/auth/SubmitButton.svelte';
 	import TextField from '#lib/components/auth/TextField.svelte';
+	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 
 	let { data } = $props();
 
@@ -57,7 +57,7 @@
 					</a>
 				</div>
 			</div>
-			<SubmitButton pending={signIn.pending > 0}>Sign In</SubmitButton>
+			<PrimaryButton type="submit" pending={signIn.pending > 0}>Sign In</PrimaryButton>
 		</form>
 
 		<a

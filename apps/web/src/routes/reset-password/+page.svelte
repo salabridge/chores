@@ -6,8 +6,8 @@
 	import BackLink from '#lib/components/auth/BackLink.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import IconBadge from '#lib/components/auth/IconBadge.svelte';
-	import SubmitButton from '#lib/components/auth/SubmitButton.svelte';
 	import TextField from '#lib/components/auth/TextField.svelte';
+	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 
 	let { data } = $props();
 </script>
@@ -47,9 +47,9 @@
 					required
 				/>
 			</div>
-			<SubmitButton pending={resetPassword.pending > 0}>
+			<PrimaryButton type="submit" pending={resetPassword.pending > 0}>
 				Update password
-			</SubmitButton>
+			</PrimaryButton>
 		</form>
 	</div>
 </AuthShell>
