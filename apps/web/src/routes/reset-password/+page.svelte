@@ -6,8 +6,8 @@
 	import BackLink from '#lib/components/auth/BackLink.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import IconBadge from '#lib/components/auth/IconBadge.svelte';
-	import TextField from '#lib/components/auth/TextField.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
+	import TextInput from '#lib/components/ui/TextInput.svelte';
 
 	let { data } = $props();
 </script>
@@ -37,7 +37,7 @@
 			/>
 			<div class="flex flex-col gap-16">
 				<FormAlert issues={resetPassword.fields.issues()} />
-				<TextField
+				<TextInput
 					{...resetPassword.fields._password.as('password')}
 					label="New password"
 					autocomplete="new-password"
