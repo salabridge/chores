@@ -1,0 +1,73 @@
+name: Chromatic
+
+# Publishes apps/web's Storybook to Chromatic and runs visual tests. PR runs
+# post a Storybook link and UI Tests / UI Review checks through the Chromatic
+# GitHub app. Pushes to main auto-accept, which keeps the baselines current.
+on:
+  pull_request:
+    paths:
+      - apps/web/**
+      - packages/tokens/**
+      - pnpm-lock.yaml
+      - .github/workflows/chromatic.yml
+  push:
+    branches: [main]
+    paths:
+      - apps/web/**
+      - packages/tokens/**
+      - pnpm-lock.yaml
+      - .github/workflows/chromatic.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: 24
+
+jobs:
+  chromatic:
+    name: Chromatic
+    # Fork PRs don't get repository secrets, so CHROMATIC_PROJECT_TOKEN would be empty.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # TurboSnap walks git history to find the baseline build.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Storybook imports packages/tokens/dist through src/routes/layout.css.
+      - name: Build tokens
+        run: pnpm --filter @chores/tokens build
+
+      - name: Publish to Chromatic
+        uses: chromaui/action@v18
+        with:
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          workingDir: apps/web
+          buildScriptName: build-storybook
+          # TurboSnap: only snapshot stories whose dependency graph changed.
+          onlyChanged: true
+          # Token CSS reaches stories through Tailwind's @import, which the
+          # bundler stats can't trace, so a token or static-file change
+          # re-snapshots everything.
+          externals: |
+            packages/tokens/**
+            apps/web/static/**
+          # Visual diffs are review items in UI Review, not CI failures.
+          exitZeroOnChanges: true
+          autoAcceptChanges: main

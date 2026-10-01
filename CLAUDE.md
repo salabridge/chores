@@ -75,8 +75,10 @@ and also depends on upstream `build`, so `pnpm run dev` generates `packages/toke
 (`pnpm --filter @chore/web dev`) skips that, so build `@chores/tokens` first in a fresh
 worktree.
 Build outputs are cached per-task based on the `inputs`/`outputs` globs in
-[turbo.json](turbo.json) — note `build` currently has no `outputs` glob configured, so
-nothing is actually cached across runs yet.
+[turbo.json](turbo.json). The root `build` task declares no `outputs`, so a cache hit
+replays logs but restores no files. Any package whose build output others consume needs
+a package-level `turbo.json` declaring `outputs`, as
+[packages/tokens/turbo.json](packages/tokens/turbo.json) does for `dist/**`.
 
 `apps/web` has the auth flows (sign-up, sign-in, OTP, password reset, account) built on
 Neon Auth via a server-side relay in `src/lib/server/auth.ts`; there's no household/chore

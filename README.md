@@ -107,6 +107,24 @@ workflow (`.github/workflows/migrate.yml`) runs by hand against the `dev` or
 `production` environment, and each environment holds that branch's
 `DATABASE_URL` secret. The PR workflow runs only Biome and needs no secrets.
 
+The **Chromatic** workflow (`.github/workflows/chromatic.yml`) publishes the
+`apps/web` Storybook to [Chromatic](https://www.chromatic.com/) and runs its
+visual tests. It runs on PRs and on pushes to `main` that touch `apps/web`,
+`packages/tokens`, or the lockfile. It needs one repository secret,
+`CHROMATIC_PROJECT_TOKEN`, which is the project token from the Chromatic
+project's **Manage → Configure** page. Fork PRs don't get the secret, so the
+job skips them.
+
+- TurboSnap (`onlyChanged`) snapshots only the stories whose dependencies
+  changed. A change under `packages/tokens/` or `apps/web/static/`
+  re-snapshots everything, because the bundler can't trace those files.
+- Visual changes don't fail the job (`exitZeroOnChanges`). They show up as the
+  **UI Tests** and **UI Review** checks on the PR, alongside a link to the
+  published Storybook. The Chromatic GitHub app posts both, so it needs to be
+  installed on the repo.
+- Pushes to `main` auto-accept their snapshots, so `main` always holds the
+  baselines.
+
 Turborepo runs in strict env mode, so a task sees only the variables declared
 for it in `turbo.json`. If you add a variable, declare it there as well. Use
 `env` when the variable changes the build output, and `passThroughEnv` when
