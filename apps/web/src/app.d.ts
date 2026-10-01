@@ -10,7 +10,10 @@ declare global {
 			user: SessionUser | null;
 			session: SessionInfo | null;
 		}
-		// interface PageData {}
+		interface PageData {
+			/** Set true from a route load to hide the mobile bottom tab nav. */
+			hideNav?: boolean;
+		}
 		// interface PageState {}
 		// interface Platform {}
 	}
