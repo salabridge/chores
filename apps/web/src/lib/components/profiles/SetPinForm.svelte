@@ -15,6 +15,11 @@
 	} = $props();
 
 	let pin = $state('');
+	// The PIN pad owns the value (bound below), so drop the one in the spread.
+	const pinField = $derived.by(() => {
+		const { value: _value, ...rest } = savePin.fields._pin.as('password');
+		return rest;
+	});
 </script>
 
 <form
@@ -30,7 +35,7 @@
 >
 	<FormAlert issues={savePin.fields.issues()} />
 	<PinPad
-		{...savePin.fields._pin.as('password')}
+		{...pinField}
 		label="New PIN (4 to 6 digits)"
 		bind:value={pin}
 	/>

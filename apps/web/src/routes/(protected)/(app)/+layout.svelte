@@ -18,7 +18,7 @@
 		: '0px'}
 >
 	{#if data.activeKid}
-		<KidModeBar name={data.activeKid.name} />
+		<KidModeBar name={data.activeKid.name} locked={data.activeKid.pinLocked} />
 	{/if}
 	<main class="flex flex-1 flex-col">
 		{@render children()}

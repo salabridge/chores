@@ -57,7 +57,7 @@ async function seed() {
 async function signIn(page: Page) {
 	await page.goto('/login');
 	await page.getByLabel('Email address').fill(email as string);
-	await page.getByLabel('Password').fill(password as string);
+	await page.getByLabel('Password', { exact: true }).fill(password as string);
 	await page.getByRole('button', { name: 'Sign In' }).click();
 	await expect(page).toHaveURL(/\/profiles$/);
 }
@@ -127,13 +127,13 @@ test.describe('managed kid profiles', () => {
 
 		// A wrong PIN fails and keeps the kid profile.
 		await openSwitchDialog(page);
-		await page.getByLabel('Parent PIN', { exact: true }).fill('0000');
+		await page.getByLabel('Enter PIN').fill('0000');
 		await page.getByRole('button', { name: 'Switch profile' }).last().click();
 		await expect(page.getByRole('alert')).toContainText('not right');
 		await expect(page.getByTestId('kid-mode-bar')).toBeVisible();
 
 		// The right PIN returns to the parent's picker.
-		await page.getByLabel('Parent PIN', { exact: true }).fill(PIN);
+		await page.getByLabel('Enter PIN').fill(PIN);
 		await page.getByRole('button', { name: 'Switch profile' }).last().click();
 		await expect(page).toHaveURL(/\/profiles$/);
 		await page.goto('/account');
@@ -177,7 +177,7 @@ test.describe('managed kid profiles', () => {
 			where member_id = ${parentId}`;
 
 		await openSwitchDialog(page);
-		await page.getByLabel('Parent PIN', { exact: true }).fill('0000');
+		await page.getByLabel('Enter PIN').fill('0000');
 		await page.getByRole('button', { name: 'Switch profile' }).last().click();
 		await expect(page.getByLabel('Account password').first()).toBeVisible();
 
@@ -187,8 +187,8 @@ test.describe('managed kid profiles', () => {
 			.first()
 			.fill(password as string);
 		await page.getByRole('button', { name: 'Unlock' }).click();
-		await expect(page.getByLabel('Parent PIN', { exact: true })).toBeVisible();
-		await page.getByLabel('Parent PIN', { exact: true }).fill(PIN);
+		await expect(page.getByLabel('Enter PIN')).toBeVisible();
+		await page.getByLabel('Enter PIN').fill(PIN);
 		await page.getByRole('button', { name: 'Switch profile' }).last().click();
 		await expect(page).toHaveURL(/\/profiles$/);
 	});

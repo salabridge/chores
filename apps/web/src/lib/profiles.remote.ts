@@ -10,18 +10,11 @@ import {
 	type MemberSummary,
 } from '#lib/server/profile-state.js';
 import { getMember, setActiveMember } from '#lib/server/profiles.js';
-import { form, query } from '$app/server';
+import { form } from '$app/server';
 
 // Remote functions for managed kid profiles (SB-51). The member id a client
 // sends is only ever a *request*: it is checked against rows the server loads
 // itself (`canOpenKidProfile`) before it can become the active profile.
-
-/** What the PIN pad needs: whether the PIN is locked, so it can ask for the account password. */
-export const getPinStatus = query(async () => {
-	const { actor } = await requireProfile();
-	const pin = await pinStore.get(actor.id);
-	return { hasPin: pin !== null, locked: pin?.lockedAt != null };
-});
 
 /** Resolves a requested kid id to a member the signed-in parent may open, or 403s. */
 async function openableKid(actor: MemberSummary, memberId: unknown) {

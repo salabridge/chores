@@ -4,7 +4,7 @@
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import ParentPinDialog from './ParentPinDialog.svelte';
 
-	let { name }: { name: string } = $props();
+	let { name, locked = false }: { name: string; locked?: boolean } = $props();
 
 	let pinOpen = $state(false);
 
@@ -41,4 +41,4 @@
 	<SecondaryButton onclick={() => (pinOpen = true)}>Switch profile</SecondaryButton>
 </div>
 
-<ParentPinDialog bind:open={pinOpen} memberName={name} />
+<ParentPinDialog bind:open={pinOpen} memberName={name} {locked} />

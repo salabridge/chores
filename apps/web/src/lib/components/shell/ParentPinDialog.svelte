@@ -5,25 +5,28 @@
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
-	import {
-		getPinStatus,
-		leaveKidProfile,
-		unlockPin,
-	} from '#lib/profiles.remote.js';
+	import { leaveKidProfile, unlockPin } from '#lib/profiles.remote.js';
+	import { invalidateAll } from '$app/navigation';
 
 	let {
 		open = $bindable(false),
 		memberName,
+		locked = false,
 	}: {
 		open?: boolean;
 		/** The kid whose profile is open, named in the prompt. */
 		memberName: string;
+		/** The PIN is locked; only the account password unlocks it. */
+		locked?: boolean;
 	} = $props();
 
 	let dialog: HTMLDialogElement | undefined = $state();
 	let pin = $state('');
-	const status = getPinStatus();
-	const locked = $derived(status.current?.locked ?? false);
+	// The PIN pad owns the value (bound below), so drop the one in the spread.
+	const pinField = $derived.by(() => {
+		const { value: _value, ...rest } = leaveKidProfile.fields._pin.as('password');
+		return rest;
+	});
 
 	$effect(() => {
 		if (!dialog) return;
@@ -52,7 +55,7 @@
 			<form
 				{...unlockPin.enhance(async (form) => {
 					if (await form.submit()) form.element.reset();
-					await status.refresh();
+					await invalidateAll();
 				})}
 				class="flex flex-col gap-16"
 			>
@@ -78,17 +81,19 @@
 		{:else}
 			<form
 				{...leaveKidProfile.enhance(async (form) => {
-					await form.submit();
-					pin = '';
-					await status.refresh();
+					// A success redirects away; refreshing then would race that navigation.
+					if (!(await form.submit())) {
+						pin = '';
+						await invalidateAll();
+					}
 				})}
 				class="flex flex-col gap-16"
 			>
 				<input {...leaveKidProfile.fields.target.as('hidden', 'parent')} />
 				<FormAlert issues={leaveKidProfile.fields.issues()} />
 				<PinPad
-					{...leaveKidProfile.fields._pin.as('password')}
-					label="Parent PIN"
+					{...pinField}
+					label="Enter PIN"
 					bind:value={pin}
 				/>
 				<PrimaryButton type="submit" pending={leaveKidProfile.pending > 0}>
@@ -105,7 +110,7 @@
 				<p class="text-text-secondary">
 					Choose a new PIN with your account password.
 				</p>
-				<SetPinForm requirePassword onsaved={() => status.refresh()} />
+				<SetPinForm requirePassword onsaved={() => invalidateAll()} />
 			</div>
 		</details>
 

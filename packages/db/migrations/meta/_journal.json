@@ -50,6 +50,13 @@
 			"when": 1790886832331,
 			"tag": "0006_chore_types_points_frequency_stages",
 			"breakpoints": true
+		},
+		{
+			"idx": 7,
+			"version": "7",
+			"when": 1790887359521,
+			"tag": "0007_kid_profile_pin_lock_device_profiles",
+			"breakpoints": true
 		}
 	]
 }
