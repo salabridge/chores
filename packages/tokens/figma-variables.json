@@ -1,0 +1,687 @@
+{
+	"variables": {
+		"VariableID:13:1613": {
+			"id": "VariableID:13:1613",
+			"name": "color/accent/34d399",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.2039, "g": 0.8275, "b": 0.6, "a": 1 },
+				"13:1": { "r": 0.4012, "g": 0.8702, "b": 0.6991, "a": 1 }
+			}
+		},
+		"VariableID:13:1611": {
+			"id": "VariableID:13:1611",
+			"name": "color/accent/60a5fa",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.3765, "g": 0.6471, "b": 0.9804, "a": 1 },
+				"13:1": { "r": 0.5734, "g": 0.7585, "b": 0.9866, "a": 1 }
+			}
+		},
+		"VariableID:13:1604": {
+			"id": "VariableID:13:1604",
+			"name": "color/accent/amber",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9608, "g": 0.6196, "b": 0.0431, "a": 1 },
+				"13:1": { "r": 0.9843, "g": 0.749, "b": 0.1412, "a": 1 }
+			}
+		},
+		"VariableID:13:1595": {
+			"id": "VariableID:13:1595",
+			"name": "color/accent/blue",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.2314, "g": 0.5098, "b": 0.9647, "a": 1 },
+				"13:1": { "r": 0.3765, "g": 0.6471, "b": 0.9804, "a": 1 }
+			}
+		},
+		"VariableID:13:1612": {
+			"id": "VariableID:13:1612",
+			"name": "color/accent/f472b6",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9569, "g": 0.4471, "b": 0.7137, "a": 1 },
+				"13:1": { "r": 0.3775, "g": 0.0825, "b": 0.2368, "a": 1 }
+			}
+		},
+		"VariableID:13:1614": {
+			"id": "VariableID:13:1614",
+			"name": "color/accent/fb7185",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9843, "g": 0.4431, "b": 0.5216, "a": 1 },
+				"13:1": { "r": 0.393, "g": 0.067, "b": 0.1142, "a": 1 }
+			}
+		},
+		"VariableID:13:1603": {
+			"id": "VariableID:13:1603",
+			"name": "color/accent/green",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.0627, "g": 0.7255, "b": 0.5059, "a": 1 },
+				"13:1": { "r": 0.2039, "g": 0.8275, "b": 0.6, "a": 1 }
+			}
+		},
+		"VariableID:13:1584": {
+			"id": "VariableID:13:1584",
+			"name": "color/accent/orange",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9765, "g": 0.451, "b": 0.0863, "a": 1 },
+				"13:1": { "r": 0.9843, "g": 0.5725, "b": 0.2353, "a": 1 }
+			}
+		},
+		"VariableID:13:1592": {
+			"id": "VariableID:13:1592",
+			"name": "color/accent/primary",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.1176, "g": 0.1608, "b": 0.2314, "a": 1 },
+				"13:1": { "r": 0.9725, "g": 0.9804, "b": 0.9882, "a": 1 }
+			}
+		},
+		"VariableID:78:5": {
+			"id": "VariableID:78:5",
+			"name": "color/accent/red",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.937, "g": 0.267, "b": 0.267, "a": 1 },
+				"13:1": { "r": 0.969, "g": 0.416, "b": 0.416, "a": 1 }
+			}
+		},
+		"VariableID:13:1564": {
+			"id": "VariableID:13:1564",
+			"name": "color/background/base",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9804, "g": 0.9765, "b": 0.9647, "a": 1 },
+				"13:1": { "r": 0.0431, "g": 0.0706, "b": 0.1255, "a": 1 }
+			}
+		},
+		"VariableID:13:1608": {
+			"id": "VariableID:13:1608",
+			"name": "color/background/orange",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9765, "g": 0.451, "b": 0.0863, "a": 1 },
+				"13:1": { "r": 0.9843, "g": 0.5725, "b": 0.2353, "a": 1 }
+			}
+		},
+		"VariableID:78:7": {
+			"id": "VariableID:78:7",
+			"name": "color/background/red",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.937, "g": 0.267, "b": 0.267, "a": 1 },
+				"13:1": { "r": 0.969, "g": 0.416, "b": 0.416, "a": 1 }
+			}
+		},
+		"VariableID:13:1582": {
+			"id": "VariableID:13:1582",
+			"name": "color/border/amber",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9608, "g": 0.6196, "b": 0.0431, "a": 1 },
+				"13:1": { "r": 0.9843, "g": 0.749, "b": 0.1412, "a": 1 }
+			}
+		},
+		"VariableID:13:1589": {
+			"id": "VariableID:13:1589",
+			"name": "color/border/blue",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.2314, "g": 0.5098, "b": 0.9647, "a": 1 },
+				"13:1": { "r": 0.3765, "g": 0.6471, "b": 0.9804, "a": 1 }
+			}
+		},
+		"VariableID:13:1590": {
+			"id": "VariableID:13:1590",
+			"name": "color/border/default",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 1, "g": 1, "b": 1, "a": 1 },
+				"13:1": { "r": 0.0667, "g": 0.0941, "b": 0.1529, "a": 1 }
+			}
+		},
+		"VariableID:13:1607": {
+			"id": "VariableID:13:1607",
+			"name": "color/border/fdba74",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9922, "g": 0.7294, "b": 0.4549, "a": 1 },
+				"13:1": { "r": 0.3976, "g": 0.2337, "b": 0.0624, "a": 1 }
+			}
+		},
+		"VariableID:13:1598": {
+			"id": "VariableID:13:1598",
+			"name": "color/border/green",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.0627, "g": 0.7255, "b": 0.5059, "a": 1 },
+				"13:1": { "r": 0.2039, "g": 0.8275, "b": 0.6, "a": 1 }
+			}
+		},
+		"VariableID:13:1600": {
+			"id": "VariableID:13:1600",
+			"name": "color/border/muted",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.5804, "g": 0.6392, "b": 0.7216, "a": 1 },
+				"13:1": { "r": 0.6588, "g": 0.702, "b": 0.7686, "a": 1 }
+			}
+		},
+		"VariableID:13:1574": {
+			"id": "VariableID:13:1574",
+			"name": "color/border/orange",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9765, "g": 0.451, "b": 0.0863, "a": 1 },
+				"13:1": { "r": 0.9843, "g": 0.5725, "b": 0.2353, "a": 1 }
+			}
+		},
+		"VariableID:13:1602": {
+			"id": "VariableID:13:1602",
+			"name": "color/border/primary",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.1176, "g": 0.1608, "b": 0.2314, "a": 1 },
+				"13:1": { "r": 0.9725, "g": 0.9804, "b": 0.9882, "a": 1 }
+			}
+		},
+		"VariableID:78:3": {
+			"id": "VariableID:78:3",
+			"name": "color/border/red",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.937, "g": 0.267, "b": 0.267, "a": 1 },
+				"13:1": { "r": 0.969, "g": 0.416, "b": 0.416, "a": 1 }
+			}
+		},
+		"VariableID:13:1616": {
+			"id": "VariableID:13:1616",
+			"name": "color/border/secondary",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.3922, "g": 0.4549, "b": 0.5451, "a": 1 },
+				"13:1": { "r": 0.7961, "g": 0.8353, "b": 0.8824, "a": 1 }
+			}
+		},
+		"VariableID:13:1565": {
+			"id": "VariableID:13:1565",
+			"name": "color/border/subtle",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.8863, "g": 0.9098, "b": 0.9412, "a": 1 },
+				"13:1": { "r": 0.2, "g": 0.2549, "b": 0.3333, "a": 1 }
+			}
+		},
+		"VariableID:13:1610": {
+			"id": "VariableID:13:1610",
+			"name": "color/icon-accent/amber",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9608, "g": 0.6196, "b": 0.0431, "a": 1 },
+				"13:1": { "r": 0.9843, "g": 0.749, "b": 0.1412, "a": 1 }
+			}
+		},
+		"VariableID:13:1621": {
+			"id": "VariableID:13:1621",
+			"name": "color/icon-accent/blue",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.2314, "g": 0.5098, "b": 0.9647, "a": 1 },
+				"13:1": { "r": 0.3765, "g": 0.6471, "b": 0.9804, "a": 1 }
+			}
+		},
+		"VariableID:13:1619": {
+			"id": "VariableID:13:1619",
+			"name": "color/icon-accent/green",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.0627, "g": 0.7255, "b": 0.5059, "a": 1 },
+				"13:1": { "r": 0.2039, "g": 0.8275, "b": 0.6, "a": 1 }
+			}
+		},
+		"VariableID:13:1620": {
+			"id": "VariableID:13:1620",
+			"name": "color/icon-accent/orange",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9765, "g": 0.451, "b": 0.0863, "a": 1 },
+				"13:1": { "r": 0.9843, "g": 0.5725, "b": 0.2353, "a": 1 }
+			}
+		},
+		"VariableID:13:1571": {
+			"id": "VariableID:13:1571",
+			"name": "color/icon-accent/primary",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.1176, "g": 0.1608, "b": 0.2314, "a": 1 },
+				"13:1": { "r": 0.9725, "g": 0.9804, "b": 0.9882, "a": 1 }
+			}
+		},
+		"VariableID:78:6": {
+			"id": "VariableID:78:6",
+			"name": "color/icon-accent/red",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.937, "g": 0.267, "b": 0.267, "a": 1 },
+				"13:1": { "r": 0.969, "g": 0.416, "b": 0.416, "a": 1 }
+			}
+		},
+		"VariableID:13:1609": {
+			"id": "VariableID:13:1609",
+			"name": "color/icon/default",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 1, "g": 1, "b": 1, "a": 1 },
+				"13:1": { "r": 0.0667, "g": 0.0941, "b": 0.1529, "a": 1 }
+			}
+		},
+		"VariableID:13:1618": {
+			"id": "VariableID:13:1618",
+			"name": "color/neutral/muted",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.5804, "g": 0.6392, "b": 0.7216, "a": 1 },
+				"13:1": { "r": 0.6588, "g": 0.702, "b": 0.7686, "a": 1 }
+			}
+		},
+		"VariableID:13:1581": {
+			"id": "VariableID:13:1581",
+			"name": "color/surface-accent/amber-subtle",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9961, "g": 0.9529, "b": 0.7804, "a": 1 },
+				"13:1": { "r": 0.1765, "g": 0.1412, "b": 0.0627, "a": 1 }
+			}
+		},
+		"VariableID:13:1587": {
+			"id": "VariableID:13:1587",
+			"name": "color/surface-accent/base",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9804, "g": 0.9765, "b": 0.9647, "a": 1 },
+				"13:1": { "r": 0.0431, "g": 0.0706, "b": 0.1255, "a": 1 }
+			}
+		},
+		"VariableID:13:1588": {
+			"id": "VariableID:13:1588",
+			"name": "color/surface-accent/blue-subtle",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9373, "g": 0.9647, "b": 1, "a": 1 },
+				"13:1": { "r": 0.0627, "g": 0.1255, "b": 0.2275, "a": 1 }
+			}
+		},
+		"VariableID:13:1597": {
+			"id": "VariableID:13:1597",
+			"name": "color/surface-accent/green-subtle",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9255, "g": 0.9922, "b": 0.9608, "a": 1 },
+				"13:1": { "r": 0.051, "g": 0.1647, "b": 0.1333, "a": 1 }
+			}
+		},
+		"VariableID:13:1573": {
+			"id": "VariableID:13:1573",
+			"name": "color/surface-accent/orange-subtle",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 1, "g": 0.9686, "b": 0.9294, "a": 1 },
+				"13:1": { "r": 0.1647, "g": 0.0902, "b": 0.0627, "a": 1 }
+			}
+		},
+		"VariableID:78:2": {
+			"id": "VariableID:78:2",
+			"name": "color/surface-accent/red-subtle",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.996, "g": 0.929, "b": 0.933, "a": 1 },
+				"13:1": { "r": 0.176, "g": 0.055, "b": 0.071, "a": 1 }
+			}
+		},
+		"VariableID:13:1605": {
+			"id": "VariableID:13:1605",
+			"name": "color/surface-accent/subtle",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.8863, "g": 0.9098, "b": 0.9412, "a": 1 },
+				"13:1": { "r": 0.2, "g": 0.2549, "b": 0.3333, "a": 1 }
+			}
+		},
+		"VariableID:13:1577": {
+			"id": "VariableID:13:1577",
+			"name": "color/surface/default",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 1, "g": 1, "b": 1, "a": 1 },
+				"13:1": { "r": 0.0667, "g": 0.0941, "b": 0.1529, "a": 1 }
+			}
+		},
+		"VariableID:13:1583": {
+			"id": "VariableID:13:1583",
+			"name": "color/text/amber",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9608, "g": 0.6196, "b": 0.0431, "a": 1 },
+				"13:1": { "r": 0.9843, "g": 0.749, "b": 0.1412, "a": 1 }
+			}
+		},
+		"VariableID:13:1596": {
+			"id": "VariableID:13:1596",
+			"name": "color/text/blue",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.2314, "g": 0.5098, "b": 0.9647, "a": 1 },
+				"13:1": { "r": 0.3765, "g": 0.6471, "b": 0.9804, "a": 1 }
+			}
+		},
+		"VariableID:13:1585": {
+			"id": "VariableID:13:1585",
+			"name": "color/text/default",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 1, "g": 1, "b": 1, "a": 1 },
+				"13:1": { "r": 0.0667, "g": 0.0941, "b": 0.1529, "a": 1 }
+			}
+		},
+		"VariableID:13:1615": {
+			"id": "VariableID:13:1615",
+			"name": "color/text/ffedd5",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 1, "g": 0.9294, "b": 0.8353, "a": 1 },
+				"13:1": { "r": 0.28, "g": 0.1771, "b": 0.04, "a": 1 }
+			}
+		},
+		"VariableID:13:1599": {
+			"id": "VariableID:13:1599",
+			"name": "color/text/green",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.0627, "g": 0.7255, "b": 0.5059, "a": 1 },
+				"13:1": { "r": 0.2039, "g": 0.8275, "b": 0.6, "a": 1 }
+			}
+		},
+		"VariableID:13:1601": {
+			"id": "VariableID:13:1601",
+			"name": "color/text/muted",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.5804, "g": 0.6392, "b": 0.7216, "a": 1 },
+				"13:1": { "r": 0.6588, "g": 0.702, "b": 0.7686, "a": 1 }
+			}
+		},
+		"VariableID:13:1580": {
+			"id": "VariableID:13:1580",
+			"name": "color/text/orange",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.9765, "g": 0.451, "b": 0.0863, "a": 1 },
+				"13:1": { "r": 0.9843, "g": 0.5725, "b": 0.2353, "a": 1 }
+			}
+		},
+		"VariableID:13:1569": {
+			"id": "VariableID:13:1569",
+			"name": "color/text/primary",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.1176, "g": 0.1608, "b": 0.2314, "a": 1 },
+				"13:1": { "r": 0.9725, "g": 0.9804, "b": 0.9882, "a": 1 }
+			}
+		},
+		"VariableID:78:4": {
+			"id": "VariableID:78:4",
+			"name": "color/text/red",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.863, "g": 0.149, "b": 0.149, "a": 1 },
+				"13:1": { "r": 0.988, "g": 0.451, "b": 0.451, "a": 1 }
+			}
+		},
+		"VariableID:13:1575": {
+			"id": "VariableID:13:1575",
+			"name": "color/text/secondary",
+			"variableCollectionId": "VariableCollectionId:13:2",
+			"resolvedType": "COLOR",
+			"valuesByMode": {
+				"13:0": { "r": 0.3922, "g": 0.4549, "b": 0.5451, "a": 1 },
+				"13:1": { "r": 0.7961, "g": 0.8353, "b": 0.8824, "a": 1 }
+			}
+		},
+		"VariableID:13:1566": {
+			"id": "VariableID:13:1566",
+			"name": "spacing/0",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 0 }
+		},
+		"VariableID:13:1578": {
+			"id": "VariableID:13:1578",
+			"name": "spacing/10",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 10 }
+		},
+		"VariableID:13:1572": {
+			"id": "VariableID:13:1572",
+			"name": "spacing/12",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 12 }
+		},
+		"VariableID:13:1606": {
+			"id": "VariableID:13:1606",
+			"name": "spacing/14",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 14 }
+		},
+		"VariableID:13:1576": {
+			"id": "VariableID:13:1576",
+			"name": "spacing/16",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 16 }
+		},
+		"VariableID:13:1586": {
+			"id": "VariableID:13:1586",
+			"name": "spacing/2",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 2 }
+		},
+		"VariableID:13:1593": {
+			"id": "VariableID:13:1593",
+			"name": "spacing/20",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 20 }
+		},
+		"VariableID:13:1591": {
+			"id": "VariableID:13:1591",
+			"name": "spacing/21",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 21 }
+		},
+		"VariableID:13:1567": {
+			"id": "VariableID:13:1567",
+			"name": "spacing/24",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 24 }
+		},
+		"VariableID:13:1568": {
+			"id": "VariableID:13:1568",
+			"name": "spacing/32",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 32 }
+		},
+		"VariableID:13:1579": {
+			"id": "VariableID:13:1579",
+			"name": "spacing/4",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 4 }
+		},
+		"VariableID:13:1617": {
+			"id": "VariableID:13:1617",
+			"name": "spacing/40",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 40 }
+		},
+		"VariableID:13:1594": {
+			"id": "VariableID:13:1594",
+			"name": "spacing/6",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 6 }
+		},
+		"VariableID:13:1570": {
+			"id": "VariableID:13:1570",
+			"name": "spacing/8",
+			"variableCollectionId": "VariableCollectionId:13:3",
+			"resolvedType": "FLOAT",
+			"valuesByMode": { "13:2": 8 }
+		}
+	},
+	"variableCollections": {
+		"VariableCollectionId:13:2": {
+			"id": "VariableCollectionId:13:2",
+			"name": "Chore Tracker · Theme",
+			"modes": [
+				{ "modeId": "13:0", "name": "Light" },
+				{ "modeId": "13:1", "name": "Dark" }
+			],
+			"defaultModeId": "13:0",
+			"variableIds": [
+				"VariableID:13:1564",
+				"VariableID:13:1565",
+				"VariableID:13:1569",
+				"VariableID:13:1571",
+				"VariableID:13:1573",
+				"VariableID:13:1574",
+				"VariableID:13:1575",
+				"VariableID:13:1577",
+				"VariableID:13:1580",
+				"VariableID:13:1581",
+				"VariableID:13:1582",
+				"VariableID:13:1583",
+				"VariableID:13:1584",
+				"VariableID:13:1585",
+				"VariableID:13:1587",
+				"VariableID:13:1588",
+				"VariableID:13:1589",
+				"VariableID:13:1590",
+				"VariableID:13:1592",
+				"VariableID:13:1595",
+				"VariableID:13:1596",
+				"VariableID:13:1597",
+				"VariableID:13:1598",
+				"VariableID:13:1599",
+				"VariableID:13:1600",
+				"VariableID:13:1601",
+				"VariableID:13:1602",
+				"VariableID:13:1603",
+				"VariableID:13:1604",
+				"VariableID:13:1605",
+				"VariableID:13:1607",
+				"VariableID:13:1608",
+				"VariableID:13:1609",
+				"VariableID:13:1610",
+				"VariableID:13:1611",
+				"VariableID:13:1612",
+				"VariableID:13:1613",
+				"VariableID:13:1614",
+				"VariableID:13:1615",
+				"VariableID:13:1616",
+				"VariableID:13:1618",
+				"VariableID:13:1619",
+				"VariableID:13:1620",
+				"VariableID:13:1621",
+				"VariableID:78:2",
+				"VariableID:78:3",
+				"VariableID:78:4",
+				"VariableID:78:5",
+				"VariableID:78:6",
+				"VariableID:78:7"
+			]
+		},
+		"VariableCollectionId:13:3": {
+			"id": "VariableCollectionId:13:3",
+			"name": "Chore Tracker · Spacing",
+			"modes": [{ "modeId": "13:2", "name": "Base" }],
+			"defaultModeId": "13:2",
+			"variableIds": [
+				"VariableID:13:1566",
+				"VariableID:13:1567",
+				"VariableID:13:1568",
+				"VariableID:13:1570",
+				"VariableID:13:1572",
+				"VariableID:13:1576",
+				"VariableID:13:1578",
+				"VariableID:13:1579",
+				"VariableID:13:1586",
+				"VariableID:13:1591",
+				"VariableID:13:1593",
+				"VariableID:13:1594",
+				"VariableID:13:1606",
+				"VariableID:13:1617"
+			]
+		}
+	}
+}

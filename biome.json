@@ -8,7 +8,8 @@
 		"defaultBranch": "main"
 	},
 	"files": {
-		"ignoreUnknown": false
+		"ignoreUnknown": false,
+		"includes": ["**", "!**/*.figma.js"]
 	},
 	"formatter": {
 		"enabled": true,

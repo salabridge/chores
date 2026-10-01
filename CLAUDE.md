@@ -31,9 +31,12 @@ To scope a command to a single workspace, use Turborepo's filter flag or pnpm's,
 - `pnpm --filter @chore/web test:unit` / `test:e2e` — `apps/web`'s vitest (unit + browser)
   suite / Playwright e2e suite (`test:ci` runs both).
 
-`packages/tokens` fetches live from the Figma REST API on every build, so its
-`build` script requires a `FIGMA_API_TOKEN` env var (Enterprise-org personal
-access token with `file_variables:read`) — see
+`packages/tokens` builds from `figma-variables.json`, a committed snapshot of the
+Figma file's variables, so its `build` needs no secrets. The Figma REST API is
+Enterprise-only and the project isn't on Enterprise. To pick up design changes,
+re-export the snapshot through the Figma MCP (`use_figma` with
+`scripts/export-variables.figma.js`). If `FIGMA_API_TOKEN` is set, the build
+fetches live from Figma instead. See
 [packages/tokens/README.md](packages/tokens/README.md).
 
 ## Environment variables

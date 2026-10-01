@@ -41,18 +41,45 @@ build time.
 
 ## Updating tokens
 
-There's nothing to hand-edit — every `pnpm build` pulls the current values
-straight from Figma's [local variables REST
-endpoint](https://developers.figma.com/docs/rest-api/variables/) and
-regenerates `dist/tokens.css` from scratch. To pick up a design change, just
-rebuild.
+`pnpm build` regenerates `dist/` from
+[`figma-variables.json`](figma-variables.json), a committed snapshot of the
+Figma file's variables. It's in the same shape as the `meta` of Figma's [local
+variables REST endpoint](https://developers.figma.com/docs/rest-api/variables/).
+That endpoint only works on Enterprise plans, so the build doesn't need it or
+any secrets. Turborepo hashes the snapshot as a build input, so changing it
+rebuilds the tokens.
 
-This requires:
+### Refreshing the snapshot from Figma
 
-- `FIGMA_API_TOKEN` — a personal access token with the `file_variables:read`
-  scope. This endpoint is Enterprise-org only, so the token must belong to a
-  full seat on an Enterprise org with access to the file.
-- `FIGMA_FILE_KEY` — optional, defaults to the `Chores` file
+After a design change in Figma, re-export the variables through the Figma MCP
+server, which works on any plan:
+
+1. Ask Claude Code to run
+   [`scripts/export-variables.figma.js`](scripts/export-variables.figma.js)
+   with the Figma MCP's `use_figma` tool on file `xWedurFoYbsD1iw9WW9wii`.
+   The script is Figma Plugin API code with a top-level `return`, not a Node
+   script, so Biome ignores `*.figma.js`.
+2. Save the returned JSON over `figma-variables.json`, then format and
+   rebuild:
+
+   ```sh
+   pnpm exec biome format --write packages/tokens/figma-variables.json
+   pnpm --filter @chores/tokens build
+   ```
+
+3. Review the `figma-variables.json` diff and commit it.
+
+`use_figma` responses are cut off at about 20KB. The export rounds values and
+fits easily today, at about 64 variables. If it starts coming back truncated,
+export one collection per call and merge the results.
+
+### Building from the live API (Enterprise only)
+
+If `FIGMA_API_TOKEN` is set, the build skips the snapshot and fetches live:
+
+- `FIGMA_API_TOKEN`: a personal access token with the
+  `file_variables:read` scope, from a full seat on an Enterprise org.
+- `FIGMA_FILE_KEY`: optional. It defaults to the `Chores` file
   (`xWedurFoYbsD1iw9WW9wii`).
 
 ```sh
@@ -64,4 +91,4 @@ CSS variable names are derived mechanically from each Figma variable's path
 been given a semantic name in Figma (still auto-named after its own hex
 value, e.g. `color/accent/60a5fa`) will generate an equally unhelpful CSS
 variable name. Fix those by renaming the variable in Figma, not in this
-package — there's no static file here to patch anymore.
+package. Hand edits to `figma-variables.json` are lost on the next export.
