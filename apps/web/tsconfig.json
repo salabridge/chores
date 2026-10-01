@@ -3,6 +3,7 @@
 	"compilerOptions": {
 		"rewriteRelativeImportExtensions": true,
 		"sourceMap": true,
+		"skipLibCheck": true,
 		"strict": true
 	}
 }
