@@ -20,6 +20,13 @@ Shared components live in `src/lib/components/`, grouped by area (`ui/`, `auth/`
   (gitignored).
 
 Both need `packages/tokens/dist`, so build `@chores/tokens` first in a fresh worktree.
+
+CI publishes this Storybook to Chromatic on every PR that touches `apps/web` or
+`packages/tokens` (`.github/workflows/chromatic.yml`; see the root README's CI section).
+The PR gets a Storybook link and UI Tests / UI Review checks. Visual diffs don't fail CI;
+accept or deny them in Chromatic's UI Review. Since every story is a snapshot, a story
+that renders nondeterministic output, such as the current date or random data, shows up
+as a change on every build. Pass fixed values through `args` instead.
 Config is in [.storybook/](.storybook/): `preview.ts` imports `src/routes/layout.css`
 (Tailwind, tokens, fonts) and adds a **Theme** toolbar that sets `data-theme` on `<html>`,
 so check stories in both light and dark.
