@@ -13,7 +13,8 @@
 		".": "./schema/schema.ts",
 		"./schema": "./schema/schema.ts",
 		"./auth": "./schema/auth-schema.ts",
-		"./rls": "./src/authenticated-db.ts"
+		"./rls": "./src/authenticated-db.ts",
+		"./recurrence": "./src/recurrence.ts"
 	},
 	"dependencies": {
 		"@neondatabase/serverless": "^1.1.0",

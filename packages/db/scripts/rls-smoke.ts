@@ -6,13 +6,15 @@
  *   pnpm --filter @chore/db test:rls
  *
  * Needs DATABASE_URL (owner, for setup/cleanup), DATABASE_AUTHENTICATED_URL,
- * and NEON_AUTH_URL in packages/db/.env. It signs up three throwaway users,
+ * and NEON_AUTH_URL in packages/db/.env. It signs up four throwaway users,
  * marks them verified with the owner connection (the branch requires email
  * verification), fetches a JWT for each, exercises the policies through
  * withAuth(), and deletes everything it created at the end.
  *
  * Cast: Alice creates a household (owner) and a managed kid, Mia, with no
- * login. She invites Bob as a parent and Carol as a kid; both accept.
+ * login. She invites Bob as a parent and Carol as a kid; both accept. They
+ * set up chores with stages, and Carol works through today's instance. Dave
+ * signs up but never joins.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -21,6 +23,9 @@ import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import { user } from '../schema/auth-schema.ts';
 import {
+	choreInstances,
+	choreStageProgress,
+	choreStages,
 	chores,
 	householdInvites,
 	householdMemberPins,
@@ -37,6 +42,7 @@ import {
 	NotHouseholdParentError,
 	requireHouseholdParent,
 } from '../src/authenticated-db.ts';
+import { addDays, chorePeriodStart, localDate } from '../src/recurrence.ts';
 
 const { DATABASE_URL, DATABASE_AUTHENTICATED_URL, NEON_AUTH_URL } = process.env;
 if (!DATABASE_URL || !DATABASE_AUTHENTICATED_URL || !NEON_AUTH_URL) {
@@ -227,6 +233,11 @@ try {
 		return c;
 	});
 	ok('creates a chore assigned to Mia by member id');
+	assert.equal(chore.type, 'personal');
+	assert.equal(chore.points, 10);
+	assert.equal(chore.frequency, 'daily');
+	assert.equal(chore.dueTime, null);
+	ok('a new chore defaults to personal, 10 points, daily, no due time');
 
 	await expectRejected(
 		'assigning a chore to a member id outside the household',
@@ -624,6 +635,305 @@ try {
 		'parents act for managed kids; not for kids with a login; kids only as themselves',
 	);
 
+	console.log('Chore stages:');
+	const stages = await authed.withAuth(alice.token, async (tx) => {
+		await tx
+			.update(chores)
+			.set({ points: 20, dueTime: '20:00', description: 'Blue bags only' })
+			.where(eq(chores.id, chore.id));
+		return tx
+			.insert(choreStages)
+			.values(
+				['Collect bins', 'Tie bags', 'Take to curb'].map((title, i) => ({
+					householdId: household.id,
+					choreId: chore.id,
+					position: i + 1,
+					title,
+					points: 5,
+				})),
+			)
+			.returning();
+	});
+	assert.equal(stages.length, 3);
+	const [updatedChore] = await authed.withAuth(carol.token, (tx) =>
+		tx.select().from(chores).where(eq(chores.id, chore.id)),
+	);
+	assert.equal(updatedChore.points, 20);
+	assert.equal(updatedChore.dueTime, '20:00:00');
+	ok('Alice sets points and a due time and adds 3 stages');
+	const [stageEdit] = await authed.withAuth(bob.token, (tx) =>
+		tx
+			.update(choreStages)
+			.set({ hint: 'Check the bathroom too' })
+			.where(eq(choreStages.id, stages[0].id))
+			.returning(),
+	);
+	assert.equal(stageEdit.hint, 'Check the bathroom too');
+	ok('Bob (parent) edits a stage hint');
+	const dishes = await authed.withAuth(bob.token, async (tx) => {
+		const [c] = await tx
+			.insert(chores)
+			.values({
+				householdId: household.id,
+				title: 'Dishes',
+				type: 'rotation',
+				points: 15,
+				frequency: 'weekly',
+				dueLabel: 'after dinner',
+			})
+			.returning();
+		const [s] = await tx
+			.insert(choreStages)
+			.values({
+				householdId: household.id,
+				choreId: c.id,
+				position: 1,
+				title: 'Load the dishwasher',
+			})
+			.returning();
+		return { chore: c, stage: s };
+	});
+	assert.equal(dishes.chore.type, 'rotation');
+	assert.equal(dishes.chore.dueLabel, 'after dinner');
+	ok('Bob creates a weekly rotation chore with a stage');
+
+	const carolStages = await authed.withAuth(carol.token, (tx) =>
+		tx.select().from(choreStages),
+	);
+	assert.equal(carolStages.length, 4);
+	ok('Carol (kid) reads every stage in the household');
+	await expectRejected(
+		'Carol adding a stage',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx.insert(choreStages).values({
+					householdId: household.id,
+					choreId: chore.id,
+					position: 4,
+					title: 'Kid stage',
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectNoRows('Carol editing a stage', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.update(choreStages)
+				.set({ points: 100 })
+				.where(eq(choreStages.id, stages[0].id))
+				.returning(),
+		),
+	);
+	await expectNoRows('Carol deleting a stage', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.delete(choreStages)
+				.where(eq(choreStages.id, stages[0].id))
+				.returning(),
+		),
+	);
+	await expectRejected(
+		'two stages at the same position',
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx.insert(choreStages).values({
+					householdId: household.id,
+					choreId: chore.id,
+					position: 2,
+					title: 'Duplicate',
+				}),
+			),
+		/chore_stages_chore_id_position_key/,
+	);
+	await expectRejected(
+		'negative chore points',
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx.update(chores).set({ points: -5 }).where(eq(chores.id, chore.id)),
+			),
+		/chores_points_check/,
+	);
+	await expectRejected(
+		'a stage whose household differs from its chore (composite FK)',
+		() =>
+			admin.insert(choreStages).values({
+				householdId: randomUUID(),
+				choreId: chore.id,
+				position: 9,
+				title: 'Wrong house',
+			}),
+		/foreign key/,
+	);
+
+	console.log('Chore instances and stage progress:');
+	const today = chorePeriodStart('daily', localDate('America/Los_Angeles'));
+	assert.ok(today);
+	const [instance] = await authed.withAuth(carol.token, (tx) =>
+		tx
+			.insert(choreInstances)
+			.values({
+				householdId: household.id,
+				choreId: chore.id,
+				periodStart: today,
+				assignedMemberId: carolMemberId,
+			})
+			.onConflictDoNothing()
+			.returning(),
+	);
+	assert.equal(instance.periodStart, today);
+	ok("Carol (kid) starts today's instance of her chore");
+	const again = await authed.withAuth(bob.token, (tx) =>
+		tx
+			.insert(choreInstances)
+			.values({
+				householdId: household.id,
+				choreId: chore.id,
+				periodStart: today,
+			})
+			.onConflictDoNothing()
+			.returning(),
+	);
+	assert.equal(again.length, 0);
+	ok('a second instance for the same period is a no-op (one per period)');
+	await expectNoRows('Carol reassigning the instance', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.update(choreInstances)
+				.set({ assignedMemberId: mia.id })
+				.where(eq(choreInstances.id, instance.id))
+				.returning(),
+		),
+	);
+	await expectNoRows('Carol deleting the instance', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.delete(choreInstances)
+				.where(eq(choreInstances.id, instance.id))
+				.returning(),
+		),
+	);
+
+	const progress = (stageId: string, memberId: string) => ({
+		instanceId: instance.id,
+		stageId,
+		choreId: chore.id,
+		householdId: household.id,
+		completedByMemberId: memberId,
+	});
+	await authed.withAuth(carol.token, (tx) =>
+		tx.insert(choreStageProgress).values(progress(stages[0].id, carolMemberId)),
+	);
+	ok('Carol checks off stage 1 as herself');
+	await expectRejected(
+		'Carol checking off a stage as Mia',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx.insert(choreStageProgress).values(progress(stages[1].id, mia.id)),
+			),
+		RLS_DENIED,
+	);
+	await authed.withAuth(bob.token, (tx) =>
+		tx.insert(choreStageProgress).values(progress(stages[1].id, mia.id)),
+	);
+	ok('Bob (parent) checks off stage 2 for Mia (managed kid)');
+	await expectNoRows("Carol unchecking Mia's stage", () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.delete(choreStageProgress)
+				.where(eq(choreStageProgress.stageId, stages[1].id))
+				.returning(),
+		),
+	);
+	const unchecked = await authed.withAuth(carol.token, (tx) =>
+		tx
+			.delete(choreStageProgress)
+			.where(eq(choreStageProgress.stageId, stages[0].id))
+			.returning(),
+	);
+	assert.equal(unchecked.length, 1);
+	await authed.withAuth(carol.token, (tx) =>
+		tx.insert(choreStageProgress).values(progress(stages[0].id, carolMemberId)),
+	);
+	ok('Carol unchecks and re-checks her own stage');
+	const done = await authed.withAuth(carol.token, (tx) =>
+		tx
+			.select()
+			.from(choreStageProgress)
+			.where(eq(choreStageProgress.instanceId, instance.id)),
+	);
+	assert.equal(done.length, 2);
+	ok('Carol sees 2 of 3 stages done this period');
+	await expectRejected(
+		"progress on another chore's stage (composite FK)",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx
+					.insert(choreStageProgress)
+					.values(progress(dishes.stage.id, aliceMember.id)),
+			),
+		/chore_stage_progress_stage_fk/,
+	);
+
+	const tomorrow = await authed.withAuth(alice.token, async (tx) => {
+		const [i] = await tx
+			.insert(choreInstances)
+			.values({
+				householdId: household.id,
+				choreId: chore.id,
+				periodStart: addDays(today, 1),
+				assignedMemberId: carolMemberId,
+			})
+			.returning();
+		return tx
+			.select()
+			.from(choreStageProgress)
+			.where(eq(choreStageProgress.instanceId, i.id));
+	});
+	assert.equal(tomorrow.length, 0);
+	ok("the next period's instance starts with no stages done (reset)");
+
+	console.log('Dave (not a member):');
+	const dave = await makeUser('dave');
+	created.push(dave.id);
+	const daveSees = await authed.withAuth(dave.token, async (tx) => ({
+		stages: await tx.select().from(choreStages),
+		instances: await tx.select().from(choreInstances),
+		progress: await tx.select().from(choreStageProgress),
+	}));
+	assert.deepEqual(
+		[
+			daveSees.stages.length,
+			daveSees.instances.length,
+			daveSees.progress.length,
+		],
+		[0, 0, 0],
+	);
+	ok('sees no stages, instances, or stage progress');
+	await expectRejected(
+		"starting an instance of the household's chore",
+		() =>
+			authed.withAuth(dave.token, (tx) =>
+				tx.insert(choreInstances).values({
+					householdId: household.id,
+					choreId: dishes.chore.id,
+					periodStart: today,
+				}),
+			),
+		RLS_DENIED,
+	);
+
+	console.log('Deleting a chore:');
+	const removedChore = await authed.withAuth(alice.token, (tx) =>
+		tx.delete(chores).where(eq(chores.id, dishes.chore.id)).returning(),
+	);
+	assert.equal(removedChore.length, 1);
+	const leftover = await admin
+		.select()
+		.from(choreStages)
+		.where(eq(choreStages.choreId, dishes.chore.id));
+	assert.equal(leftover.length, 0);
+	ok('Alice deletes a chore and its stages go with it (cascade)');
+
 	console.log('PINs:');
 	await authed.withAuth(bob.token, (tx) =>
 		tx
@@ -700,10 +1010,21 @@ try {
 			`select (select count(*)::int from chores) as chores,
 				(select count(*)::int from household_members) as members,
 				(select count(*)::int from household_member_pins) as pins,
-				(select count(*)::int from household_invites) as invites`,
+				(select count(*)::int from household_invites) as invites,
+				(select count(*)::int from chore_stages) as stages,
+				(select count(*)::int from chore_instances) as instances,
+				(select count(*)::int from chore_stage_progress) as progress`,
 		);
-		assert.deepEqual(rows[0], { chores: 0, members: 0, pins: 0, invites: 0 });
-		ok('the RLS role with no JWT claims sees 0 chores, members, PINs, invites');
+		assert.deepEqual(rows[0], {
+			chores: 0,
+			members: 0,
+			pins: 0,
+			invites: 0,
+			stages: 0,
+			instances: 0,
+			progress: 0,
+		});
+		ok('the RLS role with no JWT claims sees 0 rows in every domain table');
 	} finally {
 		await noClaimsPool.end();
 	}

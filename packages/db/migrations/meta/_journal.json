@@ -43,6 +43,13 @@
 			"when": 1790873146232,
 			"tag": "0005_rls_grants_invites_triggers",
 			"breakpoints": true
+		},
+		{
+			"idx": 6,
+			"version": "7",
+			"when": 1790886832331,
+			"tag": "0006_chore_types_points_frequency_stages",
+			"breakpoints": true
 		}
 	]
 }
