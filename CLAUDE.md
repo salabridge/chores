@@ -30,6 +30,8 @@ To scope a command to a single workspace, use Turborepo's filter flag or pnpm's,
 - `pnpm --filter @chore/web check` — typecheck `apps/web` (`svelte-kit sync && svelte-check`).
 - `pnpm --filter @chore/web test:unit` / `test:e2e` — `apps/web`'s vitest (unit + browser)
   suite / Playwright e2e suite (`test:ci` runs both).
+- `pnpm --filter @chore/web storybook` — Storybook for `apps/web` components. Every
+  component needs a `*.stories.svelte` entry; see [apps/web/CLAUDE.md](apps/web/CLAUDE.md).
 
 `packages/tokens` builds from `figma-variables.json`, a committed snapshot of the
 Figma file's variables, so its `build` needs no secrets. The Figma REST API is
