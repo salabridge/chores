@@ -6,6 +6,7 @@
 	"scripts": {
 		"db:migrate": "drizzle-kit migrate",
 		"db:generate": "drizzle-kit generate",
+		"test:unit": "node --test \"src/**/*.test.ts\"",
 		"test:rls": "node --env-file=.env scripts/rls-smoke.ts"
 	},
 	"exports": {

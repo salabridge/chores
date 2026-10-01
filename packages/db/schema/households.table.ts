@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import { pgPolicy, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.ts';
 import { chores } from './chores.table.ts';
+import { householdInvites } from './household-invites.table.ts';
 import { householdMembers } from './household-members.table.ts';
 import {
 	backendRole,
@@ -60,4 +61,5 @@ export const householdsRelations = relations(households, ({ one, many }) => ({
 	creator: one(user, { fields: [households.createdBy], references: [user.id] }),
 	members: many(householdMembers),
 	chores: many(chores),
+	invites: many(householdInvites),
 }));

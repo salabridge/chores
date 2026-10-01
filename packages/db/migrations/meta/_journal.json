@@ -22,6 +22,27 @@
 			"when": 1790564776933,
 			"tag": "0002_rls_grants_and_triggers",
 			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "7",
+			"when": 1790873036187,
+			"tag": "0003_member_rls_helpers",
+			"breakpoints": true
+		},
+		{
+			"idx": 4,
+			"version": "7",
+			"when": 1790873050187,
+			"tag": "0004_member_profiles_roles_invites",
+			"breakpoints": true
+		},
+		{
+			"idx": 5,
+			"version": "7",
+			"when": 1790873146232,
+			"tag": "0005_rls_grants_invites_triggers",
+			"breakpoints": true
 		}
 	]
 }

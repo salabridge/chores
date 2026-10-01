@@ -1,23 +1,42 @@
 /**
- * End-to-end check of the FKs into neon_auth and the RLS policies, using real
- * Neon Auth sessions (not the owner role). Run against a dev branch only:
+ * End-to-end check of the FKs, the RLS policies, and the member/role helpers,
+ * using real Neon Auth sessions (not the owner role). Run against a dev branch
+ * only:
  *
  *   pnpm --filter @chore/db test:rls
  *
  * Needs DATABASE_URL (owner, for setup/cleanup), DATABASE_AUTHENTICATED_URL,
- * and NEON_AUTH_URL in packages/db/.env. It signs up two throwaway users, marks
- * them verified with the owner connection (the branch requires email
+ * and NEON_AUTH_URL in packages/db/.env. It signs up three throwaway users,
+ * marks them verified with the owner connection (the branch requires email
  * verification), fetches a JWT for each, exercises the policies through
  * withAuth(), and deletes everything it created at the end.
+ *
+ * Cast: Alice creates a household (owner) and a managed kid, Mia, with no
+ * login. She invites Bob as a parent and Carol as a kid; both accept.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Pool } from '@neondatabase/serverless';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import { user } from '../schema/auth-schema.ts';
-import { chores, householdMembers, households } from '../schema/index.ts';
-import { createAuthenticatedDb } from '../src/authenticated-db.ts';
+import {
+	chores,
+	householdInvites,
+	householdMemberPins,
+	householdMembers,
+	households,
+} from '../schema/index.ts';
+import {
+	acceptHouseholdInvite,
+	canActAsMember,
+	createAuthenticatedDb,
+	createInviteToken,
+	currentMemberId,
+	isHouseholdParent,
+	NotHouseholdParentError,
+	requireHouseholdParent,
+} from '../src/authenticated-db.ts';
 
 const { DATABASE_URL, DATABASE_AUTHENTICATED_URL, NEON_AUTH_URL } = process.env;
 if (!DATABASE_URL || !DATABASE_AUTHENTICATED_URL || !NEON_AUTH_URL) {
@@ -80,21 +99,55 @@ async function makeUser(label: string) {
 	return { id: row.id, email, token };
 }
 
-async function expectRejected(label: string, fn: () => Promise<unknown>) {
-	await assert.rejects(fn, Error, `${label} should have been rejected`);
+/** The message of an error or of what it wraps (drizzle wraps pg errors). */
+function messages(err: unknown): string {
+	const parts: string[] = [];
+	let e: unknown = err;
+	while (e instanceof Error) {
+		parts.push(e.message);
+		e = e.cause;
+	}
+	return parts.join(' <- ');
+}
+
+async function expectRejected(
+	label: string,
+	fn: () => Promise<unknown>,
+	pattern?: RegExp,
+) {
+	await assert.rejects(
+		fn,
+		(err) => {
+			if (pattern && !pattern.test(messages(err))) {
+				throw new Error(`${label}: unexpected error: ${messages(err)}`);
+			}
+			return true;
+		},
+		`${label} should have been rejected`,
+	);
 	console.log(`  ok  ${label} (rejected)`);
+}
+
+/** For UPDATE/DELETE, where RLS hides the rows rather than raising. */
+async function expectNoRows(label: string, fn: () => Promise<unknown[]>) {
+	const rows = await fn();
+	assert.equal(rows.length, 0, `${label} should have affected 0 rows`);
+	console.log(`  ok  ${label} (0 rows)`);
 }
 
 function ok(label: string) {
 	console.log(`  ok  ${label}`);
 }
 
+const RLS_DENIED = /row-level security/;
+
 const created: string[] = [];
 try {
 	console.log('Creating users via Neon Auth...');
 	const alice = await makeUser('alice');
 	const bob = await makeUser('bob');
-	created.push(alice.id, bob.id);
+	const carol = await makeUser('carol');
+	created.push(alice.id, bob.id, carol.id);
 
 	const claims = await authed.verify(alice.token);
 	assert.equal(claims.sub, alice.id);
@@ -111,14 +164,56 @@ try {
 	assert.equal(household.createdBy, alice.id);
 	ok('creates a household; created_by defaults to her user id');
 
-	const aliceMembers = await authed.withAuth(alice.token, (tx) =>
+	const [aliceMember] = await authed.withAuth(alice.token, (tx) =>
 		tx.select().from(householdMembers),
 	);
-	assert.deepEqual(
-		aliceMembers.map((m) => [m.userId, m.role]),
-		[[alice.id, 'owner']],
+	assert.equal(aliceMember.userId, alice.id);
+	assert.equal(aliceMember.role, 'owner');
+	assert.equal(aliceMember.displayName, 'RLS smoke alice');
+	ok('is added as the owner by the trigger, named after her auth user');
+
+	assert.equal(
+		await authed.withAuth(alice.token, (tx) =>
+			currentMemberId(tx, household.id),
+		),
+		aliceMember.id,
 	);
-	ok('is added as the owner by the trigger');
+	assert.equal(
+		await authed.withAuth(alice.token, (tx) =>
+			isHouseholdParent(tx, household.id),
+		),
+		true,
+	);
+	ok('currentMemberId resolves her member row; isHouseholdParent is true');
+
+	const mia = await authed.withAuth(alice.token, async (tx) => {
+		const [m] = await tx
+			.insert(householdMembers)
+			.values({
+				householdId: household.id,
+				displayName: 'Mia',
+				birthYear: 2019,
+				avatarColor: 'pink',
+			})
+			.returning();
+		return m;
+	});
+	assert.equal(mia.userId, null);
+	assert.equal(mia.role, 'kid');
+	ok('creates a managed kid profile (no login, role defaults to kid)');
+
+	await expectRejected(
+		'a managed (no-login) member who is a parent',
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx.insert(householdMembers).values({
+					householdId: household.id,
+					displayName: 'Ghost parent',
+					role: 'parent',
+				}),
+			),
+		/household_members_managed_is_kid_check/,
+	);
 
 	const chore = await authed.withAuth(alice.token, async (tx) => {
 		const [c] = await tx
@@ -126,20 +221,23 @@ try {
 			.values({
 				householdId: household.id,
 				title: 'Take out trash',
-				assignedTo: alice.id,
+				assignedMemberId: mia.id,
 			})
 			.returning();
 		return c;
 	});
-	ok('creates a chore assigned to herself');
+	ok('creates a chore assigned to Mia by member id');
 
-	await expectRejected('assigning a chore to a non-member', () =>
-		authed.withAuth(alice.token, (tx) =>
-			tx
-				.update(chores)
-				.set({ assignedTo: bob.id })
-				.where(eq(chores.id, chore.id)),
-		),
+	await expectRejected(
+		'assigning a chore to a member id outside the household',
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx
+					.update(chores)
+					.set({ assignedMemberId: randomUUID() })
+					.where(eq(chores.id, chore.id)),
+			),
+		RLS_DENIED,
 	);
 
 	console.log('Bob (not a member yet):');
@@ -147,72 +245,451 @@ try {
 		households: await tx.select().from(households),
 		chores: await tx.select().from(chores),
 		members: await tx.select().from(householdMembers),
+		invites: await tx.select().from(householdInvites),
 	}));
 	assert.equal(bobSees.households.length, 0);
 	assert.equal(bobSees.chores.length, 0);
 	assert.equal(bobSees.members.length, 0);
-	ok("sees none of Alice's households, chores, or members");
-
-	await expectRejected('adding a chore to her household', () =>
-		authed.withAuth(bob.token, (tx) =>
-			tx
-				.insert(chores)
-				.values({ householdId: household.id, title: 'Sneaky chore' }),
-		),
-	);
-	await expectRejected('adding himself as a member', () =>
-		authed.withAuth(bob.token, (tx) =>
-			tx
-				.insert(householdMembers)
-				.values({ householdId: household.id, userId: bob.id }),
-		),
-	);
-	const bobUpdated = await authed.withAuth(bob.token, (tx) =>
-		tx
-			.update(chores)
-			.set({ title: 'hacked' })
-			.where(eq(chores.id, chore.id))
-			.returning(),
-	);
-	assert.equal(bobUpdated.length, 0);
-	ok('updating her chore changes 0 rows');
-
-	console.log('Alice adds Bob:');
-	await authed.withAuth(alice.token, (tx) =>
-		tx
-			.insert(householdMembers)
-			.values({ householdId: household.id, userId: bob.id }),
-	);
-	await authed.withAuth(alice.token, (tx) =>
-		tx
-			.update(chores)
-			.set({ assignedTo: bob.id })
-			.where(eq(chores.id, chore.id)),
-	);
-	ok('adds Bob as a member and reassigns the chore to him');
-
-	const bobChores = await authed.withAuth(bob.token, (tx) =>
-		tx.select().from(chores),
-	);
-	assert.deepEqual(
-		bobChores.map((c) => [c.id, c.assignedTo]),
-		[[chore.id, bob.id]],
-	);
-	ok('Bob now sees the chore assigned to him');
+	assert.equal(bobSees.invites.length, 0);
+	ok("sees none of Alice's households, chores, members, or invites");
 
 	await expectRejected(
-		'Bob (member, not owner) renaming the household',
-		async () => {
-			const rows = await authed.withAuth(bob.token, (tx) =>
+		'adding a chore to her household',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
 				tx
-					.update(households)
-					.set({ name: 'Bob house' })
-					.where(eq(households.id, household.id))
-					.returning(),
-			);
-			if (rows.length === 0) throw new Error('no rows updated');
-		},
+					.insert(chores)
+					.values({ householdId: household.id, title: 'Sneaky chore' }),
+			),
+		RLS_DENIED,
 	);
+	await expectRejected(
+		'adding himself as a member',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.insert(householdMembers).values({
+					householdId: household.id,
+					userId: bob.id,
+					displayName: 'Bob',
+					role: 'parent',
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectNoRows('updating her chore', () =>
+		authed.withAuth(bob.token, (tx) =>
+			tx
+				.update(chores)
+				.set({ title: 'hacked' })
+				.where(eq(chores.id, chore.id))
+				.returning(),
+		),
+	);
+	await expectRejected(
+		'accepting an invite with a made-up token',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				acceptHouseholdInvite(tx, 'not-a-real-token'),
+			),
+		/invite not found/,
+	);
+
+	console.log('Invites:');
+	const bobInvite = createInviteToken();
+	const carolInvite = createInviteToken();
+	const expiredInvite = createInviteToken();
+	await authed.withAuth(alice.token, (tx) =>
+		tx.insert(householdInvites).values([
+			{
+				householdId: household.id,
+				email: bob.email.toUpperCase(),
+				role: 'parent',
+				displayName: 'Dad',
+				tokenHash: bobInvite.tokenHash,
+			},
+			{
+				householdId: household.id,
+				email: carol.email,
+				role: 'kid',
+				displayName: 'Leo',
+				tokenHash: carolInvite.tokenHash,
+			},
+			{
+				householdId: household.id,
+				email: 'someone-else@example.com',
+				tokenHash: expiredInvite.tokenHash,
+				expiresAt: new Date(Date.now() - 60_000),
+			},
+		]),
+	);
+	ok('Alice (owner) invites Bob as a parent and Carol as a kid');
+
+	await expectRejected(
+		'inviting someone as an owner',
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx.insert(householdInvites).values({
+					householdId: household.id,
+					email: 'owner@example.com',
+					role: 'owner',
+					tokenHash: createInviteToken().tokenHash,
+				}),
+			),
+		/household_invites_role_check/,
+	);
+	await expectRejected(
+		"Carol accepting Bob's invite (wrong email)",
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				acceptHouseholdInvite(tx, bobInvite.token),
+			),
+		/invite is for a different email/,
+	);
+	await expectRejected(
+		'accepting an expired invite',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				acceptHouseholdInvite(tx, expiredInvite.token),
+			),
+		/invite expired/,
+	);
+
+	const bobMemberId = await authed.withAuth(bob.token, (tx) =>
+		acceptHouseholdInvite(tx, bobInvite.token),
+	);
+	const carolMemberId = await authed.withAuth(carol.token, (tx) =>
+		acceptHouseholdInvite(tx, carolInvite.token),
+	);
+	const members = await authed.withAuth(carol.token, (tx) =>
+		tx
+			.select()
+			.from(householdMembers)
+			.where(eq(householdMembers.householdId, household.id)),
+	);
+	const byId = new Map(members.map((m) => [m.id, m]));
+	assert.equal(byId.get(bobMemberId)?.role, 'parent');
+	assert.equal(byId.get(bobMemberId)?.userId, bob.id);
+	assert.equal(byId.get(bobMemberId)?.displayName, 'Dad');
+	assert.equal(byId.get(carolMemberId)?.role, 'kid');
+	assert.equal(byId.get(carolMemberId)?.displayName, 'Leo');
+	assert.equal(members.length, 4);
+	ok('Bob joins as a parent and Carol as a kid; Carol sees all 4 members');
+
+	const [acceptedInvite] = await admin
+		.select()
+		.from(householdInvites)
+		.where(eq(householdInvites.tokenHash, carolInvite.tokenHash));
+	assert.ok(acceptedInvite.acceptedAt);
+	assert.equal(acceptedInvite.acceptedMemberId, carolMemberId);
+	ok('the accepted invite records when and which member row');
+
+	await expectRejected(
+		'accepting the same invite twice',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				acceptHouseholdInvite(tx, carolInvite.token),
+			),
+		/invite already accepted/,
+	);
+
+	console.log('Carol (kid) running parent-only mutations:');
+	assert.equal(
+		await authed.withAuth(carol.token, (tx) =>
+			isHouseholdParent(tx, household.id),
+		),
+		false,
+	);
+	await expectRejected(
+		'requireHouseholdParent',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				requireHouseholdParent(tx, household.id),
+			),
+		/Only a parent/,
+	);
+	await assert.rejects(
+		authed.withAuth(carol.token, (tx) =>
+			requireHouseholdParent(tx, household.id),
+		),
+		NotHouseholdParentError,
+	);
+	const carolChores = await authed.withAuth(carol.token, (tx) =>
+		tx.select().from(chores),
+	);
+	assert.equal(carolChores.length, 1);
+	ok('can still read the household chores');
+
+	await expectRejected(
+		'creating a chore',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx
+					.insert(chores)
+					.values({ householdId: household.id, title: 'Kid chore' }),
+			),
+		RLS_DENIED,
+	);
+	await expectNoRows('editing a chore', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.update(chores)
+				.set({ title: 'No more trash' })
+				.where(eq(chores.id, chore.id))
+				.returning(),
+		),
+	);
+	await expectNoRows('deleting a chore', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx.delete(chores).where(eq(chores.id, chore.id)).returning(),
+		),
+	);
+	await expectRejected(
+		'creating a managed kid',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx
+					.insert(householdMembers)
+					.values({ householdId: household.id, displayName: 'Sneaky kid' }),
+			),
+		RLS_DENIED,
+	);
+	await expectNoRows("editing Mia's profile", () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.update(householdMembers)
+				.set({ displayName: 'Mia the Great' })
+				.where(eq(householdMembers.id, mia.id))
+				.returning(),
+		),
+	);
+	await expectNoRows('promoting herself to parent', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.update(householdMembers)
+				.set({ role: 'parent' })
+				.where(eq(householdMembers.id, carolMemberId))
+				.returning(),
+		),
+	);
+	await expectNoRows('removing Mia', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.delete(householdMembers)
+				.where(eq(householdMembers.id, mia.id))
+				.returning(),
+		),
+	);
+	await expectRejected(
+		'inviting someone',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx.insert(householdInvites).values({
+					householdId: household.id,
+					email: 'friend@example.com',
+					tokenHash: createInviteToken().tokenHash,
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectRejected(
+		'setting a PIN',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx
+					.insert(householdMemberPins)
+					.values({ memberId: carolMemberId, pinHash: 'x' }),
+			),
+		RLS_DENIED,
+	);
+	await expectNoRows('renaming the household', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.update(households)
+				.set({ name: 'Carol house' })
+				.where(eq(households.id, household.id))
+				.returning(),
+		),
+	);
+	const carolSeesInvites = await authed.withAuth(carol.token, (tx) =>
+		tx.select().from(householdInvites),
+	);
+	assert.equal(carolSeesInvites.length, 0);
+	ok('sees no invites');
+
+	console.log('Bob (parent, not owner):');
+	assert.equal(
+		await authed.withAuth(bob.token, (tx) =>
+			isHouseholdParent(tx, household.id),
+		),
+		true,
+	);
+	ok('isHouseholdParent is true');
+	const sam = await authed.withAuth(bob.token, async (tx) => {
+		const [m] = await tx
+			.insert(householdMembers)
+			.values({ householdId: household.id, displayName: 'Baby Sam' })
+			.returning();
+		await tx
+			.update(chores)
+			.set({ assignedMemberId: carolMemberId })
+			.where(eq(chores.id, chore.id));
+		await tx
+			.update(householdMembers)
+			.set({ avatarColor: 'teal' })
+			.where(eq(householdMembers.id, mia.id));
+		return m;
+	});
+	ok("creates a managed kid, reassigns the chore, and edits Mia's profile");
+	await expectRejected(
+		'inviting another parent (owners only)',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.insert(householdInvites).values({
+					householdId: household.id,
+					email: 'grandma@example.com',
+					role: 'parent',
+					tokenHash: createInviteToken().tokenHash,
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectRejected(
+		'promoting Carol to parent',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx
+					.update(householdMembers)
+					.set({ role: 'parent' })
+					.where(eq(householdMembers.id, carolMemberId)),
+			),
+		RLS_DENIED,
+	);
+	await expectRejected(
+		'promoting himself to owner',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx
+					.update(householdMembers)
+					.set({ role: 'owner' })
+					.where(eq(householdMembers.id, bobMemberId)),
+			),
+		RLS_DENIED,
+	);
+	await expectRejected(
+		"attaching a login to Mia's row (user_id isn't updatable)",
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx
+					.update(householdMembers)
+					.set({ userId: bob.id })
+					.where(eq(householdMembers.id, mia.id)),
+			),
+		/permission denied/,
+	);
+	await authed.withAuth(bob.token, (tx) =>
+		tx
+			.update(householdMembers)
+			.set({ displayName: 'Papa', birthYear: 1985 })
+			.where(eq(householdMembers.id, bobMemberId)),
+	);
+	ok('edits his own profile');
+	await expectNoRows("renaming Alice's (owner) profile", () =>
+		authed.withAuth(bob.token, (tx) =>
+			tx
+				.update(householdMembers)
+				.set({ displayName: 'Boss' })
+				.where(eq(householdMembers.id, aliceMember.id))
+				.returning(),
+		),
+	);
+	await expectNoRows('renaming the household', () =>
+		authed.withAuth(bob.token, (tx) =>
+			tx
+				.update(households)
+				.set({ name: 'Bob house' })
+				.where(eq(households.id, household.id))
+				.returning(),
+		),
+	);
+
+	console.log('Acting on behalf of members:');
+	const act = (token: string, memberId: string) =>
+		authed.withAuth(token, (tx) => canActAsMember(tx, memberId));
+	assert.equal(await act(bob.token, mia.id), true);
+	assert.equal(await act(alice.token, sam.id), true);
+	assert.equal(await act(bob.token, carolMemberId), false);
+	assert.equal(await act(carol.token, mia.id), false);
+	assert.equal(await act(carol.token, carolMemberId), true);
+	ok(
+		'parents act for managed kids; not for kids with a login; kids only as themselves',
+	);
+
+	console.log('PINs:');
+	await authed.withAuth(bob.token, (tx) =>
+		tx
+			.insert(householdMemberPins)
+			.values({ memberId: bobMemberId, pinHash: 'scrypt$bob' }),
+	);
+	await authed.withAuth(alice.token, (tx) =>
+		tx
+			.insert(householdMemberPins)
+			.values({ memberId: aliceMember.id, pinHash: 'scrypt$alice' }),
+	);
+	ok('each parent sets their own PIN hash');
+	const bobPins = await authed.withAuth(bob.token, (tx) =>
+		tx.select().from(householdMemberPins),
+	);
+	assert.deepEqual(
+		bobPins.map((p) => p.memberId),
+		[bobMemberId],
+	);
+	ok("Bob sees only his own PIN, not Alice's");
+	const carolPins = await authed.withAuth(carol.token, (tx) =>
+		tx.select().from(householdMemberPins),
+	);
+	assert.equal(carolPins.length, 0);
+	ok('Carol (kid) sees no PINs');
+	await expectRejected(
+		"Bob setting Alice's PIN",
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx
+					.insert(householdMemberPins)
+					.values({ memberId: aliceMember.id, pinHash: 'scrypt$evil' }),
+			),
+		RLS_DENIED,
+	);
+
+	console.log('Leaving and removing:');
+	await expectNoRows('Bob removing Alice (owner)', () =>
+		authed.withAuth(bob.token, (tx) =>
+			tx
+				.delete(householdMembers)
+				.where(eq(householdMembers.id, aliceMember.id))
+				.returning(),
+		),
+	);
+	const removed = await authed.withAuth(bob.token, (tx) =>
+		tx
+			.delete(householdMembers)
+			.where(eq(householdMembers.id, sam.id))
+			.returning(),
+	);
+	assert.equal(removed.length, 1);
+	ok('Bob (parent) removes a managed kid');
+	const [choreAfter] = await authed.withAuth(alice.token, async (tx) => {
+		await tx
+			.delete(householdMembers)
+			.where(
+				and(
+					eq(householdMembers.householdId, household.id),
+					eq(householdMembers.userId, carol.id),
+				),
+			);
+		return tx.select().from(chores).where(eq(chores.id, chore.id));
+	});
+	assert.equal(choreAfter.assignedMemberId, null);
+	ok("Alice removes Carol; Carol's chore is unassigned (FK set null)");
 
 	console.log('Without a session:');
 	const noClaimsPool = new Pool({
@@ -220,29 +697,43 @@ try {
 	});
 	try {
 		const { rows } = await noClaimsPool.query(
-			'select count(*)::int as n from chores',
+			`select (select count(*)::int from chores) as chores,
+				(select count(*)::int from household_members) as members,
+				(select count(*)::int from household_member_pins) as pins,
+				(select count(*)::int from household_invites) as invites`,
 		);
-		assert.equal(rows[0].n, 0);
-		ok('the RLS role with no JWT claims sees 0 chores');
+		assert.deepEqual(rows[0], { chores: 0, members: 0, pins: 0, invites: 0 });
+		ok('the RLS role with no JWT claims sees 0 chores, members, PINs, invites');
 	} finally {
 		await noClaimsPool.end();
 	}
 
-	console.log('Foreign keys into neon_auth.user:');
+	console.log('Foreign keys:');
 	await expectRejected(
-		'a chore assigned to a nonexistent user (owner role, FK only)',
+		'a chore assigned to a nonexistent member (owner role, FK only)',
 		() =>
 			admin.insert(chores).values({
 				householdId: household.id,
 				title: 'Ghost chore',
-				assignedTo: randomUUID(),
+				assignedMemberId: randomUUID(),
 			}),
+		/foreign key/,
+	);
+	await expectRejected(
+		'a second member row for the same user in a household',
+		() =>
+			admin.insert(householdMembers).values({
+				householdId: household.id,
+				userId: alice.id,
+				displayName: 'Alice again',
+			}),
+		/household_members_household_id_user_id_key/,
 	);
 
 	console.log('\nAll RLS smoke checks passed.');
 } finally {
 	// Deleting the users cascades to their sessions/accounts and to the
-	// households they created (and so their members and chores).
+	// households they created (and so their members, chores, PINs, invites).
 	if (created.length > 0) {
 		await admin.execute(
 			sql`delete from neon_auth."user" where id in ${created}`,

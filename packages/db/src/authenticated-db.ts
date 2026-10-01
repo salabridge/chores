@@ -64,3 +64,6 @@ export function createAuthenticatedDb({
 
 	return { withAuth, verify, close: () => pool.end() };
 }
+
+export * from './household-access.ts';
+export * from './invites.ts';

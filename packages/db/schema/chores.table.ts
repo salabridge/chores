@@ -8,8 +8,15 @@ import {
 	uuid,
 } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.ts';
+import { householdMembers } from './household-members.table.ts';
 import { households } from './households.table.ts';
-import { backendRole, currentUserId, isHouseholdMember } from './rls.ts';
+import {
+	backendRole,
+	currentUserId,
+	isHouseholdMember,
+	isHouseholdParent,
+	isMemberIdInHousehold,
+} from './rls.ts';
 
 export const chores = pgTable(
 	'chores',
@@ -20,9 +27,15 @@ export const chores = pgTable(
 			.references(() => households.id, { onDelete: 'cascade' }),
 		title: text('title').notNull(),
 		description: text('description'),
-		assignedTo: uuid('assigned_to').references(() => user.id, {
-			onDelete: 'set null',
-		}),
+		/**
+		 * The household member doing the chore (a `household_members.id`, not an
+		 * auth user id, so managed kids without a login can be assigned).
+		 */
+		assignedMemberId: uuid('assigned_member_id').references(
+			() => householdMembers.id,
+			{ onDelete: 'set null' },
+		),
+		/** The auth user who created the chore (an audit field, not a member reference). */
 		createdBy: uuid('created_by')
 			.default(sql`app.current_user_id()`)
 			.references(() => user.id, { onDelete: 'set null' }),
@@ -38,31 +51,33 @@ export const chores = pgTable(
 	},
 	(t) => [
 		index('chores_household_id_idx').on(t.householdId),
-		index('chores_assigned_to_idx').on(t.assignedTo),
+		index('chores_assigned_member_id_idx').on(t.assignedMemberId),
 		pgPolicy('chores_select', {
 			for: 'select',
 			to: backendRole,
 			using: isHouseholdMember(t.householdId),
 		}),
-		// A chore can only be assigned to someone in the same household.
+		// Chores are managed by parents. Kids record their part through the
+		// completions table (SB-26), not by editing chores. A chore can only be
+		// assigned to a member of the same household.
 		pgPolicy('chores_insert', {
 			for: 'insert',
 			to: backendRole,
-			withCheck: sql`${isHouseholdMember(t.householdId)}
+			withCheck: sql`${isHouseholdParent(t.householdId)}
 				and ${t.createdBy} = ${currentUserId}
-				and (${t.assignedTo} is null or app.is_member_of(${t.householdId}, ${t.assignedTo}))`,
+				and ${isMemberIdInHousehold(t.householdId, t.assignedMemberId)}`,
 		}),
 		pgPolicy('chores_update', {
 			for: 'update',
 			to: backendRole,
-			using: isHouseholdMember(t.householdId),
-			withCheck: sql`${isHouseholdMember(t.householdId)}
-				and (${t.assignedTo} is null or app.is_member_of(${t.householdId}, ${t.assignedTo}))`,
+			using: isHouseholdParent(t.householdId),
+			withCheck: sql`${isHouseholdParent(t.householdId)}
+				and ${isMemberIdInHousehold(t.householdId, t.assignedMemberId)}`,
 		}),
 		pgPolicy('chores_delete', {
 			for: 'delete',
 			to: backendRole,
-			using: isHouseholdMember(t.householdId),
+			using: isHouseholdParent(t.householdId),
 		}),
 	],
 );
@@ -72,6 +87,9 @@ export const choresRelations = relations(chores, ({ one }) => ({
 		fields: [chores.householdId],
 		references: [households.id],
 	}),
-	assignee: one(user, { fields: [chores.assignedTo], references: [user.id] }),
+	assignee: one(householdMembers, {
+		fields: [chores.assignedMemberId],
+		references: [householdMembers.id],
+	}),
 	creator: one(user, { fields: [chores.createdBy], references: [user.id] }),
 }));
