@@ -27,9 +27,16 @@ The PR gets a Storybook link and UI Tests / UI Review checks. Visual diffs don't
 accept or deny them in Chromatic's UI Review. Since every story is a snapshot, a story
 that renders nondeterministic output, such as the current date or random data, shows up
 as a change on every build. Pass fixed values through `args` instead.
+
 Config is in [.storybook/](.storybook/): `preview.ts` imports `src/routes/layout.css`
 (Tailwind, tokens, fonts) and adds a **Theme** toolbar that sets `data-theme` on `<html>`,
 so check stories in both light and dark.
+
+Remote function files (`*.remote.ts`) import server code, which can't load in Storybook.
+`main.ts` aliases each one a component imports to a stand-in in
+[.storybook/mocks/](.storybook/mocks/) that fakes the `form()` surface (`enhance`,
+`fields`, `pending`). When a component starts importing a new remote file, add a mock
+and an alias for it.
 
 Stories use [Svelte CSF](https://github.com/storybookjs/addon-svelte-csf) (`defineMeta`
 in a `<script module>`). Follow the existing stories:
