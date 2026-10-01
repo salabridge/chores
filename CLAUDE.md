@@ -67,7 +67,11 @@ orchestration/caching defined in [turbo.json](turbo.json) and workspaces declare
   [packages/tokens/README.md](packages/tokens/README.md).
 
 Turborepo's `build` task depends on upstream packages' `build` tasks first
-(`dependsOn: ["^build"]`). `dev` is uncached and persistent (long-running dev servers).
+(`dependsOn: ["^build"]`). `dev` is uncached and persistent (long-running dev servers),
+and also depends on upstream `build`, so `pnpm run dev` generates `packages/tokens/dist`
+(gitignored) before `apps/web` imports it. Running `apps/web` directly
+(`pnpm --filter @chore/web dev`) skips that, so build `@chores/tokens` first in a fresh
+worktree.
 Build outputs are cached per-task based on the `inputs`/`outputs` globs in
 [turbo.json](turbo.json) — note `build` currently has no `outputs` glob configured, so
 nothing is actually cached across runs yet.
