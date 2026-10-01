@@ -1,5 +1,12 @@
 import { relations, sql } from 'drizzle-orm';
-import { pgPolicy, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+	pgPolicy,
+	pgTable,
+	smallint,
+	text,
+	timestamp,
+	uuid,
+} from 'drizzle-orm/pg-core';
 import { householdMembers } from './household-members.table.ts';
 import { backendRole, isOwnMember } from './rls.ts';
 
@@ -14,6 +21,11 @@ import { backendRole, isOwnMember } from './rls.ts';
  *
  * `pin_hash` is a self-describing password hash made by the app (for example
  * an argon2id or scrypt PHC string), never the PIN itself.
+ *
+ * The attempt counters back the lockout (see apps/web `pin-lock.ts`): each
+ * check bumps `failed_attempts` before the hash is compared, so parallel
+ * guesses can't dodge the limit. At the limit `locked_at` is set and stays
+ * set until the parent re-enters their account password, which resets it.
  */
 export const householdMemberPins = pgTable(
 	'household_member_pins',
@@ -22,6 +34,11 @@ export const householdMemberPins = pgTable(
 			.primaryKey()
 			.references(() => householdMembers.id, { onDelete: 'cascade' }),
 		pinHash: text('pin_hash').notNull(),
+		/** Wrong (or in-flight) attempts since the last success or reset. */
+		failedAttempts: smallint('failed_attempts').notNull().default(0),
+		lastFailedAt: timestamp('last_failed_at', { withTimezone: true }),
+		/** Set when `failed_attempts` hits the limit; cleared by an account-password unlock. */
+		lockedAt: timestamp('locked_at', { withTimezone: true }),
 		createdAt: timestamp('created_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),
