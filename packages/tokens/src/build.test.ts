@@ -3,10 +3,12 @@ import type { FigmaLocalVariablesResponse } from './figma.ts';
 
 const writeFileMock = vi.fn();
 const mkdirMock = vi.fn();
+const readFileMock = vi.fn();
 
 vi.mock('node:fs/promises', () => ({
 	writeFile: (...args: unknown[]) => writeFileMock(...args),
 	mkdir: (...args: unknown[]) => mkdirMock(...args),
+	readFile: (...args: unknown[]) => readFileMock(...args),
 }));
 
 const fetchLocalVariablesMock = vi.fn();
@@ -129,9 +131,36 @@ describe('main', () => {
 		vi.clearAllMocks();
 	});
 
-	it('throws when FIGMA_API_TOKEN is not set', async () => {
+	it('builds from the figma-variables.json snapshot when FIGMA_API_TOKEN is not set', async () => {
 		delete process.env.FIGMA_API_TOKEN;
-		await expect(main()).rejects.toThrow(/FIGMA_API_TOKEN is not set/);
+		readFileMock.mockResolvedValue(JSON.stringify(meta));
+
+		await main();
+
+		expect(fetchLocalVariablesMock).not.toHaveBeenCalled();
+		expect(readFileMock).toHaveBeenCalledWith(
+			expect.stringMatching(/figma-variables\.json$/),
+			'utf8',
+		);
+		const [, tokensContent] = writeFileMock.mock.calls[0] as [string, string];
+		expect(tokensContent).toContain('--color-surface-accent: #336699;');
+		expect(tokensContent).toContain('figma-variables.json');
+	});
+
+	it('throws when FIGMA_API_TOKEN is not set and the snapshot is missing', async () => {
+		delete process.env.FIGMA_API_TOKEN;
+		readFileMock.mockRejectedValue(new Error('ENOENT'));
+
+		await expect(main()).rejects.toThrow(/figma-variables\.json/);
+		expect(writeFileMock).not.toHaveBeenCalled();
+	});
+
+	it('prefers the live REST API over the snapshot when FIGMA_API_TOKEN is set', async () => {
+		await main();
+
+		expect(readFileMock).not.toHaveBeenCalled();
+		const [, tokensContent] = writeFileMock.mock.calls[0] as [string, string];
+		expect(tokensContent).toContain('Pulled live from Figma');
 	});
 
 	it('writes generated tokens.css and tailwind.css from the fetched Figma variables', async () => {
