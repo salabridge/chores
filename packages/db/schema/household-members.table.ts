@@ -7,6 +7,7 @@ import {
 	smallint,
 	text,
 	timestamp,
+	unique,
 	uniqueIndex,
 	uuid,
 } from 'drizzle-orm/pg-core';
@@ -66,6 +67,9 @@ export const householdMembers = pgTable(
 			.on(t.householdId, t.userId)
 			.where(sql`${t.userId} is not null`),
 		index('household_members_user_id_idx').on(t.userId),
+		// Lets chore_rotation_members reference (member, household) together, so
+		// a rotation can only include members of its own household.
+		unique('household_members_id_household_id_key').on(t.id, t.householdId),
 		check(
 			'household_members_display_name_check',
 			sql`char_length(btrim(${t.displayName})) between 1 and 50`,

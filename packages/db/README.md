@@ -31,8 +31,9 @@ const db = drizzle(process.env.DATABASE_URL!, { schema });
 | `@chore/db`        | `schema/schema.ts`       | Every table and relation          |
 | `@chore/db/schema` | `schema/schema.ts`       | Same as above                     |
 | `@chore/db/auth`   | `schema/auth-schema.ts`  | Only the Neon Auth tables         |
-| `@chore/db/rls`    | `src/authenticated-db.ts`| `createAuthenticatedDb()` (RLS), member/parent helpers, invite tokens |
+| `@chore/db/rls`    | `src/authenticated-db.ts`| `createAuthenticatedDb()` (RLS), member/parent helpers, invite tokens, `advanceRotation()`/`getRotationTurns()` |
 | `@chore/db/recurrence` | `src/recurrence.ts`  | `chorePeriodStart()` and other period math for recurring chores |
+| `@chore/db/rotation` | `src/rotation.ts`      | Turn-order math for rotation chores (`nextEligibleMember()`, `rotationTurns()`, `validateRotation()`) |
 
 The exports point straight at the `.ts` source; there's no build step. This
 works for anything that compiles TypeScript itself (Vite/SvelteKit, `tsx`,
@@ -49,9 +50,10 @@ script that emits to `dist/` and point `exports` there.
 - **`schema/index.ts`**: re-exports the tables *we* own, in the `public`
   schema (`households`, `household_members`, `household_member_pins`,
   `household_invites`, `chores`, `chore_stages`, `chore_instances`,
-  `chore_stage_progress`). Each table lives in its own `*.table.ts` file; the
-  enums are in `household-role.ts`, `chore-type.ts`, and
-  `chore-frequency.ts`. drizzle-kit reads only this file, so it never tries to
+  `chore_stage_progress`, `chore_rotations`, `chore_rotation_members`). Each
+  table lives in its own `*.table.ts` file; the enums are in
+  `household-role.ts`, `chore-type.ts`, `chore-frequency.ts`, and
+  `rotation-scope.ts`. drizzle-kit reads only this file, so it never tries to
   create the `neon_auth` tables; FKs into them are still generated.
 - **`schema/rls.ts`**: the `authenticated_backend` role and SQL helpers the
   RLS policies use.
@@ -135,7 +137,7 @@ often. It has no per-day state; that lives on its instances (see
 **Recurrence** below).
 
 - `type` (`chore_type`): `personal` (always `assigned_member_id`) or
-  `rotation` (members take turns; the rotation itself is SB-25).
+  `rotation` (members take turns; see **Rotations** below).
 - `points`: the reward. The creator offers 5/10/15/20 as presets, but any
   integer `>= 0` is stored. Defaults to 10.
 - `frequency` (`chore_frequency`): `daily`, `weekly`, or `weekends`.
@@ -213,11 +215,12 @@ completed instance, missing rows included. Periods before the chore's
 
 Downstream notes:
 
-- **SB-25 (rotations):** set `assigned_member_id` when creating the instance
-  from the rotation order, and advance based on the previous instance. Any
-  member can create an instance today (the first person to open the chore);
-  if kids shouldn't be able to choose the assignee, move creation into a
-  `SECURITY DEFINER` function that computes it.
+- **SB-25 (rotations):** when creating a rotation chore's instance, set
+  `assigned_member_id` to the rotation's current turn
+  (`chore_rotations.current_member_id`). Any member can create an instance
+  today (the first person to open the chore); if kids shouldn't be able to
+  choose the assignee, move creation into a `SECURITY DEFINER` function that
+  copies it.
 - **SB-26 (completions, points ledger):** reference `chore_instances.id` and
   award `chores.points` plus `chore_stages.points` from the progress rows.
   Copy the point values into the ledger at award time, since parents can edit
@@ -225,6 +228,67 @@ Downstream notes:
 - **SB-28 (streaks):** a streak is consecutive periods whose instance is
   complete, per `chorePeriodStart`/`previousPeriodStart`. `weekends` chores
   skip weekdays rather than breaking on them.
+
+### Rotations
+
+A rotation chore (`type = 'rotation'`) has one `chore_rotations` row and a
+`chore_rotation_members` row per member in its loop (SB-25).
+
+- **Members** (`chore_rotation_members`): `position` (turn order from 1,
+  unique per chore, gaps fine; the unique constraint is deferred so a reorder
+  can swap positions in one transaction), `eligible`, and `exclusion_reason`
+  (required when excluded, e.g. "Too young for hot-water handling"; NULL when
+  eligible). Excluded members stay listed, and the turn skips them. Composite
+  FKs tie each row to its rotation and to a member of the same household;
+  leaving the household removes the member from every rotation.
+- **Scope** (`rotation_scope`): `whole_household` or `eligible_subset`, plus
+  an optional `scope_label` ("Kids only"). The scope describes the loop for
+  the UI; the database doesn't add new household members to a
+  `whole_household` loop by itself.
+- **Turn**: `current_member_id` is the Active Turn. `last_completed_member_id`
+  / `last_completed_at` are Done Last; `turn_started_at` is when the current
+  turn began.
+
+**Advancing.** `advanceRotation(tx, choreId, { fromMemberId, outcome })`
+(`app.advance_chore_rotation`) moves the turn to the next eligible member by
+position and wraps to the first one at the end ("Loop Reset"; the result's
+`wrapped` is true). It locks the rotation row and runs in the caller's
+transaction, so SB-26 can record the completion and its points in the same
+`withAuth` callback and both commit or neither does. It refuses with
+`StaleRotationTurnError` if the turn already moved past `fromMemberId` (a
+double submit), so a turn can't be advanced twice.
+
+- `outcome: 'completed'` (default): a parent, or someone who can act as the
+  member whose turn it is (themselves, or a managed kid they parent). That
+  member becomes Done Last.
+- `outcome: 'skipped'`: parents only. The turn moves on without changing Done
+  Last, and no points should be awarded. This is the primitive for the
+  Overview "Skip" (SB-29).
+
+Kids can't update `chore_rotations` directly; the function is how a kid's
+completion moves the turn.
+
+**Rules** (custom migration `0009`):
+
+- A rotation needs **at least 2 eligible members**, and the current turn must
+  be one of them. This is checked at commit (deferred constraint triggers),
+  so create the rotation row and its members in one transaction, in either
+  order. `validateRotation()` in `src/rotation.ts` runs the same checks for a
+  form.
+- **Excluding (or removing) the member whose turn it is hands the turn to the
+  next eligible member immediately.** (Decision for the ticket's open
+  question; a skip, not a completion, so Done Last doesn't change.)
+- A member **leaving the household** is never blocked by these rules, even if
+  it leaves fewer than 2 eligible members. `getRotationTurns()` reports
+  `eligibleCount` / `isValid` so the UI can ask a parent to fix the loop. With
+  one eligible member, advancing keeps the turn on them; with none, the turn
+  is NULL and `advanceRotation` throws `NoEligibleRotationMemberError`.
+
+**Reading.** `getRotationTurns(tx, choreId)` returns the scope, every member
+in order (with display name and avatar), and from `rotationTurns()`:
+`doneLast`, `activeTurn`, `nextUp` (and `nextUpIsLoopReset`) for the
+shared-chore screen, and `handoffChain` for the Overview: the Active Turn and
+then one full loop of hand-offs, with `loopReset` marking where it wraps.
 
 ## Row-level security
 
@@ -241,6 +305,8 @@ role. Access follows household membership and role:
 | `chore_stages`          | members               | parents                                                                                 |
 | `chore_instances`       | members               | any member can start a period (insert); parents update/delete                           |
 | `chore_stage_progress`  | members               | members check off stages as themselves; parents for anyone in the household; uncheck (delete) the same way |
+| `chore_rotations`       | members               | parents; the turn moves through `app.advance_chore_rotation` (members for their own turn, parents for anyone) |
+| `chore_rotation_members`| members               | parents                                                                                 |
 
 Column grants stop the app from changing a member row's `id`,
 `household_id`, `user_id`, or `joined_at`.
@@ -280,6 +346,12 @@ drizzle-kit but hand-ordered so existing data migrates (`member` becomes
 `chores (id, household_id)` unique constraint moved before the composite FKs
 that need it and explicit grants added at the end. Existing chores become
 personal, daily, 10-point chores.
+`0008_chore_rotations.sql` (SB-25) is generated, with the new
+`household_members (id, household_id)` unique constraint moved before the FK
+that needs it, the position unique and the current-turn FK made
+`DEFERRABLE INITIALLY DEFERRED`, and grants at the end.
+`0009_chore_rotation_turns.sql` is hand-written: `app.advance_chore_rotation`,
+the hand-off triggers, and the commit-time rotation check.
 
 **Two connection strings** (see `.env.example`):
 
@@ -323,7 +395,12 @@ parent and a kid who join by invite, a managed kid, PINs, and that every
 parent-only mutation fails when the kid runs it. For chores it covers stages
 (parents only), starting a period's instance (once per period), checking off
 stages as yourself or for a managed kid, the next period starting empty, and
-that a non-member sees none of it. It also checks the FKs and
+that a non-member sees none of it. For rotations it covers setting one up in
+a transaction, rejecting fewer than 2 eligible members and exclusions
+without a reason, a kid completing their own turn (but not someone else's,
+and not skipping), refusing a stale double advance, skipping an excluded
+member, wrapping (Loop Reset), a parent's skip leaving Done Last alone, and
+excluding the member whose turn it is. It also checks the FKs and
 the one-row-per-user constraint. It deletes everything it created when it
 finishes.
 

@@ -14,6 +14,7 @@ import {
 import { user } from './auth-schema.ts';
 import { choreFrequency } from './chore-frequency.ts';
 import { choreInstances } from './chore-instances.table.ts';
+import { choreRotations } from './chore-rotations.table.ts';
 import { choreStages } from './chore-stages.table.ts';
 import { choreType } from './chore-type.ts';
 import { householdMembers } from './household-members.table.ts';
@@ -145,4 +146,6 @@ export const choresRelations = relations(chores, ({ one, many }) => ({
 	creator: one(user, { fields: [chores.createdBy], references: [user.id] }),
 	stages: many(choreStages),
 	instances: many(choreInstances),
+	/** The turn order of a `rotation` chore (SB-25); none for personal chores. */
+	rotation: one(choreRotations),
 }));

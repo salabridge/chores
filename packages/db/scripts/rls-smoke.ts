@@ -13,8 +13,8 @@
  *
  * Cast: Alice creates a household (owner) and a managed kid, Mia, with no
  * login. She invites Bob as a parent and Carol as a kid; both accept. They
- * set up chores with stages, and Carol works through today's instance. Dave
- * signs up but never joins.
+ * set up chores with stages, and Carol works through today's instance. They
+ * take turns on a rotation chore. Dave signs up but never joins.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -24,6 +24,8 @@ import { drizzle } from 'drizzle-orm/neon-serverless';
 import { user } from '../schema/auth-schema.ts';
 import {
 	choreInstances,
+	choreRotationMembers,
+	choreRotations,
 	choreStageProgress,
 	choreStages,
 	chores,
@@ -35,13 +37,16 @@ import {
 } from '../schema/index.ts';
 import {
 	acceptHouseholdInvite,
+	advanceRotation,
 	canActAsMember,
 	createAuthenticatedDb,
 	createInviteToken,
 	currentMemberId,
+	getRotationTurns,
 	isHouseholdParent,
 	NotHouseholdParentError,
 	requireHouseholdParent,
+	StaleRotationTurnError,
 } from '../src/authenticated-db.ts';
 import { addDays, chorePeriodStart, localDate } from '../src/recurrence.ts';
 
@@ -893,6 +898,210 @@ try {
 	assert.equal(tomorrow.length, 0);
 	ok("the next period's instance starts with no stages done (reset)");
 
+	console.log('Rotations:');
+	const slot = (choreId: string, memberId: string, position: number) => ({
+		choreId,
+		householdId: household.id,
+		memberId,
+		position,
+	});
+	// Carol -> Mia -> (Sam, excluded) -> Bob, starting with Carol.
+	const trash = await authed.withAuth(alice.token, async (tx) => {
+		const [c] = await tx
+			.insert(chores)
+			.values({
+				householdId: household.id,
+				title: 'Take out trash',
+				type: 'rotation',
+			})
+			.returning();
+		await tx.insert(choreRotations).values({
+			choreId: c.id,
+			householdId: household.id,
+			scope: 'eligible_subset',
+			scopeLabel: 'Kids only',
+			currentMemberId: carolMemberId,
+		});
+		await tx.insert(choreRotationMembers).values([
+			slot(c.id, carolMemberId, 1),
+			slot(c.id, mia.id, 2),
+			{
+				...slot(c.id, sam.id, 3),
+				eligible: false,
+				exclusionReason: 'Too young for hot-water handling',
+			},
+			slot(c.id, bobMemberId, 4),
+		]);
+		return c;
+	});
+	ok('Alice sets up a rotation and its members in one transaction');
+
+	const carolView = await authed.withAuth(carol.token, (tx) =>
+		getRotationTurns(tx, trash.id),
+	);
+	assert.ok(carolView);
+	assert.equal(carolView.scopeLabel, 'Kids only');
+	assert.equal(carolView.members.length, 4);
+	assert.equal(carolView.doneLast, null);
+	assert.equal(carolView.activeTurn?.memberId, carolMemberId);
+	assert.equal(carolView.nextUp?.memberId, mia.id);
+	assert.deepEqual(
+		carolView.handoffChain.map((step) => step.member.memberId),
+		[carolMemberId, mia.id, bobMemberId],
+	);
+	ok('Carol (kid) sees the rotation: her turn, Mia next, Sam excluded');
+
+	await expectNoRows('Carol reordering the rotation', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.update(choreRotationMembers)
+				.set({ position: 9 })
+				.where(eq(choreRotationMembers.memberId, carolMemberId))
+				.returning(),
+		),
+	);
+	await expectNoRows('Carol moving the turn directly', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.update(choreRotations)
+				.set({ currentMemberId: bobMemberId })
+				.where(eq(choreRotations.choreId, trash.id))
+				.returning(),
+		),
+	);
+	await expectRejected(
+		'a rotation with fewer than 2 eligible members',
+		() =>
+			authed.withAuth(alice.token, async (tx) => {
+				const [c] = await tx
+					.insert(chores)
+					.values({
+						householdId: household.id,
+						title: 'Solo',
+						type: 'rotation',
+					})
+					.returning();
+				await tx.insert(choreRotations).values({
+					choreId: c.id,
+					householdId: household.id,
+					currentMemberId: carolMemberId,
+				});
+				const away = { eligible: false, exclusionReason: 'Away' };
+				await tx
+					.insert(choreRotationMembers)
+					.values([
+						slot(c.id, carolMemberId, 1),
+						{ ...slot(c.id, mia.id, 2), ...away },
+					]);
+			}),
+		/at least 2 eligible members/,
+	);
+	await expectRejected(
+		'excluding a member without a reason',
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx
+					.update(choreRotationMembers)
+					.set({ eligible: false })
+					.where(eq(choreRotationMembers.memberId, bobMemberId)),
+			),
+		/chore_rotation_members_exclusion_reason_check/,
+	);
+
+	const afterCarol = await authed.withAuth(carol.token, (tx) =>
+		advanceRotation(tx, trash.id, { fromMemberId: carolMemberId }),
+	);
+	assert.deepEqual(afterCarol, { memberId: mia.id, wrapped: false });
+	ok('Carol completes her turn; it passes to Mia');
+	await assert.rejects(
+		authed.withAuth(carol.token, (tx) =>
+			advanceRotation(tx, trash.id, { fromMemberId: carolMemberId }),
+		),
+		StaleRotationTurnError,
+	);
+	ok('completing the same turn twice is refused (StaleRotationTurnError)');
+	await expectRejected(
+		"Carol completing Mia's turn",
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				advanceRotation(tx, trash.id, { fromMemberId: mia.id }),
+			),
+		/only a parent or the member whose turn it is/,
+	);
+	await expectRejected(
+		'Carol skipping a turn',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				advanceRotation(tx, trash.id, {
+					fromMemberId: mia.id,
+					outcome: 'skipped',
+				}),
+			),
+		/only a parent can skip/,
+	);
+
+	const afterMia = await authed.withAuth(bob.token, (tx) =>
+		advanceRotation(tx, trash.id, { fromMemberId: mia.id }),
+	);
+	assert.deepEqual(afterMia, { memberId: bobMemberId, wrapped: false });
+	ok('Bob completes for Mia (managed kid); the turn skips Sam (excluded)');
+	const afterBob = await authed.withAuth(bob.token, (tx) =>
+		advanceRotation(tx, trash.id, { fromMemberId: bobMemberId }),
+	);
+	assert.deepEqual(afterBob, { memberId: carolMemberId, wrapped: true });
+	ok('Bob completes his turn; it wraps back to Carol (Loop Reset)');
+	const afterSkip = await authed.withAuth(bob.token, (tx) =>
+		advanceRotation(tx, trash.id, {
+			fromMemberId: carolMemberId,
+			outcome: 'skipped',
+		}),
+	);
+	assert.deepEqual(afterSkip, { memberId: mia.id, wrapped: false });
+	const afterSkipView = await authed.withAuth(alice.token, (tx) =>
+		getRotationTurns(tx, trash.id),
+	);
+	assert.equal(afterSkipView?.doneLast?.memberId, bobMemberId);
+	assert.equal(afterSkipView?.activeTurn?.memberId, mia.id);
+	assert.equal(afterSkipView?.nextUp?.memberId, bobMemberId);
+	ok("Bob skips Carol's turn: it moves to Mia and Done Last stays Bob");
+
+	await authed.withAuth(alice.token, (tx) =>
+		tx
+			.update(choreRotationMembers)
+			.set({ eligible: false, exclusionReason: 'Sprained wrist' })
+			.where(eq(choreRotationMembers.memberId, mia.id)),
+	);
+	const [afterExclude] = await authed.withAuth(alice.token, (tx) =>
+		tx
+			.select()
+			.from(choreRotations)
+			.where(eq(choreRotations.choreId, trash.id)),
+	);
+	assert.equal(afterExclude.currentMemberId, bobMemberId);
+	ok('excluding Mia during her turn hands it to Bob right away');
+	await expectRejected(
+		'excluding Bob too (1 eligible member left)',
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx
+					.update(choreRotationMembers)
+					.set({ eligible: false, exclusionReason: 'Busy' })
+					.where(eq(choreRotationMembers.memberId, bobMemberId)),
+			),
+		/at least 2 eligible members/,
+	);
+	await expectRejected(
+		'adding a member from another household (composite FK)',
+		() =>
+			admin.insert(choreRotationMembers).values({
+				choreId: trash.id,
+				householdId: household.id,
+				memberId: randomUUID(),
+				position: 7,
+			}),
+		/chore_rotation_members_member_fk/,
+	);
+
 	console.log('Dave (not a member):');
 	const dave = await makeUser('dave');
 	created.push(dave.id);
@@ -900,16 +1109,28 @@ try {
 		stages: await tx.select().from(choreStages),
 		instances: await tx.select().from(choreInstances),
 		progress: await tx.select().from(choreStageProgress),
+		rotations: await tx.select().from(choreRotations),
+		rotationMembers: await tx.select().from(choreRotationMembers),
 	}));
 	assert.deepEqual(
 		[
 			daveSees.stages.length,
 			daveSees.instances.length,
 			daveSees.progress.length,
+			daveSees.rotations.length,
+			daveSees.rotationMembers.length,
 		],
-		[0, 0, 0],
+		[0, 0, 0, 0, 0],
 	);
-	ok('sees no stages, instances, or stage progress');
+	ok('sees no stages, instances, stage progress, or rotations');
+	await expectRejected(
+		"advancing the household's rotation",
+		() =>
+			authed.withAuth(dave.token, (tx) =>
+				advanceRotation(tx, trash.id, { fromMemberId: bobMemberId }),
+			),
+		/no rotation for chore/,
+	);
 	await expectRejected(
 		"starting an instance of the household's chore",
 		() =>
@@ -1090,7 +1311,9 @@ try {
 				(select count(*)::int from household_invites) as invites,
 				(select count(*)::int from chore_stages) as stages,
 				(select count(*)::int from chore_instances) as instances,
-				(select count(*)::int from chore_stage_progress) as progress`,
+				(select count(*)::int from chore_stage_progress) as progress,
+				(select count(*)::int from chore_rotations) as rotations,
+				(select count(*)::int from chore_rotation_members) as rotation_members`,
 		);
 		assert.deepEqual(rows[0], {
 			chores: 0,
@@ -1101,6 +1324,8 @@ try {
 			stages: 0,
 			instances: 0,
 			progress: 0,
+			rotations: 0,
+			rotation_members: 0,
 		});
 		ok('the RLS role with no JWT claims sees 0 rows in every domain table');
 	} finally {
