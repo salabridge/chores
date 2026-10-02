@@ -108,6 +108,48 @@ export function clearSessionCookies(cookies: Cookies) {
 	}
 }
 
+/**
+ * Checks the account password without touching the visitor's session.
+ * Neon Auth's own verify endpoint is server-only, so this signs in with a
+ * separate client that keeps its cookies in memory, then signs that throwaway
+ * session out again. The visitor's real cookies are never read or replaced.
+ */
+export async function verifyAccountPassword(
+	email: string,
+	password: string,
+): Promise<boolean> {
+	const { url } = getRequestEvent();
+	const jar = new Map<string, string>();
+	const client = createAuthClient({
+		baseURL: NEON_AUTH_URL,
+		fetchOptions: {
+			customFetchImpl: async (input, init) => {
+				const headers = new Headers(init?.headers);
+				headers.set('origin', url.origin);
+				headers.delete('cookie');
+				if (jar.size) {
+					headers.set(
+						'cookie',
+						[...jar].map(([name, value]) => `${name}=${value}`).join('; '),
+					);
+				}
+				const res = await fetch(input, { ...init, headers });
+				for (const header of res.headers.getSetCookie()) {
+					const pair = header.split(';')[0] ?? '';
+					const eq = pair.indexOf('=');
+					if (eq > 0)
+						jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+				}
+				return res;
+			},
+		},
+	});
+	const { error } = await client.signIn.email({ email, password });
+	if (error) return false;
+	await client.signOut().catch(() => {});
+	return true;
+}
+
 /** Cheap check so requests without a session skip the upstream call. */
 export function hasSessionCookie(cookies: Cookies) {
 	return cookies.get(`${LOCAL_PREFIX}session_token`) !== undefined;
@@ -210,6 +252,11 @@ export function requireUser(): SessionUser {
 		redirect(303, route.id ? signInUrl(url) : '/login');
 	}
 	return locals.user;
+}
+
+/** Where to go after signing in: home goes through the profile picker, which skips itself for anyone without managed kids. */
+export function afterSignInUrl(redirectTo: string) {
+	return redirectTo === '/' ? '/profiles' : redirectTo;
 }
 
 /** Only allow same-site, path-only redirect targets. */

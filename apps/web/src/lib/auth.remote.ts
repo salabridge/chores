@@ -1,6 +1,7 @@
 import { invalid, redirect } from '@sveltejs/kit';
 import { type } from 'arktype';
 import {
+	afterSignInUrl,
 	clearPendingCode,
 	clearSessionCookies,
 	getPendingCode,
@@ -10,6 +11,7 @@ import {
 	setPendingCode,
 	verifyUrl,
 } from '#lib/server/auth.js';
+import { requireNotKidProfile } from '#lib/server/guards.js';
 import { form, getRequestEvent, query } from '$app/server';
 
 /** Email/password sign-in. `neonAuth` re-issues Neon's session cookie on our
@@ -33,7 +35,7 @@ export const signIn = form(
 		}
 		if (error) invalid('Incorrect email or password.');
 
-		redirect(303, redirectTo);
+		redirect(303, afterSignInUrl(redirectTo));
 	},
 );
 
@@ -137,7 +139,7 @@ export const verifyCode = form(
 			redirect(303, '/reset-password');
 		}
 		clearPendingCode(cookies);
-		redirect(303, safeRedirectTarget(data.redirectTo));
+		redirect(303, afterSignInUrl(safeRedirectTarget(data.redirectTo)));
 	},
 );
 
@@ -218,8 +220,11 @@ export const resendCode = form(async () => {
 	return { sent: true };
 });
 
-/** Ends the session with Neon Auth and clears our copy of its cookies. */
+/** Ends the session with Neon Auth and clears our copy of its cookies. Refused
+ * (403) while a managed kid profile is active: the parent has to leave it with
+ * the PIN first, so a kid can't sign the parent out by posting here directly. */
 export const signOut = form(async () => {
+	await requireNotKidProfile();
 	const { locals, cookies } = getRequestEvent();
 	if (locals.user) {
 		const { error } = await neonAuth.signOut();
@@ -235,6 +240,8 @@ export const setPassword = form(
 		newPassword: 'string>=0',
 	}),
 	async ({ currentPassword, newPassword }) => {
+		// A kid profile must not be able to change the parent's password.
+		await requireNotKidProfile();
 		const { locals } = getRequestEvent();
 		if (locals.user) {
 			const { error } = await neonAuth.changePassword({

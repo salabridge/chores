@@ -119,7 +119,14 @@ the parent's approval; there's no separate approval step.
 
 **PINs** (`household_member_pins`): one hashed PIN per parent membership for
 the managed-kid profile lock (SB-51). Only the parent themselves can read or
-write their row. Store a password hash (argon2id/scrypt), never the PIN.
+write their row. Store a password hash (argon2id/scrypt), never the PIN. The row
+also holds the attempt counters for the lockout (`failed_attempts`,
+`last_failed_at`, `locked_at`).
+
+**Device profiles** (`device_profiles`): which managed kid a device is acting as,
+per device and signed-in parent (SB-51). Kept on the server so the client never
+sends a member id; `active_member_id` NULL means the parent's own view. See the
+Kid profiles section of `apps/web/README.md`.
 
 ## Chores
 

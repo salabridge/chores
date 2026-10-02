@@ -27,6 +27,7 @@ import {
 	choreStageProgress,
 	choreStages,
 	chores,
+	deviceProfiles,
 	householdInvites,
 	householdMemberPins,
 	householdMembers,
@@ -970,6 +971,73 @@ try {
 		RLS_DENIED,
 	);
 
+	const [bobPin] = bobPins;
+	assert.equal(bobPin?.failedAttempts, 0);
+	assert.equal(bobPin?.lockedAt, null);
+	await authed.withAuth(bob.token, (tx) =>
+		tx
+			.update(householdMemberPins)
+			.set({
+				failedAttempts: 5,
+				lastFailedAt: new Date(),
+				lockedAt: new Date(),
+			})
+			.where(eq(householdMemberPins.memberId, bobMemberId)),
+	);
+	await authed.withAuth(bob.token, (tx) =>
+		tx
+			.update(householdMemberPins)
+			.set({ failedAttempts: 0, lastFailedAt: null, lockedAt: null })
+			.where(eq(householdMemberPins.memberId, bobMemberId)),
+	);
+	ok('a parent can lock and unlock their own PIN counters');
+	await expectNoRows("Bob resetting Alice's PIN counters", () =>
+		authed.withAuth(bob.token, (tx) =>
+			tx
+				.update(householdMemberPins)
+				.set({ failedAttempts: 0 })
+				.where(eq(householdMemberPins.memberId, aliceMember.id))
+				.returning(),
+		),
+	);
+
+	console.log('Device profiles:');
+	await authed.withAuth(bob.token, (tx) =>
+		tx.insert(deviceProfiles).values({
+			deviceHash: 'device-a',
+			userId: bob.id,
+			activeMemberId: sam.id,
+			sessionId: 'session-1',
+		}),
+	);
+	ok('a parent records the managed kid active on a device');
+	await expectRejected(
+		"Alice recording a device row for Bob's user",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx.insert(deviceProfiles).values({
+					deviceHash: 'device-b',
+					userId: bob.id,
+					activeMemberId: null,
+				}),
+			),
+		RLS_DENIED,
+	);
+	const aliceDevices = await authed.withAuth(alice.token, (tx) =>
+		tx.select().from(deviceProfiles),
+	);
+	assert.equal(aliceDevices.length, 0);
+	await expectNoRows("Alice changing Bob's device profile", () =>
+		authed.withAuth(alice.token, (tx) =>
+			tx
+				.update(deviceProfiles)
+				.set({ activeMemberId: null })
+				.where(eq(deviceProfiles.deviceHash, 'device-a'))
+				.returning(),
+		),
+	);
+	ok("Alice can't see or change Bob's device profiles");
+
 	console.log('Leaving and removing:');
 	await expectNoRows('Bob removing Alice (owner)', () =>
 		authed.withAuth(bob.token, (tx) =>
@@ -987,6 +1055,14 @@ try {
 	);
 	assert.equal(removed.length, 1);
 	ok('Bob (parent) removes a managed kid');
+	const [deviceAfter] = await admin
+		.select()
+		.from(deviceProfiles)
+		.where(eq(deviceProfiles.deviceHash, 'device-a'));
+	assert.equal(deviceAfter?.activeMemberId, null);
+	ok(
+		'removing the kid clears the device profile (falls back to the parent view)',
+	);
 	const [choreAfter] = await authed.withAuth(alice.token, async (tx) => {
 		await tx
 			.delete(householdMembers)
@@ -1010,6 +1086,7 @@ try {
 			`select (select count(*)::int from chores) as chores,
 				(select count(*)::int from household_members) as members,
 				(select count(*)::int from household_member_pins) as pins,
+				(select count(*)::int from device_profiles) as devices,
 				(select count(*)::int from household_invites) as invites,
 				(select count(*)::int from chore_stages) as stages,
 				(select count(*)::int from chore_instances) as instances,
@@ -1019,6 +1096,7 @@ try {
 			chores: 0,
 			members: 0,
 			pins: 0,
+			devices: 0,
 			invites: 0,
 			stages: 0,
 			instances: 0,
