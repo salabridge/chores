@@ -1,0 +1,103 @@
+name: PR Neon Branch
+
+# Gives each PR its own Neon branch (copied from `e2e`) and applies the PR's
+# migrations to it. The branch is deleted when the PR closes.
+#
+# Opt out with the `no-db` label: adding it deletes the PR's branch, removing it
+# creates one.
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+      - closed
+
+permissions:
+  contents: read
+
+# One run per PR at a time. Never cancel: a cancelled create could leave a
+# half-migrated branch, and a cancelled delete would leak one.
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.number }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 24
+  NEON_BRANCH: preview/pr-${{ github.event.number }}
+
+jobs:
+  create_neon_branch:
+    name: Create Neon branch and migrate
+    # Fork PRs don't get NEON_API_KEY. Other label changes don't touch the database.
+    if: |
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.state == 'open'
+      && !contains(github.event.pull_request.labels.*.name, 'no-db')
+      && (
+        contains(fromJSON('["opened", "reopened", "synchronize"]'), github.event.action)
+        || (github.event.action == 'unlabeled' && github.event.label.name == 'no-db')
+      )
+    runs-on: ubuntu-latest
+    outputs:
+      # For later jobs (e2e). GitHub drops a job output that holds a masked
+      # value; if the log shows "Skip output ... may contain secret", look the
+      # URL up with `neonctl connection-string` in the consuming job instead.
+      db_url: ${{ steps.create_neon_branch.outputs.db_url }}
+      db_url_with_pooler: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
+    steps:
+      - name: Set branch expiration (7 days from now)
+        run: echo "EXPIRES_AT=$(date -u --date '+7 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+
+      # Reuses the branch if it already exists, so pushes after the first one
+      # only apply the migrations the branch hasn't seen yet.
+      - name: Create Neon branch
+        id: create_neon_branch
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch_name: ${{ env.NEON_BRANCH }}
+          parent_branch: e2e
+          api_key: ${{ secrets.NEON_API_KEY }}
+          expires_at: ${{ env.EXPIRES_AT }}
+
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter @chore/db
+
+      # Always runs: drizzle-kit skips migrations already recorded on the
+      # branch, so this also catches up a branch whose `e2e` parent is behind.
+      - name: Migrate
+        run: pnpm --filter @chore/db db:migrate
+        env:
+          # Unpooled: DDL shouldn't go through PgBouncer.
+          DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url }}
+
+  delete_neon_branch:
+    name: Delete Neon branch
+    # On close, unless `no-db` is set (its branch was already deleted, or never
+    # existed). When `no-db` is added to an open PR.
+    if: |
+      github.event.pull_request.head.repo.full_name == github.repository
+      && (
+        (github.event.action == 'closed' && !contains(github.event.pull_request.labels.*.name, 'no-db'))
+        || (github.event.action == 'labeled' && github.event.label.name == 'no-db')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete Neon branch
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: ${{ env.NEON_BRANCH }}
+          api_key: ${{ secrets.NEON_API_KEY }}
