@@ -1,5 +1,7 @@
 export * from './chore-frequency.ts';
 export * from './chore-instances.table.ts';
+export * from './chore-rotation-members.table.ts';
+export * from './chore-rotations.table.ts';
 export * from './chore-stage-progress.table.ts';
 export * from './chore-stages.table.ts';
 export * from './chore-type.ts';
@@ -11,3 +13,4 @@ export * from './household-members.table.ts';
 export * from './household-role.ts';
 export * from './households.table.ts';
 export * from './rls.ts';
+export * from './rotation-scope.ts';

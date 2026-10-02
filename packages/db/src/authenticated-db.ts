@@ -67,3 +67,4 @@ export function createAuthenticatedDb({
 
 export * from './household-access.ts';
 export * from './invites.ts';
+export * from './rotations.ts';
