@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { deviceProfiles, householdMembers } from '@chore/db';
+import { deviceProfiles, householdMembers, parentRoles } from '@chore/db';
 import type { Cookies } from '@sveltejs/kit';
-import { and, asc, eq, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, or } from 'drizzle-orm';
 import { dev } from '$app/env';
 import { getRequestEvent } from '$app/server';
 import { db } from './drizzle.ts';
@@ -83,6 +83,22 @@ export async function listManagedKids(
 		)
 		.orderBy(asc(householdMembers.displayName))
 		.then((rows) => rows.filter((m) => m.userId === null));
+}
+
+/** The household's parents and owners (people with a login), oldest first. */
+export async function listParents(
+	householdId: string,
+): Promise<MemberSummary[]> {
+	return db
+		.select(memberColumns)
+		.from(householdMembers)
+		.where(
+			and(
+				eq(householdMembers.householdId, householdId),
+				inArray(householdMembers.role, [...parentRoles]),
+			),
+		)
+		.orderBy(asc(householdMembers.joinedAt));
 }
 
 async function findDeviceProfile(
