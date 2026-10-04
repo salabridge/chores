@@ -1,11 +1,11 @@
 import { invalid, redirect } from '@sveltejs/kit';
-import { type } from 'arktype';
 import {
 	afterSignInUrl,
 	clearPendingCode,
 	clearSessionCookies,
 	getPendingCode,
 	neonAuth,
+	requireUser,
 	safeRedirectTarget,
 	sendCode,
 	setPendingCode,
@@ -234,27 +234,44 @@ export const signOut = form(async () => {
 	redirect(303, '/login');
 });
 
+/** Changes the signed-in user's password from the account page. Other devices
+ * are signed out so a stolen session doesn't survive the change. */
 export const setPassword = form(
-	type({
-		currentPassword: 'string>=0',
-		newPassword: 'string>=0',
-	}),
-	async ({ currentPassword, newPassword }) => {
+	'unchecked',
+	async (data: { _currentPassword: string; _newPassword: string }) => {
 		// A kid profile must not be able to change the parent's password.
 		await requireNotKidProfile();
-		const { locals } = getRequestEvent();
-		if (locals.user) {
-			const { error } = await neonAuth.changePassword({
-				newPassword,
-				currentPassword,
-			});
+		requireUser();
 
-			if (error) console.error('Failed updating passwords');
-
-			return {
-				status: 0,
-			};
+		const currentPassword = String(data._currentPassword ?? '');
+		const newPassword = String(data._newPassword ?? '');
+		if (!currentPassword || !newPassword) {
+			invalid('Enter your current and new password.');
 		}
+
+		const { error } = await neonAuth.changePassword({
+			currentPassword,
+			newPassword,
+			revokeOtherSessions: true,
+		});
+		if (error) {
+			switch (error.code) {
+				case 'INVALID_PASSWORD':
+					invalid('Your current password is not right.');
+					break;
+				case 'PASSWORD_TOO_SHORT':
+					invalid('That password is too short.');
+					break;
+				case 'PASSWORD_TOO_LONG':
+					invalid('That password is too long.');
+					break;
+				default:
+					console.error('Neon Auth change-password failed', error);
+					invalid('Could not change your password. Try again.');
+			}
+		}
+
+		return { changed: true };
 	},
 );
 
