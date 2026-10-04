@@ -23,6 +23,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import { user } from '../schema/auth-schema.ts';
 import {
+	choreCompletions,
 	choreInstances,
 	choreRotationMembers,
 	choreRotations,
@@ -34,19 +35,27 @@ import {
 	householdMemberPins,
 	householdMembers,
 	households,
+	pointsLedger,
 } from '../schema/index.ts';
 import {
 	acceptHouseholdInvite,
 	advanceRotation,
+	ChoreStagesIncompleteError,
 	canActAsMember,
+	completeChore,
+	completeChoreStage,
 	createAuthenticatedDb,
 	createInviteToken,
 	currentMemberId,
 	getRotationTurns,
 	isHouseholdParent,
+	memberPointsBalance,
 	NotHouseholdParentError,
+	reopenCompletion,
 	requireHouseholdParent,
+	StageLockedError,
 	StaleRotationTurnError,
+	weeklyPointsProgress,
 } from '../src/authenticated-db.ts';
 import { addDays, chorePeriodStart, localDate } from '../src/recurrence.ts';
 
@@ -1142,6 +1151,361 @@ try {
 				}),
 			),
 		RLS_DENIED,
+	);
+
+	console.log('Completions and points:');
+	const startInstance = (token: string, choreId: string, memberId: string) =>
+		authed.withAuth(token, async (tx) => {
+			const [row] = await tx
+				.insert(choreInstances)
+				.values({
+					householdId: household.id,
+					choreId,
+					periodStart: today,
+					assignedMemberId: memberId,
+				})
+				.returning();
+			return row;
+		});
+	const balance = (memberId: string) =>
+		authed.withAuth(alice.token, (tx) => memberPointsBalance(tx, memberId));
+
+	// A rotation chore of its own (the one above has been advanced by now):
+	// Carol has the turn, so completing it pays Carol and hands the turn to
+	// Mia, in one transaction.
+	const plants = await authed.withAuth(alice.token, async (tx) => {
+		const [c] = await tx
+			.insert(chores)
+			.values({
+				householdId: household.id,
+				title: 'Water the plants',
+				type: 'rotation',
+			})
+			.returning();
+		await tx.insert(choreRotations).values({
+			choreId: c.id,
+			householdId: household.id,
+			currentMemberId: carolMemberId,
+		});
+		await tx
+			.insert(choreRotationMembers)
+			.values([
+				slot(c.id, carolMemberId, 1),
+				slot(c.id, mia.id, 2),
+				slot(c.id, bobMemberId, 3),
+			]);
+		return c;
+	});
+	const trashInstance = await startInstance(
+		carol.token,
+		plants.id,
+		carolMemberId,
+	);
+	const carolBefore = await balance(carolMemberId);
+	const trashDone = await authed.withAuth(carol.token, (tx) =>
+		completeChore(tx, trashInstance.id),
+	);
+	assert.equal(trashDone.points, 10);
+	assert.equal(trashDone.alreadyCompleted, false);
+	assert.equal(trashDone.nextMemberId, mia.id);
+	assert.equal(await balance(carolMemberId), carolBefore + 10);
+	const afterTrash = await authed.withAuth(alice.token, (tx) =>
+		getRotationTurns(tx, plants.id),
+	);
+	assert.equal(afterTrash?.activeTurn?.memberId, mia.id);
+	assert.equal(afterTrash?.doneLast?.memberId, carolMemberId);
+	ok('Carol completes her rotation turn: +10 pts and the turn moves to Mia');
+
+	const trashAgain = await authed.withAuth(carol.token, (tx) =>
+		completeChore(tx, trashInstance.id),
+	);
+	assert.equal(trashAgain.alreadyCompleted, true);
+	assert.equal(trashAgain.points, 0);
+	assert.equal(trashAgain.completionId, trashDone.completionId);
+	assert.equal(await balance(carolMemberId), carolBefore + 10);
+	const stillMia = await authed.withAuth(alice.token, (tx) =>
+		getRotationTurns(tx, plants.id),
+	);
+	assert.equal(stillMia?.activeTurn?.memberId, mia.id);
+	ok('completing again awards nothing and does not advance the turn again');
+
+	// Someone else's chore: Mia is a managed kid, so a parent can act for her
+	// but Carol (a kid) can't.
+	const [feedFish] = await authed.withAuth(alice.token, (tx) =>
+		tx
+			.insert(chores)
+			.values({
+				householdId: household.id,
+				title: 'Feed the fish',
+				points: 5,
+				assignedMemberId: mia.id,
+			})
+			.returning(),
+	);
+	const fishInstance = await startInstance(bob.token, feedFish.id, mia.id);
+	await expectRejected(
+		"Carol completing Mia's chore",
+		() =>
+			authed.withAuth(carol.token, (tx) => completeChore(tx, fishInstance.id)),
+		/only a parent or the assignee/,
+	);
+	const miaBefore = await balance(mia.id);
+	const fishDone = await authed.withAuth(bob.token, (tx) =>
+		completeChore(tx, fishInstance.id),
+	);
+	assert.equal(fishDone.points, 5);
+	assert.equal(fishDone.nextMemberId, null);
+	assert.equal(await balance(mia.id), miaBefore + 5);
+	ok('Bob (parent) completes the chore for Mia (managed kid): +5 pts to Mia');
+
+	// A staged personal chore: stages unlock in order, and the last one
+	// completes the chore.
+	const packBag = await authed.withAuth(alice.token, async (tx) => {
+		const [c] = await tx
+			.insert(chores)
+			.values({
+				householdId: household.id,
+				title: 'Pack school bag',
+				points: 15,
+				assignedMemberId: carolMemberId,
+			})
+			.returning();
+		const stages = await tx
+			.insert(choreStages)
+			.values([
+				{
+					householdId: household.id,
+					choreId: c.id,
+					position: 1,
+					title: 'Homework in',
+				},
+				{
+					householdId: household.id,
+					choreId: c.id,
+					position: 2,
+					title: 'Lunch in',
+				},
+			])
+			.returning();
+		return { chore: c, stages };
+	});
+	const [stageOne, stageTwo] = packBag.stages;
+	const bagInstance = await startInstance(
+		carol.token,
+		packBag.chore.id,
+		carolMemberId,
+	);
+	await expectRejected(
+		'checking stage 2 before stage 1',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				completeChoreStage(tx, bagInstance.id, stageTwo.id),
+			),
+		/earlier stage/,
+	);
+	await assert.rejects(
+		authed.withAuth(carol.token, (tx) =>
+			completeChoreStage(tx, bagInstance.id, stageTwo.id),
+		),
+		StageLockedError,
+	);
+	await assert.rejects(
+		authed.withAuth(carol.token, (tx) => completeChore(tx, bagInstance.id)),
+		ChoreStagesIncompleteError,
+	);
+	ok('a locked stage and a chore with stages left are refused (typed errors)');
+
+	const bagBefore = await balance(carolMemberId);
+	const first = await authed.withAuth(carol.token, (tx) =>
+		completeChoreStage(tx, bagInstance.id, stageOne.id),
+	);
+	assert.equal(first.choreCompleted, false);
+	const firstAgain = await authed.withAuth(carol.token, (tx) =>
+		completeChoreStage(tx, bagInstance.id, stageOne.id),
+	);
+	assert.equal(firstAgain.choreCompleted, false);
+	assert.equal(await balance(carolMemberId), bagBefore);
+	ok('checking stage 1 (twice) records it once and awards nothing yet');
+
+	const last = await authed.withAuth(carol.token, (tx) =>
+		completeChoreStage(tx, bagInstance.id, stageTwo.id),
+	);
+	assert.ok(last.choreCompleted);
+	assert.equal(last.points, 15);
+	assert.equal(await balance(carolMemberId), bagBefore + 15);
+	const lastAgain = await authed.withAuth(carol.token, (tx) =>
+		completeChoreStage(tx, bagInstance.id, stageTwo.id),
+	);
+	assert.ok(lastAgain.choreCompleted);
+	assert.equal(lastAgain.alreadyCompleted, true);
+	assert.equal(lastAgain.points, 0);
+	assert.equal(await balance(carolMemberId), bagBefore + 15);
+	ok('the last stage completes the chore: +15 pts once, not twice');
+
+	// Reopen is for parents and takes the points back without deleting history.
+	await expectRejected(
+		'Carol reopening her own completion',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				reopenCompletion(tx, last.completionId),
+			),
+		/only a parent can reopen/,
+	);
+	const reopened = await authed.withAuth(bob.token, (tx) =>
+		reopenCompletion(tx, last.completionId),
+	);
+	assert.equal(reopened, true);
+	assert.equal(await balance(carolMemberId), bagBefore);
+	const reopenedAgain = await authed.withAuth(bob.token, (tx) =>
+		reopenCompletion(tx, last.completionId),
+	);
+	assert.equal(reopenedAgain, false);
+	assert.equal(await balance(carolMemberId), bagBefore);
+	const bagLedger = await authed.withAuth(alice.token, (tx) =>
+		tx
+			.select()
+			.from(pointsLedger)
+			.where(eq(pointsLedger.completionId, last.completionId)),
+	);
+	assert.deepEqual(
+		bagLedger.map((r) => r.delta).sort((a, b) => a - b),
+		[-15, 15],
+	);
+	const bagProgress = await authed.withAuth(alice.token, (tx) =>
+		tx
+			.select()
+			.from(choreStageProgress)
+			.where(eq(choreStageProgress.instanceId, bagInstance.id)),
+	);
+	assert.deepEqual(
+		bagProgress.map((r) => r.stageId),
+		[stageOne.id],
+	);
+	ok(
+		'Bob reopens it: -15 pts via a reversing ledger row, last stage unchecked',
+	);
+
+	const redone = await authed.withAuth(carol.token, (tx) =>
+		completeChoreStage(tx, bagInstance.id, stageTwo.id),
+	);
+	assert.ok(redone.choreCompleted);
+	assert.equal(redone.points, 15);
+	assert.notEqual(redone.completionId, last.completionId);
+	assert.equal(await balance(carolMemberId), bagBefore + 15);
+	ok('after a reopen the chore can be completed again (+15, new completion)');
+
+	// Nobody writes the ledger or completions directly (except parent adjustments).
+	await expectRejected(
+		'Carol writing her own points',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx.insert(pointsLedger).values({
+					householdId: household.id,
+					memberId: carolMemberId,
+					delta: 100,
+					reason: 'adjustment',
+					note: 'free points',
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectRejected(
+		'Bob writing a fake completion award',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.insert(pointsLedger).values({
+					householdId: household.id,
+					memberId: carolMemberId,
+					delta: 100,
+					reason: 'completion',
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectRejected(
+		'Bob inserting a completion row',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.insert(choreCompletions).values({
+					householdId: household.id,
+					choreId: packBag.chore.id,
+					instanceId: bagInstance.id,
+					memberId: carolMemberId,
+					points: 99,
+				}),
+			),
+		/permission denied/,
+	);
+	await expectRejected(
+		'Bob editing a ledger row',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.update(pointsLedger).set({ delta: 1 }),
+			),
+		/permission denied/,
+	);
+	await expectRejected(
+		'Bob deleting a ledger row',
+		() => authed.withAuth(bob.token, (tx) => tx.delete(pointsLedger)),
+		/permission denied/,
+	);
+	const adjustBefore = await balance(carolMemberId);
+	await authed.withAuth(bob.token, (tx) =>
+		tx.insert(pointsLedger).values({
+			householdId: household.id,
+			memberId: carolMemberId,
+			delta: 3,
+			reason: 'adjustment',
+			note: 'Helped with groceries',
+			createdBy: bob.id,
+		}),
+	);
+	assert.equal(await balance(carolMemberId), adjustBefore + 3);
+	ok('only parents add adjustments; completion rows and edits are blocked');
+
+	// Weekly goal: per member, set by a parent.
+	const monday = new Date(`${chorePeriodStart('weekly', today)}T00:00:00Z`);
+	const weekly = await authed.withAuth(carol.token, (tx) =>
+		weeklyPointsProgress(tx, carolMemberId, monday),
+	);
+	assert.equal(weekly.goal, 200);
+	assert.equal(weekly.earned, 25);
+	assert.equal(weekly.remaining, 175);
+	await expectNoRows('Carol raising her own weekly goal', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.update(householdMembers)
+				.set({ weeklyGoalPoints: 1 })
+				.where(eq(householdMembers.id, carolMemberId))
+				.returning(),
+		),
+	);
+	await authed.withAuth(bob.token, (tx) =>
+		tx
+			.update(householdMembers)
+			.set({ weeklyGoalPoints: 100 })
+			.where(eq(householdMembers.id, carolMemberId)),
+	);
+	const reset = await authed.withAuth(carol.token, (tx) =>
+		weeklyPointsProgress(tx, carolMemberId, monday),
+	);
+	assert.equal(reset.goal, 100);
+	assert.equal(reset.percent, 25);
+	ok(
+		"weekly progress counts completions net of reversals; a parent sets Carol's goal",
+	);
+
+	const daveLedger = await authed.withAuth(dave.token, async (tx) => ({
+		completions: await tx.select().from(choreCompletions),
+		ledger: await tx.select().from(pointsLedger),
+	}));
+	assert.equal(daveLedger.completions.length, 0);
+	assert.equal(daveLedger.ledger.length, 0);
+	await expectRejected(
+		"completing a chore in a household Dave isn't in",
+		() =>
+			authed.withAuth(dave.token, (tx) => completeChore(tx, bagInstance.id)),
+		/no chore instance/,
 	);
 
 	console.log('Deleting a chore:');

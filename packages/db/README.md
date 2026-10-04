@@ -290,6 +290,56 @@ in order (with display name and avatar), and from `rotationTurns()`:
 shared-chore screen, and `handoffChain` for the Overview: the Active Turn and
 then one full loop of hand-offs, with `loopReset` marking where it wraps.
 
+### Completions and points
+
+Finishing a chore in a period writes a `chore_completions` row and, if the
+chore is worth points, a `points_ledger` row (SB-26). Stages are still tracked
+by `chore_stage_progress`; the completion appears when the chore as a whole is
+done.
+
+- **Completions** (`chore_completions`): one row per finished instance, with
+  the member credited (the instance's assignee, even when a parent tapped the
+  button for a managed kid) and the points copied from `chores.points`. At
+  most one *open* completion exists per instance (a partial unique index),
+  which is what makes completing twice a no-op.
+- **Ledger** (`points_ledger`): append-only. Every point change is a row with
+  a `delta` and a `reason`: `completion` (+), `reversal` (-, a parent reopened
+  it), `reward_claim` (-, SB-27 will write these) or `adjustment` (a parent's
+  correction, with a note). A balance is the sum of the member's deltas
+  (`memberPointsBalance()`); there is no stored counter. Nothing updates or
+  deletes ledger rows, and `completion`/`reversal` rows are unique per
+  completion.
+- **Weekly goal**: `household_members.weekly_goal_points` (default 200), set
+  per member by a parent. `weeklyPointsProgress(tx, memberId, weekStart)`
+  returns earned / goal / remaining / percent for the progress bar, counting
+  only chore points (completions net of reversals). Pass the start of the
+  household-local week as an instant.
+
+**Writing.** Neither table has insert policies for the app role (parents can
+insert `adjustment` ledger rows). Use the helpers, which call `SECURITY
+DEFINER` functions (custom migration `0011`) that check who may act, lock the
+chore instance, and write the completion, the ledger row and the rotation
+hand-off in the caller's transaction:
+
+- `completeChoreStage(tx, instanceId, stageId)` checks a stage off. Stages
+  unlock in order (`StageLockedError`), repeating one is a no-op, and the last
+  stage completes the chore in the same call.
+- `completeChore(tx, instanceId)` completes a chore without stages ("Mark
+  Done"), or a staged one whose stages are all done
+  (`ChoreStagesIncompleteError` otherwise). A repeat call returns the existing
+  completion with `alreadyCompleted: true` and awards nothing. For a rotation
+  chore it also advances the turn (`nextMemberId`).
+- `reopenCompletion(tx, completionId)` is parent-only. It marks the completion
+  reopened, writes a reversing ledger row (the original stays), and unchecks
+  the last stage of a staged chore so it's back to "Complete Chore". The
+  instance can then be completed again with a new completion. It returns
+  false if it was already reopened. A rotation's turn is **not** moved back:
+  others may have had their turn since.
+
+Who may complete: a parent, or someone who can act as the instance's assignee
+(themselves, or a managed kid they parent). Chores with no assignee can't be
+completed (`ChoreNotAssignedError`).
+
 ## Row-level security
 
 Every domain table has RLS enabled, with policies for the `authenticated_backend`
@@ -307,9 +357,12 @@ role. Access follows household membership and role:
 | `chore_stage_progress`  | members               | members check off stages as themselves; parents for anyone in the household; uncheck (delete) the same way |
 | `chore_rotations`       | members               | parents; the turn moves through `app.advance_chore_rotation` (members for their own turn, parents for anyone) |
 | `chore_rotation_members`| members               | parents                                                                                 |
+| `chore_completions`     | members               | nobody directly; written by `app.complete_chore_instance` / `complete_chore_stage` / `reopen_chore_completion` |
+| `points_ledger`         | members               | append-only; parents insert `adjustment` rows, completions and reversals come from the functions above |
 
 Column grants stop the app from changing a member row's `id`,
-`household_id`, `user_id`, or `joined_at`.
+`household_id`, `user_id`, or `joined_at`; `weekly_goal_points` can be changed
+(by parents, through the member update policy).
 
 Use these in routes and server code (inside `withAuth`) to check roles up
 front; RLS enforces the same rules either way:

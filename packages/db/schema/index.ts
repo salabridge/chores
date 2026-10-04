@@ -1,3 +1,4 @@
+export * from './chore-completions.table.ts';
 export * from './chore-frequency.ts';
 export * from './chore-instances.table.ts';
 export * from './chore-rotation-members.table.ts';
@@ -12,5 +13,7 @@ export * from './household-member-pins.table.ts';
 export * from './household-members.table.ts';
 export * from './household-role.ts';
 export * from './households.table.ts';
+export * from './points-ledger.table.ts';
+export * from './points-reason.ts';
 export * from './rls.ts';
 export * from './rotation-scope.ts';
