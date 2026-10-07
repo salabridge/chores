@@ -49,6 +49,19 @@ describe('MemberToggleRow.svelte', () => {
 			.toBeVisible();
 	});
 
+	it('renders extra actions before the toggle', async () => {
+		const actions = createRawSnippet(() => ({
+			render: () => '<button type="button">Move</button>',
+		}));
+		render(MemberToggleRow, { name: 'Leo', actions });
+		await expect
+			.element(page.getByRole('button', { name: 'Move' }))
+			.toBeVisible();
+		await expect
+			.element(page.getByRole('switch', { name: 'Leo' }))
+			.toBeVisible();
+	});
+
 	it('works without an avatar', async () => {
 		render(MemberToggleRow, { name: 'Leo' });
 		await expect
