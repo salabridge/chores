@@ -30,11 +30,12 @@ describe('MemberToggleRow.svelte', () => {
 		await expect
 			.element(page.getByText('Too young for hot-water handling'))
 			.toHaveClass('text-text-secondary');
-		await expect
-			.element(
-				page.getByText('Mia').element().closest<HTMLElement>('[data-checked]')!,
-			)
-			.toHaveClass('opacity-60');
+		const row = page
+			.getByText('Mia')
+			.element()
+			.closest<HTMLElement>('[data-checked]');
+		if (!row) throw new Error('Expected Mia to be inside the toggle row');
+		await expect.element(row).toHaveClass('opacity-60');
 	});
 
 	it('swaps status text when toggled', async () => {

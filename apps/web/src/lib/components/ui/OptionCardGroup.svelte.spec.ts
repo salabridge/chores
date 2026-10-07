@@ -58,8 +58,11 @@ describe('OptionCardGroup / OptionCard', () => {
 
 	it('styles the selected card by accent', async () => {
 		render(Host, { value: 'shared', accent: 'blue' });
-		await expect
-			.element(page.getByText('Household Rotation').element().closest('label')!)
-			.toHaveClass('border-border-blue');
+		const card = page
+			.getByText('Household Rotation')
+			.element()
+			.closest('label');
+		if (!card) throw new Error('Expected the option to be inside a label');
+		await expect.element(card).toHaveClass('border-border-blue');
 	});
 });
