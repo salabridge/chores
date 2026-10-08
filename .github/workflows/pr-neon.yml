@@ -57,7 +57,7 @@ jobs:
       # value; if the log shows "Skip output ... may contain secret", look the
       # URL up with `neonctl connection-string` in the consuming job instead.
       db_url: ${{ steps.create_neon_branch.outputs.db_url }}
-      db_url_with_pooler: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
+      db_url_pooled: ${{ steps.create_neon_branch.outputs.db_url_pooled }}
       preview_url: ${{ steps.alias.outputs.url }}
     steps:
       - name: Set branch expiration (7 days from now)
@@ -123,7 +123,7 @@ jobs:
         run: vercel build --token "$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
+          DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url_pooled }}
           NEON_AUTH_URL: ${{ steps.auth.outputs.url }}
 
       - name: Deploy
@@ -135,7 +135,7 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
+          DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url_pooled }}
           NEON_AUTH_URL: ${{ steps.auth.outputs.url }}
 
       - name: Alias the deployment
