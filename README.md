@@ -86,7 +86,8 @@ Neon Auth only accepts requests from trusted origins. On `dev`, the
 **allow localhost** setting covers local work, and
 `https://chores.salabridge.family` is on the trusted-domain list. Add any
 other origin to that branch's trusted domains in the Neon Auth settings. PR
-previews do this automatically (see "Deployments and preview branches").
+branches inherit the `e2e` list, which includes `*.vercel.app`, so previews
+need nothing extra (see "Deployments and preview branches").
 
 ### Neon Auth keys
 
@@ -149,7 +150,8 @@ values, so its own builds failed. For each PR the workflow:
 3. Builds and deploys to Vercel with that branch's `DATABASE_URL` and
    `NEON_AUTH_URL`.
 4. Points a stable alias, `salabridge-chores-pr-<n>.vercel.app`, at the
-   deployment and adds it to the branch's Neon Auth trusted domains.
+   deployment. Neon Auth trusts it because the `e2e` branch, which PR branches
+   copy, lists `*.vercel.app` as a trusted domain.
 5. Comments the alias URL on the PR, editing the same comment on later pushes.
 
 When the PR closes, the workflow deletes the Neon branch and the alias. PRs

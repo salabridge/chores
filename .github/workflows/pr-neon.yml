@@ -32,8 +32,9 @@ concurrency:
 env:
   NODE_VERSION: 24
   NEON_BRANCH: preview/pr-${{ github.event.number }}
-  # Stable per-PR hostname, so the Neon Auth trusted domain survives pushes.
-  # Each push gets a new unique deployment URL; the alias is repointed at it.
+  # Stable per-PR hostname. Each push gets a new unique deployment URL; the
+  # alias is repointed at it. Neon Auth trusts it through the `*.vercel.app`
+  # entry on the `e2e` branch, which every PR branch inherits.
   PREVIEW_HOST: ${{ vars.VERCEL_PREVIEW_PREFIX || 'salabridge-chores-pr' }}-${{ github.event.number }}.vercel.app
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -104,20 +105,6 @@ jobs:
             "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$BRANCH_ID/auth" \
             | jq -er .base_url)
           echo "url=$url" >> "$GITHUB_OUTPUT"
-        env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
-          BRANCH_ID: ${{ steps.create_neon_branch.outputs.branch_id }}
-
-      # Neon Auth only accepts requests from trusted origins. The branch
-      # inherits the `e2e` list, which doesn't include the preview host.
-      - name: Trust the preview origin
-        run: |
-          curl -fsS -X POST \
-            -H "Authorization: Bearer $NEON_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{\"domain\": \"https://$PREVIEW_HOST\", \"auth_provider\": \"better_auth\"}" \
-            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$BRANCH_ID/auth/domains"
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
