@@ -12,6 +12,8 @@
 		eligibleLabel?: string;
 		/** Avatar slot, e.g. the Member Avatar component. */
 		avatar?: Snippet;
+		/** Extra controls before the toggle, e.g. the ReorderButtons. */
+		actions?: Snippet;
 		disabled?: boolean;
 	}
 
@@ -21,6 +23,7 @@
 		reason,
 		eligibleLabel = 'Eligible rotation member',
 		avatar,
+		actions,
 		disabled = false,
 	}: Props = $props();
 
@@ -48,6 +51,9 @@
 			{checked ? eligibleLabel : (reason ?? '')}
 		</span>
 	</div>
+	{#if actions}
+		<div class="flex shrink-0 items-center gap-4">{@render actions()}</div>
+	{/if}
 	<Toggle
 		bind:checked
 		{disabled}
