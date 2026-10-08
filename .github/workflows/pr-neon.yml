@@ -4,7 +4,7 @@ name: PR Neon Branch
 # migrations to it, and deploys a Vercel preview wired to that branch. The
 # branch and the preview alias are removed when the PR closes.
 #
-# Vercel's own git integration is off (`vercel.json`): it can't know the
+# Vercel's own git integration is off (`apps/web/vercel.json`): it can't know the
 # per-PR `DATABASE_URL` and `NEON_AUTH_URL`, so its builds always failed.
 #
 # Opt out with the `no-db` label: adding it deletes the PR's branch, removing it

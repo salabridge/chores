@@ -140,7 +140,7 @@ values.
 
 Previews come from the **PR Neon Branch** workflow
 (`.github/workflows/pr-neon.yml`), not from Vercel's git integration, which is
-disabled in `vercel.json`. Vercel can't know the per-PR database and auth
+disabled in `apps/web/vercel.json`. Vercel can't know the per-PR database and auth
 values, so its own builds failed. For each PR the workflow:
 
 1. Creates the `preview/pr-<n>` Neon branch and migrates it.
