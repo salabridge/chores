@@ -16,7 +16,7 @@
 		 */
 		variant?: 'outline' | 'icon' | 'tinted';
 		/** Colour of the `tinted` variant. */
-		tone?: 'orange' | 'blue' | 'green' | 'amber';
+		tone?: 'orange' | 'blue' | 'green' | 'amber' | 'neutral';
 	};
 
 	type ButtonProps = BaseProps &
@@ -45,6 +45,7 @@
 		blue: 'bg-surface-accent-blue-subtle text-text-blue',
 		green: 'bg-surface-accent-green-subtle text-text-green',
 		amber: 'bg-surface-accent-amber-subtle text-text-amber',
+		neutral: 'bg-background-base text-text-secondary',
 	} as const;
 
 	const variants = {
