@@ -149,9 +149,10 @@ values, so its own builds failed. For each PR the workflow:
    with the branch.
 3. Builds and deploys to Vercel with that branch's `DATABASE_URL` and
    `NEON_AUTH_URL`.
-4. Comments the deployment URL on the PR, editing the same comment on later
-   pushes. Neon Auth trusts the URL because the `e2e` branch, which PR
-   branches copy, lists `*.vercel.app` as a trusted domain.
+4. Records a GitHub deployment in the `preview` environment, so the PR shows a
+   **View deployment** link to the preview. Neon Auth trusts the URL because
+   the `e2e` branch, which PR branches copy, lists `*.vercel.app` as a
+   trusted domain.
 
 When the PR closes, the workflow deletes the Neon branch. Vercel expires the
 deployments under its retention settings. PRs with the `no-db` label, and fork

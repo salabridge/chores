@@ -21,7 +21,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 # One run per PR at a time. Never cancel: a cancelled create could leave a
 # half-migrated branch, and a cancelled delete would leak one.
@@ -50,6 +49,11 @@ jobs:
         || (github.event.action == 'unlabeled' && github.event.label.name == 'no-db')
       )
     runs-on: ubuntu-latest
+    # Records a GitHub deployment, so the PR shows a "View deployment" link to
+    # the preview.
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
     outputs:
       # For later jobs (e2e). GitHub drops a job output that holds a masked
       # value; if the log shows "Skip output ... may contain secret", look the
@@ -135,23 +139,6 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url_pooled }}
           NEON_AUTH_URL: ${{ steps.auth.outputs.url }}
-
-      # One comment per PR, edited in place on later pushes.
-      - name: Comment the preview URL
-        run: |
-          marker='<!-- pr-neon-preview -->'
-          body="$marker"$'\n'"Preview: $PREVIEW_URL"$'\n'"Neon branch: \`$NEON_BRANCH\`"
-          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-            --jq "map(select(.body | startswith(\"$marker\"))) | first | .id // empty")
-          if [ -n "$id" ]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body"
-          else
-            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body"
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.number }}
-          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
 
   delete_neon_branch:
     name: Delete Neon branch
