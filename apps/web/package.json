@@ -22,7 +22,7 @@
 		"@storybook/addon-docs": "^10.6.1",
 		"@storybook/addon-svelte-csf": "^5.1.5",
 		"@storybook/sveltekit": "^10.6.1",
-		"@sveltejs/adapter-auto": "next",
+		"@sveltejs/adapter-vercel": "^6.3.4",
 		"@sveltejs/kit": "^2.70.3",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/vite": "^4.3.0",

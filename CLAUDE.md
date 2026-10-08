@@ -59,7 +59,7 @@ orchestration/caching defined in [turbo.json](turbo.json) and workspaces declare
 
 - `apps/web` (`@chore/web`) — SvelteKit app (Svelte 5, runes forced project-wide via
   `compilerOptions.runes` in [vite.config.ts](apps/web/vite.config.ts)), built with Vite,
-  Tailwind CSS v4, `adapter-auto`, and SvelteKit's experimental `async`/`remoteFunctions`
+  Tailwind CSS v4, `adapter-vercel`, and SvelteKit's experimental `async`/`remoteFunctions`
   flags enabled. Testing is already wired up: Vitest with two projects (`client` — browser
   tests via `@vitest/browser-playwright` for `*.svelte.{test,spec}.ts`; `server` — plain
   Node tests for everything else) plus a separate Playwright e2e suite under

@@ -134,7 +134,7 @@ it doesn't.
 
 ### Deployments and preview branches
 
-`apps/web` deploys to Vercel with `adapter-auto`. Production gets its secrets
+`apps/web` deploys to Vercel with `@sveltejs/adapter-vercel`. Production gets its secrets
 from the Vercel project's environment settings, using the `production` branch
 values.
 
