@@ -149,13 +149,13 @@ values, so its own builds failed. For each PR the workflow:
    with the branch.
 3. Builds and deploys to Vercel with that branch's `DATABASE_URL` and
    `NEON_AUTH_URL`.
-4. Points a stable alias, `salabridge-chores-pr-<n>.vercel.app`, at the
-   deployment. Neon Auth trusts it because the `e2e` branch, which PR branches
-   copy, lists `*.vercel.app` as a trusted domain.
-5. Comments the alias URL on the PR, editing the same comment on later pushes.
+4. Comments the deployment URL on the PR, editing the same comment on later
+   pushes. Neon Auth trusts the URL because the `e2e` branch, which PR
+   branches copy, lists `*.vercel.app` as a trusted domain.
 
-When the PR closes, the workflow deletes the Neon branch and the alias. PRs
-with the `no-db` label, and fork PRs, get no preview.
+When the PR closes, the workflow deletes the Neon branch. Vercel expires the
+deployments under its retention settings. PRs with the `no-db` label, and fork
+PRs, get no preview.
 
 It needs these repository settings:
 
@@ -164,7 +164,6 @@ It needs these repository settings:
 | `VERCEL_TOKEN`          | secret   | Vercel access token with access to the project's team.              |
 | `VERCEL_ORG_ID`         | secret   | `orgId` from `.vercel/project.json` after `vercel link`.            |
 | `VERCEL_PROJECT_ID`     | secret   | `projectId` from the same file.                                     |
-| `VERCEL_PREVIEW_PREFIX` | variable | Optional. Alias prefix, default `salabridge-chores-pr`.             |
 
 A preview doesn't set `DATABASE_AUTHENTICATED_URL`. If something in a preview
 starts using it, give `authenticated_backend` a password on the PR branch and
