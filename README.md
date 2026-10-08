@@ -85,8 +85,8 @@ The Neon project is `salabridge-chores`. It has two branches: `production`
 Neon Auth only accepts requests from trusted origins. On `dev`, the
 **allow localhost** setting covers local work, and
 `https://chores.salabridge.family` is on the trusted-domain list. Add any
-other origin, such as a preview URL, to that branch's trusted domains in the
-Neon Auth settings.
+other origin to that branch's trusted domains in the Neon Auth settings. PR
+previews do this automatically (see "Deployments and preview branches").
 
 ### Neon Auth keys
 
@@ -133,20 +133,40 @@ it doesn't.
 
 ### Deployments and preview branches
 
-We haven't picked a host yet: `apps/web` still uses `adapter-auto`. Once we
-do, production gets its secrets from the host's environment settings, using
-the `production` branch values.
+`apps/web` deploys to Vercel with `adapter-auto`. Production gets its secrets
+from the Vercel project's environment settings, using the `production` branch
+values.
 
-For previews, create a Neon branch per PR, for example with
-[`neondatabase/create-branch-action`](https://github.com/neondatabase/create-branch-action).
-Neon Auth branches along with the database, so users, sessions and auth
-config come with the branch. No auth migration is needed. Each preview then
-needs:
+Previews come from the **PR Neon Branch** workflow
+(`.github/workflows/pr-neon.yml`), not from Vercel's git integration, which is
+disabled in `vercel.json`. Vercel can't know the per-PR database and auth
+values, so its own builds failed. For each PR the workflow:
 
-1. That branch's `DATABASE_URL` and `NEON_AUTH_URL`.
-2. The preview's origin added to the branch's trusted domains.
-3. A password for `authenticated_backend`, if anything in the preview uses
-   `DATABASE_AUTHENTICATED_URL`.
+1. Creates the `preview/pr-<n>` Neon branch and migrates it.
+2. Looks up that branch's Neon Auth URL through the Neon API. Neon Auth
+   branches along with the database, so users, sessions and auth config come
+   with the branch.
+3. Builds and deploys to Vercel with that branch's `DATABASE_URL` and
+   `NEON_AUTH_URL`.
+4. Points a stable alias, `salabridge-chores-pr-<n>.vercel.app`, at the
+   deployment and adds it to the branch's Neon Auth trusted domains.
+5. Comments the alias URL on the PR, editing the same comment on later pushes.
+
+When the PR closes, the workflow deletes the Neon branch and the alias. PRs
+with the `no-db` label, and fork PRs, get no preview.
+
+It needs these repository settings:
+
+| Name                    | Kind     | What it is                                                          |
+| ----------------------- | -------- | ------------------------------------------------------------------- |
+| `VERCEL_TOKEN`          | secret   | Vercel access token with access to the project's team.              |
+| `VERCEL_ORG_ID`         | secret   | `orgId` from `.vercel/project.json` after `vercel link`.            |
+| `VERCEL_PROJECT_ID`     | secret   | `projectId` from the same file.                                     |
+| `VERCEL_PREVIEW_PREFIX` | variable | Optional. Alias prefix, default `salabridge-chores-pr`.             |
+
+A preview doesn't set `DATABASE_AUTHENTICATED_URL`. If something in a preview
+starts using it, give `authenticated_backend` a password on the PR branch and
+pass the URL through the workflow too.
 
 ## Scripts
 

@@ -1,7 +1,11 @@
 name: PR Neon Branch
 
-# Gives each PR its own Neon branch (copied from `e2e`) and applies the PR's
-# migrations to it. The branch is deleted when the PR closes.
+# Gives each PR its own Neon branch (copied from `e2e`), applies the PR's
+# migrations to it, and deploys a Vercel preview wired to that branch. The
+# branch and the preview alias are removed when the PR closes.
+#
+# Vercel's own git integration is off (`vercel.json`): it can't know the
+# per-PR `DATABASE_URL` and `NEON_AUTH_URL`, so its builds always failed.
 #
 # Opt out with the `no-db` label: adding it deletes the PR's branch, removing it
 # creates one.
@@ -17,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 # One run per PR at a time. Never cancel: a cancelled create could leave a
 # half-migrated branch, and a cancelled delete would leak one.
@@ -27,10 +32,15 @@ concurrency:
 env:
   NODE_VERSION: 24
   NEON_BRANCH: preview/pr-${{ github.event.number }}
+  # Stable per-PR hostname, so the Neon Auth trusted domain survives pushes.
+  # Each push gets a new unique deployment URL; the alias is repointed at it.
+  PREVIEW_HOST: ${{ vars.VERCEL_PREVIEW_PREFIX || 'salabridge-chores-pr' }}-${{ github.event.number }}.vercel.app
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
   create_neon_branch:
-    name: Create Neon branch and migrate
+    name: Create Neon branch, migrate and deploy preview
     # Fork PRs don't get NEON_API_KEY. Other label changes don't touch the database.
     if: |
       github.event.pull_request.head.repo.full_name == github.repository
@@ -47,6 +57,7 @@ jobs:
       # URL up with `neonctl connection-string` in the consuming job instead.
       db_url: ${{ steps.create_neon_branch.outputs.db_url }}
       db_url_with_pooler: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
+      preview_url: ${{ steps.alias.outputs.url }}
     steps:
       - name: Set branch expiration (7 days from now)
         run: echo "EXPIRES_AT=$(date -u --date '+7 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
@@ -83,8 +94,91 @@ jobs:
           # Unpooled: DDL shouldn't go through PgBouncer.
           DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url }}
 
+      # Neon Auth branches with the database, so each PR branch has its own
+      # Auth URL. Only the REST API exposes it.
+      - name: Look up Neon Auth URL
+        id: auth
+        run: |
+          url=$(curl -fsS \
+            -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$BRANCH_ID/auth" \
+            | jq -er .base_url)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          BRANCH_ID: ${{ steps.create_neon_branch.outputs.branch_id }}
+
+      # Neon Auth only accepts requests from trusted origins. The branch
+      # inherits the `e2e` list, which doesn't include the preview host.
+      - name: Trust the preview origin
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $NEON_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"domain\": \"https://$PREVIEW_HOST\", \"auth_provider\": \"better_auth\"}" \
+            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$BRANCH_ID/auth/domains"
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          BRANCH_ID: ${{ steps.create_neon_branch.outputs.branch_id }}
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings
+        run: vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      # The build sees the PR branch's values through the shell environment.
+      - name: Build
+        run: vercel build --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
+          NEON_AUTH_URL: ${{ steps.auth.outputs.url }}
+
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt --token "$VERCEL_TOKEN" \
+            --env DATABASE_URL="$DATABASE_URL" \
+            --env NEON_AUTH_URL="$NEON_AUTH_URL")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
+          NEON_AUTH_URL: ${{ steps.auth.outputs.url }}
+
+      - name: Alias the deployment
+        id: alias
+        run: |
+          vercel alias set "$DEPLOYMENT_URL" "$PREVIEW_HOST" --token "$VERCEL_TOKEN"
+          echo "url=https://$PREVIEW_HOST" >> "$GITHUB_OUTPUT"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+
+      # One comment per PR, edited in place on later pushes.
+      - name: Comment the preview URL
+        run: |
+          marker='<!-- pr-neon-preview -->'
+          body="$marker"$'\n'"Preview: $PREVIEW_URL"$'\n'"Neon branch: \`$NEON_BRANCH\`"
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq "map(select(.body | startswith(\"$marker\"))) | first | .id // empty")
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body"
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.number }}
+          PREVIEW_URL: ${{ steps.alias.outputs.url }}
+
   delete_neon_branch:
-    name: Delete Neon branch
+    name: Delete Neon branch and preview
     # On close, unless `no-db` is set (its branch was already deleted, or never
     # existed). When `no-db` is added to an open PR.
     if: |
@@ -101,3 +195,13 @@ jobs:
           project_id: ${{ vars.NEON_PROJECT_ID }}
           branch: ${{ env.NEON_BRANCH }}
           api_key: ${{ secrets.NEON_API_KEY }}
+
+      # Frees the hostname. The deployments themselves expire under Vercel's
+      # retention settings. Nothing to remove if the PR never had a preview.
+      - name: Remove preview alias
+        continue-on-error: true
+        run: |
+          npm install --global vercel@latest
+          vercel alias rm "$PREVIEW_HOST" --yes --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
