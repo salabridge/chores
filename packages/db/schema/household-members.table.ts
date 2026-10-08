@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import {
 	check,
 	index,
+	integer,
 	pgPolicy,
 	pgTable,
 	smallint,
@@ -53,6 +54,12 @@ export const householdMembers = pgTable(
 		avatarInitial: text('avatar_initial'),
 		/** Optional, so the UI can show an age ("Mia (7)"). */
 		birthYear: smallint('birth_year'),
+		/**
+		 * Points this member is aiming for each week ("160 / 200 Points
+		 * reached"). Set by a parent; the progress is the week's sum from
+		 * `points_ledger` (`weeklyPointsProgress()` in ../src/completions.ts).
+		 */
+		weeklyGoalPoints: integer('weekly_goal_points').notNull().default(200),
 		joinedAt: timestamp('joined_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),
@@ -81,6 +88,10 @@ export const householdMembers = pgTable(
 		check(
 			'household_members_avatar_initial_check',
 			sql`${t.avatarInitial} is null or char_length(${t.avatarInitial}) between 1 and 2`,
+		),
+		check(
+			'household_members_weekly_goal_points_check',
+			sql`${t.weeklyGoalPoints} >= 0`,
 		),
 		check(
 			'household_members_birth_year_check',
