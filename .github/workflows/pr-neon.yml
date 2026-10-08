@@ -141,7 +141,7 @@ jobs:
       - name: Alias the deployment
         id: alias
         run: |
-          vercel alias set "$DEPLOYMENT_URL" "$PREVIEW_HOST" --token "$VERCEL_TOKEN"
+          vercel alias set "$DEPLOYMENT_URL" "$PREVIEW_HOST" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN"
           echo "url=https://$PREVIEW_HOST" >> "$GITHUB_OUTPUT"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -189,6 +189,6 @@ jobs:
         continue-on-error: true
         run: |
           npm install --global vercel@latest
-          vercel alias rm "$PREVIEW_HOST" --yes --token "$VERCEL_TOKEN"
+          vercel alias rm "$PREVIEW_HOST" --yes --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
