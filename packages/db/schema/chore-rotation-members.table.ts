@@ -83,10 +83,12 @@ export const choreRotationMembers = pgTable(
 		index('chore_rotation_members_member_id_idx').on(t.memberId),
 		index('chore_rotation_members_household_id_idx').on(t.householdId),
 		check('chore_rotation_members_position_check', sql`${t.position} >= 1`),
+		// coalesce: char_length(btrim(NULL)) is NULL, and a CHECK passes on NULL,
+		// so without it an excluded member with no reason got through.
 		check(
 			'chore_rotation_members_exclusion_reason_check',
 			sql`(${t.eligible} and ${t.exclusionReason} is null)
-				or (not ${t.eligible} and char_length(btrim(${t.exclusionReason})) between 1 and 200)`,
+				or (not ${t.eligible} and coalesce(char_length(btrim(${t.exclusionReason})), 0) between 1 and 200)`,
 		),
 		// Members read, parents write (who's in the loop is a parent decision).
 		pgPolicy('chore_rotation_members_select', {

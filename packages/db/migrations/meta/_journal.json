@@ -92,6 +92,13 @@
 			"when": 1791581810471,
 			"tag": "0012_rewards_catalog_claims",
 			"breakpoints": true
+		},
+		{
+			"idx": 13,
+			"version": "7",
+			"when": 1791586997072,
+			"tag": "0013_rotation_exclusion_reason_not_null",
+			"breakpoints": true
 		}
 	]
 }
