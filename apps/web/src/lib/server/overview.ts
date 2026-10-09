@@ -1,0 +1,246 @@
+import {
+	choreCompletions,
+	choreInstances,
+	choreRotationMembers,
+	choreRotations,
+	choreStageProgress,
+	choreStages,
+	chores,
+	householdMembers,
+} from '@chore/db';
+import { chorePeriodStart, localDate } from '@chore/db/recurrence';
+import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
+import {
+	type ChoreStatus,
+	type ChoreStatusRow,
+	dueText,
+	familyStreakDays,
+	type HouseholdOverview,
+	percentOf,
+	sortRows,
+} from '../overview.ts';
+import { db } from './drizzle.ts';
+
+// Reads for the Household Overview (SB-46). Like the rotation loops, the web
+// app talks to Postgres as the table owner, so every query is scoped by the
+// `householdId` from the caller's own profile and the page load must be
+// parent-only.
+
+// Households have no time zone yet, so "today" is the UTC date. Swap this for
+// the household's zone once it is stored.
+const HOUSEHOLD_TIME_ZONE = 'UTC';
+
+/** Days of completions to look back over for the interim family streak. */
+const STREAK_LOOKBACK_DAYS = 90;
+
+export async function loadHouseholdOverview(
+	householdId: string,
+	now: Date = new Date(),
+): Promise<HouseholdOverview> {
+	const today = localDate(HOUSEHOLD_TIME_ZONE, now);
+	const since = new Date(now.getTime() - STREAK_LOOKBACK_DAYS * 86_400_000);
+
+	const [choreRows, memberRows, rotationRows, exclusionRows, recent] =
+		await Promise.all([
+			db.select().from(chores).where(eq(chores.householdId, householdId)),
+			db
+				.select({ id: householdMembers.id, name: householdMembers.displayName })
+				.from(householdMembers)
+				.where(eq(householdMembers.householdId, householdId)),
+			db
+				.select()
+				.from(choreRotations)
+				.where(eq(choreRotations.householdId, householdId)),
+			db
+				.select({
+					choreId: choreRotationMembers.choreId,
+					memberId: choreRotationMembers.memberId,
+					reason: choreRotationMembers.exclusionReason,
+				})
+				.from(choreRotationMembers)
+				.where(
+					and(
+						eq(choreRotationMembers.householdId, householdId),
+						eq(choreRotationMembers.eligible, false),
+					),
+				),
+			db
+				.select({ completedAt: choreCompletions.completedAt })
+				.from(choreCompletions)
+				.where(
+					and(
+						eq(choreCompletions.householdId, householdId),
+						isNull(choreCompletions.reopenedAt),
+						gte(choreCompletions.completedAt, since),
+					),
+				),
+		]);
+
+	const names = new Map(memberRows.map((m) => [m.id, m.name]));
+	const rotations = new Map(rotationRows.map((r) => [r.choreId, r]));
+	const choreById = new Map(choreRows.map((c) => [c.id, c]));
+
+	// Today's period for each chore; a chore that doesn't occur today (a
+	// weekends chore on a weekday) isn't due, so it has no row.
+	const dueChores = choreRows.flatMap((chore) => {
+		const periodStart = chorePeriodStart(chore.frequency, today);
+		return periodStart ? [{ chore, periodStart }] : [];
+	});
+	const choreIds = dueChores.map((d) => d.chore.id);
+
+	const [instances, stages] = choreIds.length
+		? await Promise.all([
+				db
+					.select()
+					.from(choreInstances)
+					.where(
+						and(
+							eq(choreInstances.householdId, householdId),
+							inArray(choreInstances.choreId, choreIds),
+						),
+					),
+				db
+					.select({ id: choreStages.id, choreId: choreStages.choreId })
+					.from(choreStages)
+					.where(
+						and(
+							eq(choreStages.householdId, householdId),
+							inArray(choreStages.choreId, choreIds),
+						),
+					),
+			])
+		: [[], []];
+
+	const instanceByChore = new Map(
+		instances.flatMap((i) => {
+			const due = dueChores.find((d) => d.chore.id === i.choreId);
+			return due && due.periodStart === i.periodStart
+				? [[i.choreId, i] as const]
+				: [];
+		}),
+	);
+	const instanceIds = [...instanceByChore.values()].map((i) => i.id);
+
+	const [completions, progress] = instanceIds.length
+		? await Promise.all([
+				db
+					.select({
+						id: choreCompletions.id,
+						instanceId: choreCompletions.instanceId,
+					})
+					.from(choreCompletions)
+					.where(
+						and(
+							eq(choreCompletions.householdId, householdId),
+							inArray(choreCompletions.instanceId, instanceIds),
+							isNull(choreCompletions.reopenedAt),
+						),
+					),
+				db
+					.select({ instanceId: choreStageProgress.instanceId })
+					.from(choreStageProgress)
+					.where(
+						and(
+							eq(choreStageProgress.householdId, householdId),
+							inArray(choreStageProgress.instanceId, instanceIds),
+						),
+					),
+			])
+		: [[], []];
+
+	const completionByInstance = new Map(
+		completions.map((c) => [c.instanceId, c.id]),
+	);
+	const stageCount = (choreId: string) =>
+		stages.filter((s) => s.choreId === choreId).length;
+	const doneCount = (instanceId: string) =>
+		progress.filter((p) => p.instanceId === instanceId).length;
+
+	const rows: ChoreStatusRow[] = dueChores.map(({ chore }) => {
+		const instance = instanceByChore.get(chore.id) ?? null;
+		const rotation = rotations.get(chore.id) ?? null;
+		const isLoop = chore.type === 'rotation';
+		const completionId = instance
+			? (completionByInstance.get(instance.id) ?? null)
+			: null;
+		const total = stageCount(chore.id);
+		const done = instance ? doneCount(instance.id) : 0;
+
+		const assigneeId = isLoop
+			? (instance?.assignedMemberId ?? rotation?.currentMemberId ?? null)
+			: (instance?.assignedMemberId ?? chore.assignedMemberId);
+		const assigneeName = assigneeId ? (names.get(assigneeId) ?? null) : null;
+
+		let status: ChoreStatus = 'todo';
+		if (completionId) status = 'completed';
+		else if (total > 0 && done > 0) status = 'staged';
+		else if (isLoop) status = 'active-turn';
+
+		const due = dueText({
+			status,
+			stageProgress: total > 0 ? { done, total } : null,
+			dueLabel: chore.dueLabel,
+			dueTime: chore.dueTime,
+			frequency: chore.frequency,
+		});
+		const owner = isLoop
+			? (rotation?.scopeLabel ?? 'Household rotation')
+			: assigneeName
+				? `${assigneeName}'s personal chore`
+				: 'Personal chore';
+
+		return {
+			choreId: chore.id,
+			instanceId: instance?.id ?? null,
+			completionId,
+			title: chore.title,
+			context: `${owner} • ${due}`,
+			assignee:
+				assigneeId && assigneeName
+					? { memberId: assigneeId, name: assigneeName }
+					: null,
+			status,
+			points: chore.points,
+			isLoop,
+		};
+	});
+
+	const sorted = sortRows(rows.sort((a, b) => a.title.localeCompare(b.title)));
+
+	const loopRows = sorted.filter((r) => r.isLoop);
+	const dueSoon = loopRows.filter((r) => r.status !== 'completed');
+	const completedToday = sorted.filter((r) => r.status === 'completed').length;
+
+	const exclusions = exclusionRows.flatMap((e) => {
+		const member = names.get(e.memberId);
+		const chore = choreById.get(e.choreId);
+		return member && chore
+			? [
+					`${member} is excluded from ${chore.title}${e.reason ? `: ${e.reason}` : ''}.`,
+				]
+			: [];
+	});
+
+	const streakDays = familyStreakDays(
+		recent.map((c) => localDate(HOUSEHOLD_TIME_ZONE, c.completedAt)),
+		today,
+	);
+
+	return {
+		rows: sorted,
+		stats: {
+			totalChores: choreRows.length,
+			sharedLoops: choreRows.filter((c) => c.type === 'rotation').length,
+			personalChores: choreRows.filter((c) => c.type === 'personal').length,
+			activeRotations: rotationRows.filter((r) => r.currentMemberId).length,
+			rotationsDueSoon: dueSoon.length,
+			dueSoonTitles: dueSoon.map((r) => r.title),
+			completedToday,
+			dueToday: sorted.length,
+			completedPercent: percentOf(completedToday, sorted.length),
+			streakDays,
+			exceptions: exclusions.length,
+			firstException: exclusions[0] ?? null,
+		},
+	};
+}
