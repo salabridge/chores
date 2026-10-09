@@ -3,8 +3,8 @@
 	import MemberAvatar from './MemberAvatar.svelte';
 
 	interface Props extends Omit<HTMLAttributes<HTMLOListElement>, 'children'> {
-		/** Member who completed the previous turn. */
-		doneLast: string;
+		/** Member who completed the previous turn, or null if nobody has yet. */
+		doneLast: string | null;
 		/** Member whose turn it is; highlighted. */
 		active: string;
 		/** Member who is next in the loop. */
@@ -27,14 +27,23 @@
 			aria-current={node.current ? 'step' : undefined}
 			class="flex min-w-0 flex-col items-center gap-8 text-center"
 		>
-			<MemberAvatar name={node.name} size="lg" active={node.current} />
+			{#if node.name}
+				<MemberAvatar name={node.name} size="lg" active={node.current} />
+			{:else}
+				<span
+					data-empty
+					aria-hidden="true"
+					class="inline-flex size-[56px] items-center justify-center rounded-full border-2 border-dashed border-border-subtle text-[22px] text-text-muted"
+					>–</span
+				>
+			{/if}
 			<span
 				class={[
 					'max-w-full text-[13px] font-semibold break-words',
 					node.current ? 'text-text-orange' : 'text-text-primary',
 				]}
 			>
-				{node.name}
+				{node.name ?? 'Nobody yet'}
 			</span>
 			<span
 				class={[
