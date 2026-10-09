@@ -232,7 +232,14 @@ async function prepare(state: ProfileState, choreId: string) {
 		throw new RotationDetailError('That rotation chore was not found.', 404);
 	}
 	const loaded = await loadRotation(householdId, choreId);
-	const turnHolderId = loaded?.rotation.currentMemberId ?? null;
+	// Same derivation as the screen, so the check and the CTA can't drift.
+	const turnHolderId = loaded
+		? (rotationTurns(
+				loaded.members,
+				loaded.rotation.currentMemberId,
+				loaded.rotation.lastCompletedMemberId,
+			).activeTurn?.memberId ?? null)
+		: null;
 	if (!turnHolderId) {
 		throw new RotationDetailError(
 			'Nobody is eligible to take this turn yet.',
@@ -280,6 +287,7 @@ export async function completeRotationTurn(
 		]);
 		const row = completed.rows[0];
 		if (!row) throw new Error('complete_chore_instance returned no row');
+		if (row.already_completed) throw alreadyDone();
 		return { points: row.points, choreCompleted: true };
 	} catch (err) {
 		throw mapError(err);
@@ -302,21 +310,33 @@ export async function completeRotationStage(
 	try {
 		const [, stage] = await db.batch([
 			db.execute(sql`select set_config('request.jwt.claims', ${claims}, true)`),
-			db.execute<{ chore_completed: boolean; points: number }>(
-				sql`select chore_completed, points from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid)`,
+			db.execute<{
+				chore_completed: boolean;
+				points: number;
+				already_completed: boolean;
+			}>(
+				sql`select chore_completed, points, already_completed from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid)`,
 			),
 		]);
 		const row = stage.rows[0];
 		if (!row) throw new Error('complete_chore_stage returned no row');
+		if (row.chore_completed && row.already_completed) throw alreadyDone();
 		return { points: row.points, choreCompleted: row.chore_completed };
 	} catch (err) {
 		throw mapError(err);
 	}
 }
 
+/** The period already has an open completion, so this call wrote nothing. */
+function alreadyDone() {
+	return new RotationDetailError('This turn is already done for now.', 409);
+}
+
 /** Turns the database's custom errors into messages for the screen. */
 function mapError(err: unknown): unknown {
 	switch (sqlState(err)) {
+		case 'P0002':
+			return new RotationDetailError('That rotation chore was not found.', 404);
 		case 'CP001':
 			return new RotationDetailError('Finish the earlier stages first.', 409);
 		case 'CP002':

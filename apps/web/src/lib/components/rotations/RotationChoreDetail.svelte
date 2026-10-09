@@ -58,6 +58,12 @@
 </script>
 
 <div class="flex flex-1 flex-col gap-24 px-24 pb-24">
+	<!-- Here, not in the action bar: a failed attempt reloads the data, which can
+	     unmount the bar (no longer your turn) and would hide the reason. -->
+	{#if error}
+		<FormAlert issues={[{ message: error }]} />
+	{/if}
+
 	<div class="flex flex-col gap-16">
 		<div class="flex flex-col gap-8">
 			<h2 class="font-display text-[24px] font-bold text-text-primary">{detail.title}</h2>
@@ -122,9 +128,6 @@
 
 {#if detail.canComplete}
 	<StickyActionBar>
-		{#if error}
-			<FormAlert issues={[{ message: error }]} />
-		{/if}
 		<PrimaryButton {pending} onclick={submit}>{ctaLabel(detail)}</PrimaryButton>
 	</StickyActionBar>
 {/if}
