@@ -1511,160 +1511,6 @@ try {
 		/no chore instance/,
 	);
 
-	console.log('Deleting a chore:');
-	const removedChore = await authed.withAuth(alice.token, (tx) =>
-		tx.delete(chores).where(eq(chores.id, dishes.chore.id)).returning(),
-	);
-	assert.equal(removedChore.length, 1);
-	const leftover = await admin
-		.select()
-		.from(choreStages)
-		.where(eq(choreStages.choreId, dishes.chore.id));
-	assert.equal(leftover.length, 0);
-	ok('Alice deletes a chore and its stages go with it (cascade)');
-
-	console.log('PINs:');
-	await authed.withAuth(bob.token, (tx) =>
-		tx
-			.insert(householdMemberPins)
-			.values({ memberId: bobMemberId, pinHash: 'scrypt$bob' }),
-	);
-	await authed.withAuth(alice.token, (tx) =>
-		tx
-			.insert(householdMemberPins)
-			.values({ memberId: aliceMember.id, pinHash: 'scrypt$alice' }),
-	);
-	ok('each parent sets their own PIN hash');
-	const bobPins = await authed.withAuth(bob.token, (tx) =>
-		tx.select().from(householdMemberPins),
-	);
-	assert.deepEqual(
-		bobPins.map((p) => p.memberId),
-		[bobMemberId],
-	);
-	ok("Bob sees only his own PIN, not Alice's");
-	const carolPins = await authed.withAuth(carol.token, (tx) =>
-		tx.select().from(householdMemberPins),
-	);
-	assert.equal(carolPins.length, 0);
-	ok('Carol (kid) sees no PINs');
-	await expectRejected(
-		"Bob setting Alice's PIN",
-		() =>
-			authed.withAuth(bob.token, (tx) =>
-				tx
-					.insert(householdMemberPins)
-					.values({ memberId: aliceMember.id, pinHash: 'scrypt$evil' }),
-			),
-		RLS_DENIED,
-	);
-
-	const [bobPin] = bobPins;
-	assert.equal(bobPin?.failedAttempts, 0);
-	assert.equal(bobPin?.lockedAt, null);
-	await authed.withAuth(bob.token, (tx) =>
-		tx
-			.update(householdMemberPins)
-			.set({
-				failedAttempts: 5,
-				lastFailedAt: new Date(),
-				lockedAt: new Date(),
-			})
-			.where(eq(householdMemberPins.memberId, bobMemberId)),
-	);
-	await authed.withAuth(bob.token, (tx) =>
-		tx
-			.update(householdMemberPins)
-			.set({ failedAttempts: 0, lastFailedAt: null, lockedAt: null })
-			.where(eq(householdMemberPins.memberId, bobMemberId)),
-	);
-	ok('a parent can lock and unlock their own PIN counters');
-	await expectNoRows("Bob resetting Alice's PIN counters", () =>
-		authed.withAuth(bob.token, (tx) =>
-			tx
-				.update(householdMemberPins)
-				.set({ failedAttempts: 0 })
-				.where(eq(householdMemberPins.memberId, aliceMember.id))
-				.returning(),
-		),
-	);
-
-	console.log('Device profiles:');
-	await authed.withAuth(bob.token, (tx) =>
-		tx.insert(deviceProfiles).values({
-			deviceHash: 'device-a',
-			userId: bob.id,
-			activeMemberId: sam.id,
-			sessionId: 'session-1',
-		}),
-	);
-	ok('a parent records the managed kid active on a device');
-	await expectRejected(
-		"Alice recording a device row for Bob's user",
-		() =>
-			authed.withAuth(alice.token, (tx) =>
-				tx.insert(deviceProfiles).values({
-					deviceHash: 'device-b',
-					userId: bob.id,
-					activeMemberId: null,
-				}),
-			),
-		RLS_DENIED,
-	);
-	const aliceDevices = await authed.withAuth(alice.token, (tx) =>
-		tx.select().from(deviceProfiles),
-	);
-	assert.equal(aliceDevices.length, 0);
-	await expectNoRows("Alice changing Bob's device profile", () =>
-		authed.withAuth(alice.token, (tx) =>
-			tx
-				.update(deviceProfiles)
-				.set({ activeMemberId: null })
-				.where(eq(deviceProfiles.deviceHash, 'device-a'))
-				.returning(),
-		),
-	);
-	ok("Alice can't see or change Bob's device profiles");
-
-	console.log('Leaving and removing:');
-	await expectNoRows('Bob removing Alice (owner)', () =>
-		authed.withAuth(bob.token, (tx) =>
-			tx
-				.delete(householdMembers)
-				.where(eq(householdMembers.id, aliceMember.id))
-				.returning(),
-		),
-	);
-	const removed = await authed.withAuth(bob.token, (tx) =>
-		tx
-			.delete(householdMembers)
-			.where(eq(householdMembers.id, sam.id))
-			.returning(),
-	);
-	assert.equal(removed.length, 1);
-	ok('Bob (parent) removes a managed kid');
-	const [deviceAfter] = await admin
-		.select()
-		.from(deviceProfiles)
-		.where(eq(deviceProfiles.deviceHash, 'device-a'));
-	assert.equal(deviceAfter?.activeMemberId, null);
-	ok(
-		'removing the kid clears the device profile (falls back to the parent view)',
-	);
-	const [choreAfter] = await authed.withAuth(alice.token, async (tx) => {
-		await tx
-			.delete(householdMembers)
-			.where(
-				and(
-					eq(householdMembers.householdId, household.id),
-					eq(householdMembers.userId, carol.id),
-				),
-			);
-		return tx.select().from(chores).where(eq(chores.id, chore.id));
-	});
-	assert.equal(choreAfter.assignedMemberId, null);
-	ok("Alice removes Carol; Carol's chore is unassigned (FK set null)");
-
 	console.log('Rewards:');
 	const rewardRows = await authed.withAuth(bob.token, (tx) =>
 		tx
@@ -1914,6 +1760,160 @@ try {
 	);
 	ok('an archived reward cannot be claimed and keeps its claims');
 
+	console.log('Deleting a chore:');
+	const removedChore = await authed.withAuth(alice.token, (tx) =>
+		tx.delete(chores).where(eq(chores.id, dishes.chore.id)).returning(),
+	);
+	assert.equal(removedChore.length, 1);
+	const leftover = await admin
+		.select()
+		.from(choreStages)
+		.where(eq(choreStages.choreId, dishes.chore.id));
+	assert.equal(leftover.length, 0);
+	ok('Alice deletes a chore and its stages go with it (cascade)');
+
+	console.log('PINs:');
+	await authed.withAuth(bob.token, (tx) =>
+		tx
+			.insert(householdMemberPins)
+			.values({ memberId: bobMemberId, pinHash: 'scrypt$bob' }),
+	);
+	await authed.withAuth(alice.token, (tx) =>
+		tx
+			.insert(householdMemberPins)
+			.values({ memberId: aliceMember.id, pinHash: 'scrypt$alice' }),
+	);
+	ok('each parent sets their own PIN hash');
+	const bobPins = await authed.withAuth(bob.token, (tx) =>
+		tx.select().from(householdMemberPins),
+	);
+	assert.deepEqual(
+		bobPins.map((p) => p.memberId),
+		[bobMemberId],
+	);
+	ok("Bob sees only his own PIN, not Alice's");
+	const carolPins = await authed.withAuth(carol.token, (tx) =>
+		tx.select().from(householdMemberPins),
+	);
+	assert.equal(carolPins.length, 0);
+	ok('Carol (kid) sees no PINs');
+	await expectRejected(
+		"Bob setting Alice's PIN",
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx
+					.insert(householdMemberPins)
+					.values({ memberId: aliceMember.id, pinHash: 'scrypt$evil' }),
+			),
+		RLS_DENIED,
+	);
+
+	const [bobPin] = bobPins;
+	assert.equal(bobPin?.failedAttempts, 0);
+	assert.equal(bobPin?.lockedAt, null);
+	await authed.withAuth(bob.token, (tx) =>
+		tx
+			.update(householdMemberPins)
+			.set({
+				failedAttempts: 5,
+				lastFailedAt: new Date(),
+				lockedAt: new Date(),
+			})
+			.where(eq(householdMemberPins.memberId, bobMemberId)),
+	);
+	await authed.withAuth(bob.token, (tx) =>
+		tx
+			.update(householdMemberPins)
+			.set({ failedAttempts: 0, lastFailedAt: null, lockedAt: null })
+			.where(eq(householdMemberPins.memberId, bobMemberId)),
+	);
+	ok('a parent can lock and unlock their own PIN counters');
+	await expectNoRows("Bob resetting Alice's PIN counters", () =>
+		authed.withAuth(bob.token, (tx) =>
+			tx
+				.update(householdMemberPins)
+				.set({ failedAttempts: 0 })
+				.where(eq(householdMemberPins.memberId, aliceMember.id))
+				.returning(),
+		),
+	);
+
+	console.log('Device profiles:');
+	await authed.withAuth(bob.token, (tx) =>
+		tx.insert(deviceProfiles).values({
+			deviceHash: 'device-a',
+			userId: bob.id,
+			activeMemberId: sam.id,
+			sessionId: 'session-1',
+		}),
+	);
+	ok('a parent records the managed kid active on a device');
+	await expectRejected(
+		"Alice recording a device row for Bob's user",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx.insert(deviceProfiles).values({
+					deviceHash: 'device-b',
+					userId: bob.id,
+					activeMemberId: null,
+				}),
+			),
+		RLS_DENIED,
+	);
+	const aliceDevices = await authed.withAuth(alice.token, (tx) =>
+		tx.select().from(deviceProfiles),
+	);
+	assert.equal(aliceDevices.length, 0);
+	await expectNoRows("Alice changing Bob's device profile", () =>
+		authed.withAuth(alice.token, (tx) =>
+			tx
+				.update(deviceProfiles)
+				.set({ activeMemberId: null })
+				.where(eq(deviceProfiles.deviceHash, 'device-a'))
+				.returning(),
+		),
+	);
+	ok("Alice can't see or change Bob's device profiles");
+
+	console.log('Leaving and removing:');
+	await expectNoRows('Bob removing Alice (owner)', () =>
+		authed.withAuth(bob.token, (tx) =>
+			tx
+				.delete(householdMembers)
+				.where(eq(householdMembers.id, aliceMember.id))
+				.returning(),
+		),
+	);
+	const removed = await authed.withAuth(bob.token, (tx) =>
+		tx
+			.delete(householdMembers)
+			.where(eq(householdMembers.id, sam.id))
+			.returning(),
+	);
+	assert.equal(removed.length, 1);
+	ok('Bob (parent) removes a managed kid');
+	const [deviceAfter] = await admin
+		.select()
+		.from(deviceProfiles)
+		.where(eq(deviceProfiles.deviceHash, 'device-a'));
+	assert.equal(deviceAfter?.activeMemberId, null);
+	ok(
+		'removing the kid clears the device profile (falls back to the parent view)',
+	);
+	const [choreAfter] = await authed.withAuth(alice.token, async (tx) => {
+		await tx
+			.delete(householdMembers)
+			.where(
+				and(
+					eq(householdMembers.householdId, household.id),
+					eq(householdMembers.userId, carol.id),
+				),
+			);
+		return tx.select().from(chores).where(eq(chores.id, chore.id));
+	});
+	assert.equal(choreAfter.assignedMemberId, null);
+	ok("Alice removes Carol; Carol's chore is unassigned (FK set null)");
+
 	console.log('Without a session:');
 	const noClaimsPool = new Pool({
 		connectionString: DATABASE_AUTHENTICATED_URL,
@@ -1929,7 +1929,9 @@ try {
 				(select count(*)::int from chore_instances) as instances,
 				(select count(*)::int from chore_stage_progress) as progress,
 				(select count(*)::int from chore_rotations) as rotations,
-				(select count(*)::int from chore_rotation_members) as rotation_members`,
+				(select count(*)::int from chore_rotation_members) as rotation_members,
+				(select count(*)::int from rewards) as rewards,
+				(select count(*)::int from reward_claims) as reward_claims`,
 		);
 		assert.deepEqual(rows[0], {
 			chores: 0,
@@ -1942,6 +1944,8 @@ try {
 			progress: 0,
 			rotations: 0,
 			rotation_members: 0,
+			rewards: 0,
+			reward_claims: 0,
 		});
 		ok('the RLS role with no JWT claims sees 0 rows in every domain table');
 	} finally {
