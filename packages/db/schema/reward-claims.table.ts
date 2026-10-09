@@ -6,6 +6,7 @@ import {
 	integer,
 	pgPolicy,
 	pgTable,
+	text,
 	timestamp,
 	uniqueIndex,
 	uuid,
@@ -20,14 +21,16 @@ import { backendRole, isHouseholdMember } from './rls.ts';
  * matching negative `points_ledger` row (`reason = 'reward_claim'`,
  * `reward_claim_id` pointing back here), written in the same statement.
  *
- * `cost_points` is copied from the reward so later price edits don't rewrite
- * history. `single_use` is copied from `NOT rewards.repeatable`; a partial
+ * `reward_title` and `cost_points` are copied from the reward so later edits
+ * don't rewrite history, and the reward can be archived without losing what was
+ * redeemed. `single_use` is copied from `NOT rewards.repeatable`; a partial
  * unique index on it is what stops a non-repeatable reward being claimed twice
  * by the same member, even when two taps race.
  *
  * Nothing writes this table through the app role: claims go through
  * `claimReward()` in the web app's server code, which checks the balance and
- * the claim limit.
+ * the claim limit. A trigger on `points_ledger` (custom migration 0012)
+ * serializes claims per member and refuses one that would overspend.
  */
 export const rewardClaims = pgTable(
 	'reward_claims',
@@ -39,6 +42,8 @@ export const rewardClaims = pgTable(
 		rewardId: uuid('reward_id').notNull(),
 		/** Who claimed it. Leaving the household removes the member's claims. */
 		memberId: uuid('member_id').notNull(),
+		/** The reward's title at claim time, so the record survives edits and archiving. */
+		rewardTitle: text('reward_title').notNull(),
 		/** Points spent, copied from `rewards.cost_points` at claim time. */
 		costPoints: integer('cost_points').notNull(),
 		/** True when the reward was non-repeatable at claim time. */
@@ -52,7 +57,7 @@ export const rewardClaims = pgTable(
 			name: 'reward_claims_reward_fk',
 			columns: [t.rewardId, t.householdId],
 			foreignColumns: [rewards.id, rewards.householdId],
-		}).onDelete('cascade'),
+		}).onDelete('restrict'),
 		foreignKey({
 			name: 'reward_claims_member_fk',
 			columns: [t.memberId, t.householdId],

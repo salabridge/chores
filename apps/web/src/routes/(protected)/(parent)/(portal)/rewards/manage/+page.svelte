@@ -23,7 +23,7 @@
 		toRewardInput,
 		validateRewardDraft,
 	} from '#lib/rewards.js';
-	import { createReward, deleteReward, updateReward } from '#lib/rewards.remote.js';
+	import { archiveReward, createReward, updateReward } from '#lib/rewards.remote.js';
 	import { invalidateAll } from '$app/navigation';
 
 	let { data } = $props();
@@ -34,6 +34,10 @@
 	let showErrors = $state(false);
 	let submitting = $state(false);
 	let submitError = $state<string | null>(null);
+	// The reward waiting on "Remove it?", and whether the removal is in flight.
+	let confirmingId = $state<string | null>(null);
+	let removing = $state(false);
+	let formEl = $state<HTMLFormElement>();
 
 	const errors = $derived(validateRewardDraft(draft));
 	const shown = $derived(showErrors ? errors : {});
@@ -63,6 +67,9 @@
 		};
 		showErrors = false;
 		submitError = null;
+		// On a long list the form can be off-screen: bring it into view and focus the title.
+		formEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		formEl?.querySelector('input')?.focus({ preventScroll: true });
 	}
 
 	async function onsubmit(event: SubmitEvent) {
@@ -85,13 +92,17 @@
 	}
 
 	async function remove(id: string) {
+		removing = true;
 		submitError = null;
 		try {
-			await deleteReward({ id });
+			await archiveReward({ id });
 			if (editingId === id) reset();
+			confirmingId = null;
 			await invalidateAll();
 		} catch (e) {
-			submitError = messageOf(e, 'Could not delete this reward. Try again.');
+			submitError = messageOf(e, 'Could not remove this reward. Try again.');
+		} finally {
+			removing = false;
 		}
 	}
 </script>
@@ -130,9 +141,43 @@
 						</p>
 					{/if}
 					<div class="flex gap-8">
-						<SecondaryButton type="button" onclick={() => edit(reward)}>Edit</SecondaryButton>
-						<SecondaryButton type="button" onclick={() => remove(reward.id)}>Delete</SecondaryButton>
+						<SecondaryButton type="button" aria-label="Edit {reward.title}" onclick={() => edit(reward)}>
+							Edit
+						</SecondaryButton>
+						<SecondaryButton
+							type="button"
+							aria-label="Delete {reward.title}"
+							onclick={() => (confirmingId = reward.id)}
+						>
+							Delete
+						</SecondaryButton>
 					</div>
+					{#if confirmingId === reward.id}
+						<Callout tone="warning" title="Remove this reward?" data-testid="remove-confirm">
+							<p>
+								It disappears from the catalog. Anything already claimed stays on record and
+								points already spent are not refunded.
+							</p>
+							<div class="mt-8 flex items-center gap-8">
+								<SecondaryButton
+									variant="tinted"
+									tone="amber"
+									pending={removing}
+									onclick={() => remove(reward.id)}
+								>
+									Remove reward
+								</SecondaryButton>
+								<SecondaryButton
+									variant="tinted"
+									tone="blue"
+									disabled={removing}
+									onclick={() => (confirmingId = null)}
+								>
+									Cancel
+								</SecondaryButton>
+							</div>
+						</Callout>
+					{/if}
 				</div>
 			</SurfaceCard>
 		{:else}
@@ -144,6 +189,7 @@
 	</div>
 
 	<form
+		bind:this={formEl}
 		{onsubmit}
 		novalidate
 		aria-label={editingId ? 'Edit reward' : 'New reward'}

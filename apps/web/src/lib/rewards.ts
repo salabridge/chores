@@ -88,21 +88,40 @@ export const draftOf = (reward: RewardInput): RewardDraft => ({
 	repeatable: reward.repeatable,
 });
 
+/** True for a canonical UUID string; anything else would make Postgres fail with a 500. */
+export const isUuid = (value: unknown): value is string =>
+	typeof value === 'string' &&
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
 /**
- * Checks a request the same way the form does, for the server. Returns the
- * first problem, worded for the form, or null.
+ * Checks a request the same way the form does, for the server. Remote
+ * functions take unchecked input, so every field is type-checked first.
+ * Returns the first problem, worded for the form, or null.
  */
-export function rewardInputError(input: RewardInput): string | null {
-	if (!(REWARD_KINDS as readonly string[]).includes(input.kind))
+export function rewardInputError(input: unknown): string | null {
+	if (typeof input !== 'object' || input === null)
+		return 'The reward is not valid.';
+	const { title, description, costPoints, kind, repeatable } = input as Record<
+		string,
+		unknown
+	>;
+	if (typeof title !== 'string') return 'Give the reward a title.';
+	if (description !== null && typeof description !== 'string')
+		return 'The description is not valid.';
+	if (typeof costPoints !== 'number' || !Number.isInteger(costPoints))
+		return 'Enter a whole number of points.';
+	if (kind !== 'personal' && kind !== 'family_milestone')
 		return 'Choose Personal Reward or Family Milestone.';
-	if (input.kind === 'family_milestone' && input.repeatable)
+	if (typeof repeatable !== 'boolean')
+		return 'The repeatable setting is not valid.';
+	if (kind === 'family_milestone' && repeatable)
 		return 'A family milestone cannot be repeatable.';
 	const errors = validateRewardDraft({
-		title: String(input.title ?? ''),
-		description: String(input.description ?? ''),
-		costPoints: String(input.costPoints ?? ''),
-		kind: input.kind,
-		repeatable: input.repeatable === true,
+		title,
+		description: description ?? '',
+		costPoints: String(costPoints),
+		kind,
+		repeatable,
 	});
 	return errors.title ?? errors.description ?? errors.costPoints ?? null;
 }

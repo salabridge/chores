@@ -1,14 +1,14 @@
 import { error } from '@sveltejs/kit';
 import { getCurrentMember, requireParentProfile } from '#lib/server/guards.js';
 import {
+	archiveReward as archiveRewardInHousehold,
 	claimReward as claimRewardForMember,
 	createReward as createRewardForHousehold,
-	deleteReward as deleteRewardFromHousehold,
 	RewardError,
 	updateReward as updateRewardInHousehold,
 } from '#lib/server/rewards.js';
 import { command } from '$app/server';
-import type { RewardInput } from './rewards.ts';
+import { isUuid, type RewardInput } from './rewards.ts';
 
 // Remote functions for rewards (SB-27). The catalog is parent-only; claiming is
 // for the member the request acts as. The household always comes from the
@@ -23,6 +23,18 @@ async function asBadRequest<T>(run: () => Promise<T>): Promise<T> {
 	}
 }
 
+// Remote input is unchecked, so ids are validated here (a malformed uuid would
+// otherwise be a Postgres error and a 500); the reward itself is validated by
+// the server functions.
+function idOf(input: unknown, key: string): string {
+	const value =
+		typeof input === 'object' && input !== null
+			? (input as Record<string, unknown>)[key]
+			: undefined;
+	if (!isUuid(value)) error(400, 'That reward was not found.');
+	return value;
+}
+
 /** Adds a reward to the household's catalog and returns its id. */
 export const createReward = command('unchecked', async (input: RewardInput) => {
 	const { actor } = await requireParentProfile();
@@ -33,23 +45,24 @@ export const updateReward = command(
 	'unchecked',
 	async (input: { id: string; reward: RewardInput }) => {
 		const { actor } = await requireParentProfile();
+		const id = idOf(input, 'id');
 		await asBadRequest(() =>
 			updateRewardInHousehold(
 				actor.householdId,
-				String(input.id),
-				input.reward,
+				id,
+				(input as { reward: RewardInput }).reward,
 			),
 		);
 	},
 );
 
-export const deleteReward = command(
+/** Removes a reward from the catalog (archives it; claims are kept). */
+export const archiveReward = command(
 	'unchecked',
 	async (input: { id: string }) => {
 		const { actor } = await requireParentProfile();
-		await asBadRequest(() =>
-			deleteRewardFromHousehold(actor.householdId, String(input.id)),
-		);
+		const id = idOf(input, 'id');
+		await asBadRequest(() => archiveRewardInHousehold(actor.householdId, id));
 	},
 );
 
@@ -61,8 +74,7 @@ export const claimReward = command(
 	'unchecked',
 	async (input: { rewardId: string }) => {
 		const member = await getCurrentMember();
-		return asBadRequest(() =>
-			claimRewardForMember(member, String(input.rewardId)),
-		);
+		const rewardId = idOf(input, 'rewardId');
+		return asBadRequest(() => claimRewardForMember(member, rewardId));
 	},
 );

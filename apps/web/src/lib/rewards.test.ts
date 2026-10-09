@@ -4,6 +4,7 @@ import {
 	costLabel,
 	emptyRewardDraft,
 	hasErrors,
+	isUuid,
 	milestoneRemaining,
 	type RewardDraft,
 	type RewardInput,
@@ -86,6 +87,33 @@ describe('rewardInputError', () => {
 		expect(rewardInputError(input({ costPoints: 0 }))).toBeTruthy();
 		expect(rewardInputError(input({ costPoints: 1.5 }))).toBeTruthy();
 		expect(rewardInputError(input({ title: '' }))).toBeTruthy();
+	});
+
+	it('rejects wrongly typed fields instead of throwing', () => {
+		for (const bad of [
+			null,
+			'x',
+			{ ...input(), title: 5 },
+			{ ...input(), description: 5 },
+			{ ...input(), costPoints: '50' },
+			{ ...input(), repeatable: 'true' },
+			{ ...input(), kind: 'personal', repeatable: undefined },
+		]) {
+			expect(rewardInputError(bad)).toBeTruthy();
+		}
+	});
+
+	it('checks uuids', () => {
+		expect(isUuid('2b8f6c1e-6a3c-4d0e-9c52-0a1b2c3d4e5f')).toBe(true);
+		for (const bad of [
+			'',
+			'abc',
+			5,
+			null,
+			'2b8f6c1e-6a3c-4d0e-9c52-0a1b2c3d4e5',
+		]) {
+			expect(isUuid(bad)).toBe(false);
+		}
 	});
 });
 

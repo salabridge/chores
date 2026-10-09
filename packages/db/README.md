@@ -353,16 +353,26 @@ Shop screen is SB-43).
 - **Status** (`rewardStatuses()`): `earned` (balance >= cost, or the milestone is
   reached), `claimed` (a non-repeatable reward the member already claimed),
   `next_up` (the closest unreached milestone), otherwise `locked`.
-- **Claiming** is `claimReward()` in the web app's `server/rewards.ts`: one SQL
-  statement checks the balance and the claim limit, then inserts the
-  `reward_claims` row and a negative `reward_claim` ledger row together. A
-  non-repeatable reward is claimed once per member; `reward_claims.single_use`
-  (copied from `NOT rewards.repeatable`) has a partial unique index so two
-  racing taps can't both succeed. `cost_points` is copied onto the claim so price
-  edits don't rewrite history. Deleting a reward deletes its claims; the spent
-  points stay in the ledger.
+- **Claiming** is `insertRewardClaim()` (`@chore/db/claim-reward`, wrapped by
+  the web app's `claimReward()`): one SQL statement checks the balance and the
+  claim limit, then inserts the `reward_claims` row and a negative
+  `reward_claim` ledger row (noted with the reward's title) together. Those
+  checks run against the statement's snapshot, so what holds under concurrency
+  is in the database: `reward_claims.single_use` (copied from
+  `NOT rewards.repeatable`) has a partial unique index, so a non-repeatable
+  reward is claimed once per member even when taps race; and a trigger on
+  `points_ledger` locks the member's row, re-sums the balance and raises
+  `RW001` if a claim would take it below zero (`claimFailure()` maps both
+  errors). The claim copies `reward_title` and `cost_points` so edits don't
+  rewrite history.
+- **Removing a reward** archives it (`rewards.archived_at`): it leaves the
+  catalog and can't be claimed or edited, but its claims stay as the record of
+  what was redeemed. `reward_claims` references rewards with RESTRICT, so a
+  reward with claims can't be hard-deleted.
+- **Household week**: points count by the week of the *completion*, so a
+  reversal of an old completion doesn't lower this week's total.
 - **RLS**: members read `rewards` and `reward_claims`; parents write `rewards`.
-  Nothing writes `reward_claims` through the RLS role (select-only grant).
+  `reward_claims` is select-only for the RLS role (writes use the owner role).
 
 ## Row-level security
 
@@ -384,7 +394,7 @@ role. Access follows household membership and role:
 | `chore_completions`     | members               | nobody directly; written by `app.complete_chore_instance` / `complete_chore_stage` / `reopen_chore_completion` |
 | `points_ledger`         | members               | append-only; parents insert `adjustment` rows, completions and reversals come from the functions above |
 | `rewards`               | members               | parents                                                                                 |
-| `reward_claims`         | members               | nobody directly; written by `claimReward()` with its ledger row                         |
+| `reward_claims`         | members               | nobody directly; written by `insertRewardClaim()` with its ledger row                    |
 
 Column grants stop the app from changing a member row's `id`,
 `household_id`, `user_id`, or `joined_at`; `weekly_goal_points` can be changed

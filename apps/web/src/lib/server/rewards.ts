@@ -5,6 +5,7 @@ import {
 	rewardClaims,
 	rewards,
 } from '@chore/db';
+import { claimFailure, insertRewardClaim } from '@chore/db/claim-reward';
 import { chorePeriodStart, localDate } from '@chore/db/recurrence';
 import {
 	type ClaimDenial,
@@ -12,7 +13,7 @@ import {
 	milestoneProgress,
 	rewardStatuses,
 } from '@chore/db/rewards';
-import { and, asc, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import {
 	claimDenialMessage,
 	type RewardInput,
@@ -49,12 +50,14 @@ const rewardColumns = {
 	repeatable: rewards.repeatable,
 };
 
-/** The household's rewards, cheapest first. */
+/** The household's rewards (archived ones left out), cheapest first. */
 export function listRewards(householdId: string) {
 	return db
 		.select(rewardColumns)
 		.from(rewards)
-		.where(eq(rewards.householdId, householdId))
+		.where(
+			and(eq(rewards.householdId, householdId), isNull(rewards.archivedAt)),
+		)
 		.orderBy(asc(rewards.costPoints), asc(rewards.createdAt), asc(rewards.id));
 }
 
@@ -96,21 +99,39 @@ export async function updateReward(
 			kind: input.kind,
 			repeatable: input.repeatable,
 		})
-		.where(and(eq(rewards.id, id), eq(rewards.householdId, householdId)))
+		.where(
+			and(
+				eq(rewards.id, id),
+				eq(rewards.householdId, householdId),
+				isNull(rewards.archivedAt),
+			),
+		)
 		.returning({ id: rewards.id });
 	if (updated.length === 0) throw new RewardError('That reward was not found.');
 }
 
-/** Deleting a reward also deletes its claims; the points they spent stay in the ledger. */
-export async function deleteReward(
+/**
+ * Removes a reward from the catalog by archiving it. Claims keep pointing at
+ * it, so the record of what was redeemed (and what the kid's spent points were
+ * for) survives; it just can't be claimed or edited any more.
+ */
+export async function archiveReward(
 	householdId: string,
 	id: string,
 ): Promise<void> {
-	const deleted = await db
-		.delete(rewards)
-		.where(and(eq(rewards.id, id), eq(rewards.householdId, householdId)))
+	const archived = await db
+		.update(rewards)
+		.set({ archivedAt: new Date() })
+		.where(
+			and(
+				eq(rewards.id, id),
+				eq(rewards.householdId, householdId),
+				isNull(rewards.archivedAt),
+			),
+		)
 		.returning({ id: rewards.id });
-	if (deleted.length === 0) throw new RewardError('That reward was not found.');
+	if (archived.length === 0)
+		throw new RewardError('That reward was not found.');
 }
 
 /** The start of this household-local week (Monday) as an instant. */
@@ -123,26 +144,33 @@ function weekStart(now: Date): Date {
 }
 
 /**
- * What the household has done since Monday: points earned (completions net of
- * reversals, not claims or adjustments, same as a member's weekly goal) and
- * how many rotation chores ("loops") were completed.
+ * What the household has done since Monday: points earned and how many
+ * rotation chores ("loops") were completed. Both count by when the chore was
+ * completed: a reversal belongs to the week of the completion it takes back,
+ * so a parent reopening an old completion doesn't lower this week's total.
+ * Claims and adjustments don't count (same as a member's weekly goal).
  */
 export async function householdWeekProgress(
 	householdId: string,
 	now: Date = new Date(),
 ): Promise<{ points: number; loopsCompleted: number }> {
-	const since = weekStart(now);
+	const since = weekStart(now).toISOString();
 	const [[pointsRow], [loopsRow]] = await Promise.all([
 		db
 			.select({
 				total: sql<number>`coalesce(sum(${pointsLedger.delta}), 0)::int`,
 			})
 			.from(pointsLedger)
+			.leftJoin(
+				choreCompletions,
+				eq(choreCompletions.id, pointsLedger.completionId),
+			)
 			.where(
 				and(
 					eq(pointsLedger.householdId, householdId),
-					gte(pointsLedger.createdAt, since),
 					sql`${pointsLedger.reason} in ('completion', 'reversal')`,
+					// The completion is gone if its chore was deleted: use the row's own date then.
+					sql`coalesce(${choreCompletions.completedAt}, ${pointsLedger.createdAt}) >= ${since}::timestamptz`,
 				),
 			),
 		db
@@ -153,7 +181,7 @@ export async function householdWeekProgress(
 				and(
 					eq(choreCompletions.householdId, householdId),
 					isNull(choreCompletions.reopenedAt),
-					gte(choreCompletions.completedAt, since),
+					sql`${choreCompletions.completedAt} >= ${since}::timestamptz`,
 					eq(chores.type, 'rotation'),
 				),
 			),
@@ -220,53 +248,30 @@ export async function loadRewardShop(
 
 /**
  * Claims a personal reward for `member`: spends its cost and records the
- * claim. Refused (`RewardError`) when the reward is unknown, a family
- * milestone, unaffordable, or non-repeatable and already claimed by this
+ * claim. Refused (`RewardError`) when the reward is unknown or archived, a
+ * family milestone, unaffordable, or non-repeatable and already claimed by this
  * member.
  *
  * The claim and its negative ledger row are one SQL statement, so they commit
- * together and the balance and claim-limit checks happen in the same snapshot
- * as the writes. Two taps at once can't both claim a non-repeatable reward (a
- * partial unique index on `reward_claims`). Two claims on *different* rewards
- * at the same moment could, in theory, both see the same balance; each is
- * still checked against it, so the worst case is a slightly negative balance.
+ * together. The statement checks the balance and the claim limit up front, but
+ * concurrent statements all see the same committed balance, so the checks that
+ * hold under concurrency are in the database: a partial unique index on
+ * `reward_claims` stops a non-repeatable reward being claimed twice, and a
+ * trigger on `points_ledger` (migration 0012) serializes a member's claims and
+ * raises RW001 if one would take the balance below zero. Either way the
+ * whole statement rolls back and the caller gets the matching `RewardError`.
  */
 export async function claimReward(
 	member: { id: string; householdId: string },
 	rewardId: string,
 ): Promise<{ claimId: string }> {
 	try {
-		const { rows } = await db.execute<{ id: string }>(sql`
-			with r as (
-				select id, household_id, cost_points, repeatable
-				from rewards
-				where id = ${rewardId} and household_id = ${member.householdId} and kind = 'personal'
-			),
-			bal as (
-				select coalesce(sum(delta), 0)::int as balance
-				from points_ledger
-				where member_id = ${member.id}
-			),
-			claim as (
-				insert into reward_claims (household_id, reward_id, member_id, cost_points, single_use)
-				select r.household_id, r.id, ${member.id}, r.cost_points, not r.repeatable
-				from r, bal
-				where bal.balance >= r.cost_points
-					and (r.repeatable or not exists (
-						select 1 from reward_claims c where c.reward_id = r.id and c.member_id = ${member.id}
-					))
-				returning id, household_id, member_id, cost_points
-			),
-			spend as (
-				insert into points_ledger (household_id, member_id, delta, reason, reward_claim_id)
-				select household_id, member_id, -cost_points, 'reward_claim', id from claim
-			)
-			select id from claim
-		`);
-		if (rows[0]) return { claimId: rows[0].id };
+		const claimId = await insertRewardClaim(db, member, rewardId);
+		if (claimId) return { claimId };
 	} catch (e) {
-		if (!isUniqueViolation(e)) throw e;
-		throw denied('already_claimed');
+		const denial = claimFailure(e);
+		if (denial) throw denied(denial);
+		throw e;
 	}
 
 	// Nothing was written: work out why, for the message.
@@ -277,6 +282,7 @@ export async function claimReward(
 			and(
 				eq(rewards.id, rewardId),
 				eq(rewards.householdId, member.householdId),
+				isNull(rewards.archivedAt),
 			),
 		);
 	const [balance, claimed] = await Promise.all([
@@ -291,14 +297,4 @@ export async function claimReward(
 
 function denied(denial: ClaimDenial) {
 	return new RewardError(claimDenialMessage(denial), denial);
-}
-
-/** A unique-index violation (SQLSTATE 23505), on the error or what it wraps. */
-function isUniqueViolation(err: unknown): boolean {
-	let e: unknown = err;
-	while (e instanceof Error) {
-		if ((e as { code?: unknown }).code === '23505') return true;
-		e = e.cause;
-	}
-	return false;
 }

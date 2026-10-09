@@ -32,6 +32,10 @@ import {
  * `rewardStatuses()` in ../src/rewards.ts for how "Earned", "Claimed" and
  * "Next up" are derived.
  *
+ * Rewards are archived, not deleted, once anyone has claimed them: the claim
+ * rows are the record of what was redeemed (the foreign key from
+ * `reward_claims` is RESTRICT, so a claimed reward can't be hard-deleted).
+ *
  * Non-repeatable personal rewards can be claimed once per member (enforced
  * when claiming, see `reward_claims`). Family milestones are never repeatable.
  */
@@ -49,6 +53,11 @@ export const rewards = pgTable(
 		kind: rewardKind('kind').notNull().default('personal'),
 		/** Whether the same member can claim it more than once. */
 		repeatable: boolean('repeatable').notNull().default(false),
+		/**
+		 * Set when a parent removes the reward. An archived reward is hidden from
+		 * the catalog and can't be claimed, but its claims keep pointing at it.
+		 */
+		archivedAt: timestamp('archived_at', { withTimezone: true }),
 		/** The auth user who created the reward (an audit field, not a member reference). */
 		createdBy: uuid('created_by')
 			.default(sql`app.current_user_id()`)

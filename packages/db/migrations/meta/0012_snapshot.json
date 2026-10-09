@@ -1,5 +1,5 @@
 {
-	"id": "4893219c-95a3-4fe2-96c7-b3554f6afd72",
+	"id": "c7cd74d0-0a9d-4d7d-b39d-c467231f39ce",
 	"prevId": "80948b67-9cb7-412c-937e-c82877b362af",
 	"version": "7",
 	"dialect": "postgresql",
@@ -2228,6 +2228,12 @@
 					"primaryKey": false,
 					"notNull": true
 				},
+				"reward_title": {
+					"name": "reward_title",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
 				"cost_points": {
 					"name": "cost_points",
 					"type": "integer",
@@ -2324,7 +2330,7 @@
 					"tableTo": "rewards",
 					"columnsFrom": ["reward_id", "household_id"],
 					"columnsTo": ["id", "household_id"],
-					"onDelete": "cascade",
+					"onDelete": "restrict",
 					"onUpdate": "no action"
 				},
 				"reward_claims_member_fk": {
@@ -2400,6 +2406,12 @@
 					"primaryKey": false,
 					"notNull": true,
 					"default": false
+				},
+				"archived_at": {
+					"name": "archived_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
 				},
 				"created_by": {
 					"name": "created_by",
