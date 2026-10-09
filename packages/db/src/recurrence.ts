@@ -90,3 +90,13 @@ export function localDate(timeZone: string, at: Date = new Date()): string {
 		day: '2-digit',
 	}).format(at);
 }
+
+/** Whether `timeZone` is an IANA time zone name this runtime knows. */
+export function isValidTimeZone(timeZone: string): boolean {
+	try {
+		new Intl.DateTimeFormat('en-CA', { timeZone });
+		return true;
+	} catch {
+		return false;
+	}
+}
