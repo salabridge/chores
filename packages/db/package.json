@@ -15,6 +15,7 @@
 		"./auth": "./schema/auth-schema.ts",
 		"./rls": "./src/authenticated-db.ts",
 		"./recurrence": "./src/recurrence.ts",
+		"./rewards": "./src/rewards.ts",
 		"./rotation": "./src/rotation.ts"
 	},
 	"dependencies": {

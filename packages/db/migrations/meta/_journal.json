@@ -85,6 +85,13 @@
 			"when": 1791146191071,
 			"tag": "0011_complete_and_reopen_chores",
 			"breakpoints": true
+		},
+		{
+			"idx": 12,
+			"version": "7",
+			"when": 1791577214253,
+			"tag": "0012_rewards_catalog_claims",
+			"breakpoints": true
 		}
 	]
 }

@@ -16,6 +16,7 @@ import { choreCompletions } from './chore-completions.table.ts';
 import { householdMembers } from './household-members.table.ts';
 import { households } from './households.table.ts';
 import { pointsReason } from './points-reason.ts';
+import { rewardClaims } from './reward-claims.table.ts';
 import {
 	backendRole,
 	currentUserId,
@@ -33,8 +34,8 @@ import {
  * - `completion` and `reversal` rows point at their `chore_completions` row
  *   (`completion_id`). A partial unique index per reason allows at most one
  *   of each per completion, which is the idempotency guarantee.
- * - `reward_claim` rows are written by the rewards work (SB-27), which adds
- *   its own source column.
+ * - `reward_claim` rows point at their `reward_claims` row (`reward_claim_id`)
+ *   and are written together with it (SB-27).
  * - `adjustment` rows are a parent's manual correction, with a `note`.
  *
  * Completion and reversal rows are written by the SECURITY DEFINER functions
@@ -59,6 +60,10 @@ export const pointsLedger = pgTable(
 		completionId: uuid('completion_id').references(() => choreCompletions.id, {
 			onDelete: 'set null',
 		}),
+		/** The claim a `reward_claim` row belongs to. NULL if the reward was later deleted. */
+		rewardClaimId: uuid('reward_claim_id').references(() => rewardClaims.id, {
+			onDelete: 'set null',
+		}),
 		/** Free text, required for adjustments ("Helped with groceries"). */
 		note: text('note'),
 		/** The auth user who caused it (an audit field, not a member reference). */
@@ -81,6 +86,10 @@ export const pointsLedger = pgTable(
 			sql`${t.reason} in ('completion', 'reversal') or ${t.completionId} is null`,
 		),
 		check(
+			'points_ledger_reward_claim_source_check',
+			sql`${t.rewardClaimId} is null or ${t.reason} = 'reward_claim'`,
+		),
+		check(
 			'points_ledger_sign_check',
 			sql`(${t.reason} <> 'completion' or ${t.delta} > 0)
 				and (${t.reason} not in ('reversal', 'reward_claim') or ${t.delta} < 0)`,
@@ -97,6 +106,10 @@ export const pointsLedger = pgTable(
 		uniqueIndex('points_ledger_completion_id_reversal_key')
 			.on(t.completionId)
 			.where(sql`${t.reason} = 'reversal'`),
+		// At most one spend per claim.
+		uniqueIndex('points_ledger_reward_claim_id_key')
+			.on(t.rewardClaimId)
+			.where(sql`${t.reason} = 'reward_claim'`),
 		index('points_ledger_member_id_created_at_idx').on(t.memberId, t.createdAt),
 		index('points_ledger_household_id_created_at_idx').on(
 			t.householdId,
@@ -131,5 +144,9 @@ export const pointsLedgerRelations = relations(pointsLedger, ({ one }) => ({
 	completion: one(choreCompletions, {
 		fields: [pointsLedger.completionId],
 		references: [choreCompletions.id],
+	}),
+	rewardClaim: one(rewardClaims, {
+		fields: [pointsLedger.rewardClaimId],
+		references: [rewardClaims.id],
 	}),
 }));

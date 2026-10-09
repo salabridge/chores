@@ -17,6 +17,7 @@
 		{ href: '/overview', label: 'Overview', icon: 'grid' },
 		{ href: '/chores/new', label: 'Create & Assign', icon: 'plus' },
 		{ href: '/rotations', label: 'Rotation Builder', icon: 'refresh' },
+		{ href: '/rewards/manage', label: 'Rewards', icon: 'gift' },
 	] as const;
 
 	const isActive = (href: string) =>
@@ -106,6 +107,10 @@
 								{:else if item.icon === 'plus'}
 									<circle cx="12" cy="12" r="10" />
 									<path d="M8 12h8M12 8v8" />
+								{:else if item.icon === 'gift'}
+									<rect width="18" height="4" x="3" y="8" rx="1" />
+									<path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+									<path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
 								{:else}
 									<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
 									<path d="M21 3v5h-5" />
