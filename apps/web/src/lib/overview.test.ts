@@ -201,22 +201,45 @@ describe('rotationChain', () => {
 		position,
 		eligible,
 	});
+	const members = [m('c', 2), m('a', 0), m('x', 1, false), m('b', 3)];
 
-	it('runs from the current turn to the end, skipping excluded members', () => {
-		const members = [m('c', 2), m('a', 0), m('x', 1, false), m('b', 3)];
-		expect(rotationChain(members, 'c')).toEqual(['C', 'B']);
-		expect(rotationChain(members, 'a')).toEqual(['A', 'C', 'B']);
+	it('starts at the current turn and wraps once around the loop', () => {
+		expect(rotationChain(members, 'a')).toEqual({
+			order: ['A', 'C', 'B'],
+			resetAt: 3,
+		});
+		expect(rotationChain(members, 'c')).toEqual({
+			order: ['C', 'B', 'A'],
+			resetAt: 2,
+		});
 	});
 
-	it('is empty without a valid current member', () => {
-		expect(rotationChain([m('a', 0)], null)).toEqual([]);
-		expect(rotationChain([m('a', 0, false)], 'a')).toEqual([]);
+	it('shows a full loop when the current member is last', () => {
+		expect(rotationChain(members, 'b')).toEqual({
+			order: ['B', 'A', 'C'],
+			resetAt: 1,
+		});
+	});
+
+	it('hands the turn to the first eligible member when the current one is excluded', () => {
+		expect(rotationChain(members, 'x')).toEqual({
+			order: ['A', 'C', 'B'],
+			resetAt: 3,
+		});
+	});
+
+	it('is empty when nobody is eligible or there is no current turn', () => {
+		expect(rotationChain([m('a', 0, false)], 'a')).toEqual({
+			order: [],
+			resetAt: 0,
+		});
 	});
 });
 
 describe('handoffText', () => {
 	const base = {
 		dueToday: true,
+		doneToday: false,
 		dueTime: null,
 		dueLabel: null,
 		frequency: 'daily' as const,
@@ -235,13 +258,18 @@ describe('handoffText', () => {
 		);
 	});
 
-	it('points at the next period when nothing is open today', () => {
-		expect(handoffText({ ...base, dueToday: false })).toBe(
-			'Next handoff tomorrow',
+	it('points at the next period once today is done', () => {
+		const done = { ...base, dueToday: false, doneToday: true };
+		expect(handoffText(done)).toBe('Next handoff tomorrow');
+		expect(handoffText({ ...done, frequency: 'weekends' })).toBe(
+			'Next handoff next weekend',
 		);
+	});
+
+	it('says this weekend for a weekends chore that does not occur today', () => {
 		expect(
 			handoffText({ ...base, dueToday: false, frequency: 'weekends' }),
-		).toBe('Next handoff next weekend');
+		).toBe('Next handoff this weekend');
 	});
 });
 

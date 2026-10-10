@@ -28,7 +28,7 @@
 		</p>
 	{:else}
 		<ul class="m-0 flex list-none flex-col gap-12 p-0">
-			{#each notes as note, i (i)}
+			{#each notes as note (note.text)}
 				<li
 					data-tone={note.tone}
 					class={['flex items-start gap-8 rounded-[12px] p-12', tones[note.tone]]}

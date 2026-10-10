@@ -13,9 +13,11 @@ describe('ManageChoresPanel.svelte', () => {
 		await expect
 			.element(link('Rotation Builder'))
 			.toHaveAttribute('href', '/rotations');
+		await expect.element(link('Overview')).toHaveAttribute('href', '/overview');
+		// This panel only renders on the Overview, so that card is the current page.
 		await expect
-			.element(link('Overview Review'))
-			.toHaveAttribute('href', '/overview');
+			.element(link('Overview'))
+			.toHaveAttribute('aria-current', 'page');
 		expect(page.getByRole('link').elements()).toHaveLength(3);
 	});
 });

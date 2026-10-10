@@ -54,6 +54,7 @@
 			href={overviewHref}
 			tone="neutral"
 			title="Overview"
+			aria-current="page"
 			description="Review status, workload, exceptions, and upcoming handoffs."
 			icon={grid}
 		/>

@@ -44,11 +44,12 @@
 					<RotationOrderPreview
 						class="min-w-0 flex-1"
 						members={rotation.order.map((name) => ({ name }))}
+						resetAt={rotation.resetAt}
 					/>
 					<SecondaryButton
 						variant="tinted"
 						tone="neutral"
-						href={loopHref}
+						href="{loopHref}#loop-{rotation.choreId}"
 						aria-label="View Loop: {rotation.title}"
 					>
 						View Loop

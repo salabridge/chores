@@ -2,6 +2,8 @@
 // load, the components and the tests share. No server imports here: this
 // file is bundled into the client.
 
+import { type RotationSlot, rotationHandoffChain } from '@chore/db/rotation';
+
 export type ChoreStatus = 'active-turn' | 'staged' | 'todo' | 'completed';
 
 export interface OverviewAssignee {
@@ -76,8 +78,10 @@ export interface UpcomingRotation {
 	handoff: string;
 	/** Open today, so it counts towards the "N due today" badge. */
 	dueToday: boolean;
-	/** Eligible members from the current turn to the end of the loop, in order. */
+	/** The Active Turn, then one full loop of handoffs, in order. */
 	order: string[];
+	/** Where the loop wraps: the "Loop Reset" tag goes before `order[resetAt]`. */
+	resetAt: number;
 }
 
 export type NoteTone = 'warning' | 'info' | 'success';
@@ -176,34 +180,38 @@ export function buildWorkload(
 }
 
 /**
- * The loop from the current turn onwards: eligible members by position, from
- * `currentMemberId` to the end of the loop (the Loop Reset follows). Empty when
- * the current member isn't in the loop.
+ * Names for the Upcoming Rotations chain: the Active Turn, then one full loop
+ * of handoffs, and where the loop wraps (`resetAt`: the index of the step
+ * where it does, or the chain's length when it wraps after the last step).
+ * Delegates to `rotationHandoffChain` so it follows the same rules as
+ * `app.advance_chore_rotation`.
  */
 export function rotationChain(
-	members: {
-		memberId: string;
-		name: string;
-		position: number;
-		eligible: boolean;
-	}[],
+	members: (RotationSlot & { name: string })[],
 	currentMemberId: string | null,
-): string[] {
-	const eligible = members
-		.filter((m) => m.eligible)
-		.sort((a, b) => a.position - b.position);
-	const at = eligible.findIndex((m) => m.memberId === currentMemberId);
-	return at < 0 ? [] : eligible.slice(at).map((m) => m.name);
+): { order: string[]; resetAt: number } {
+	const chain = rotationHandoffChain(members, currentMemberId);
+	const wrap = chain.findIndex((step) => step.loopReset);
+	return {
+		order: chain.map((step) => step.member.name),
+		resetAt: wrap < 0 ? chain.length : wrap,
+	};
 }
 
 /** "Next handoff at 8:00 PM"; once today's turn is done, the next period. */
 export function handoffText(input: {
 	dueToday: boolean;
+	/** Today's turn is done (as opposed to the chore not occurring today). */
+	doneToday: boolean;
 	dueTime: string | null;
 	dueLabel: string | null;
 	frequency: 'daily' | 'weekly' | 'weekends';
 }): string {
 	if (!input.dueToday) {
+		// Neither due nor done: it doesn't occur today, so this period is still ahead.
+		if (!input.doneToday && input.frequency === 'weekends') {
+			return 'Next handoff this weekend';
+		}
 		const next = {
 			daily: 'tomorrow',
 			weekly: 'next week',

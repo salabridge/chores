@@ -127,13 +127,15 @@ export const upcomingRotations: UpcomingRotation[] = [
 		handoff: 'Next handoff at 8:00 PM',
 		dueToday: true,
 		order: ['Leo', 'Mia'],
+		resetAt: 2,
 	},
 	{
 		choreId: 'dishwasher',
 		title: 'Run Dishwasher',
 		handoff: 'Next handoff after dinner',
 		dueToday: true,
-		order: ['Mom', 'Dad', 'Leo'],
+		order: ['Leo', 'Mom', 'Dad'],
+		resetAt: 1,
 	},
 	{
 		choreId: 'dog',
@@ -141,6 +143,7 @@ export const upcomingRotations: UpcomingRotation[] = [
 		handoff: 'Next handoff tomorrow',
 		dueToday: false,
 		order: ['Leo', 'Mia'],
+		resetAt: 2,
 	},
 ];
 

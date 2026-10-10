@@ -8,7 +8,7 @@ describe('UpcomingRotationsPanel.svelte', () => {
 	it('shows handoff, order chain and a View Loop link per rotation', async () => {
 		render(UpcomingRotationsPanel, {
 			rotations: upcomingRotations,
-			loopHref: '#loop',
+			loopHref: '/loops',
 		});
 		await expect.element(page.getByText('2 due today')).toBeVisible();
 		await expect
@@ -21,7 +21,9 @@ describe('UpcomingRotationsPanel.svelte', () => {
 		const link = page.getByRole('link', {
 			name: 'View Loop: Run Dishwasher',
 		});
-		await expect.element(link).toHaveAttribute('href', '#loop');
+		await expect
+			.element(link)
+			.toHaveAttribute('href', '/loops#loop-dishwasher');
 	});
 
 	it('has an empty state', async () => {

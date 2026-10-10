@@ -252,7 +252,10 @@ export async function loadHouseholdOverview(
 			if (!chore || !rotation.currentMemberId) return [];
 			const row = rowByChore.get(chore.id);
 			const dueToday = !!row && row.status !== 'completed';
-			const order = rotationChain(
+			// No row at all means the chore doesn't occur today (a weekends chore on a
+			// weekday), which is not the same as today's turn being done.
+			const doneToday = row?.status === 'completed';
+			const { order, resetAt } = rotationChain(
 				loopMemberRows
 					.filter((m) => m.choreId === chore.id)
 					.flatMap((m) => {
@@ -267,12 +270,14 @@ export async function loadHouseholdOverview(
 					title: chore.title,
 					handoff: handoffText({
 						dueToday,
+						doneToday,
 						dueTime: chore.dueTime,
 						dueLabel: chore.dueLabel,
 						frequency: chore.frequency,
 					}),
 					dueToday,
 					order,
+					resetAt,
 				},
 			];
 		})
