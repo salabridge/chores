@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+	buildNotes,
+	buildWorkload,
 	type ChoreStatusRow,
 	dueText,
 	familyStreakDays,
 	formatTime,
+	handoffText,
 	joinNames,
 	openCount,
 	percentOf,
+	rotationChain,
 	rowActions,
 	sortRows,
+	workloadBalance,
+	workloadSummary,
 } from './overview.ts';
 
 const row = (over: Partial<ChoreStatusRow> = {}): ChoreStatusRow => ({
@@ -125,5 +131,156 @@ describe('dueText / formatTime', () => {
 		expect(formatTime('00:05:00')).toBe('12:05 AM');
 		expect(formatTime('12:00:00')).toBe('12:00 PM');
 		expect(formatTime('08:30:00')).toBe('8:30 AM');
+	});
+});
+
+describe('workloadBalance', () => {
+	it('is balanced when there is little to balance', () => {
+		expect(workloadBalance([])).toBe('balanced');
+		expect(workloadBalance([5])).toBe('balanced');
+		expect(workloadBalance([2, 0])).toBe('balanced');
+	});
+
+	it('ignores small gaps', () => {
+		expect(workloadBalance([2, 0, 1, 0])).toBe('balanced');
+		expect(workloadBalance([3, 1, 2])).toBe('balanced');
+	});
+
+	it('does not flag one idle member in an even split', () => {
+		expect(workloadBalance([3, 3, 3, 0])).toBe('balanced');
+	});
+
+	it('flags a big, lopsided gap', () => {
+		expect(workloadBalance([5, 0])).toBe('unbalanced');
+		expect(workloadBalance([4, 1, 1, 1])).toBe('unbalanced');
+	});
+});
+
+describe('workloadSummary', () => {
+	it('words each combination', () => {
+		expect(workloadSummary([], [])).toBe('Nothing assigned today.');
+		expect(workloadSummary(['A'], [])).toBe('A in progress.');
+		expect(workloadSummary([], ['A', 'B'])).toBe('A and B completed.');
+		expect(workloadSummary(['A'], ['B'])).toBe('A in progress; B completed.');
+		expect(workloadSummary(['A', 'B', 'C', 'D'], [])).toBe(
+			'A, B and 2 more in progress.',
+		);
+	});
+});
+
+describe('buildWorkload', () => {
+	const members = [
+		{ id: 'a', name: 'Ann' },
+		{ id: 'b', name: 'Ben' },
+		{ id: 'c', name: 'Cy' },
+	];
+
+	it('counts active and done, sorts busiest first and scales the bars', () => {
+		const w = buildWorkload(members, [
+			{ memberId: 'b', title: 'X', done: false },
+			{ memberId: 'b', title: 'Y', done: true },
+			{ memberId: 'a', title: 'Z', done: false },
+		]);
+		expect(w.members.map((m) => m.name)).toEqual(['Ben', 'Ann', 'Cy']);
+		expect(w.members[0]).toMatchObject({ active: 1, done: 1, barPercent: 100 });
+		expect(w.members[1]).toMatchObject({ active: 1, done: 0, barPercent: 50 });
+		expect(w.members[2]).toMatchObject({ active: 0, done: 0, barPercent: 0 });
+		expect(w.balance).toBe('balanced');
+	});
+
+	it('handles no chores at all', () => {
+		const w = buildWorkload(members, []);
+		expect(w.members.every((m) => m.barPercent === 0)).toBe(true);
+	});
+});
+
+describe('rotationChain', () => {
+	const m = (memberId: string, position: number, eligible = true) => ({
+		memberId,
+		name: memberId.toUpperCase(),
+		position,
+		eligible,
+	});
+
+	it('runs from the current turn to the end, skipping excluded members', () => {
+		const members = [m('c', 2), m('a', 0), m('x', 1, false), m('b', 3)];
+		expect(rotationChain(members, 'c')).toEqual(['C', 'B']);
+		expect(rotationChain(members, 'a')).toEqual(['A', 'C', 'B']);
+	});
+
+	it('is empty without a valid current member', () => {
+		expect(rotationChain([m('a', 0)], null)).toEqual([]);
+		expect(rotationChain([m('a', 0, false)], 'a')).toEqual([]);
+	});
+});
+
+describe('handoffText', () => {
+	const base = {
+		dueToday: true,
+		dueTime: null,
+		dueLabel: null,
+		frequency: 'daily' as const,
+	};
+
+	it('prefers a time, then a label, then the frequency', () => {
+		expect(handoffText({ ...base, dueTime: '20:00:00' })).toBe(
+			'Next handoff at 8:00 PM',
+		);
+		expect(handoffText({ ...base, dueLabel: 'after dinner' })).toBe(
+			'Next handoff after dinner',
+		);
+		expect(handoffText(base)).toBe('Next handoff today');
+		expect(handoffText({ ...base, frequency: 'weekly' })).toBe(
+			'Next handoff this week',
+		);
+	});
+
+	it('points at the next period when nothing is open today', () => {
+		expect(handoffText({ ...base, dueToday: false })).toBe(
+			'Next handoff tomorrow',
+		);
+		expect(
+			handoffText({ ...base, dueToday: false, frequency: 'weekends' }),
+		).toBe('Next handoff next weekend');
+	});
+});
+
+describe('buildNotes', () => {
+	const loop = (over: Partial<ChoreStatusRow>) =>
+		row({ isLoop: true, ...over });
+
+	it('generates warning, info and success notes in that order', () => {
+		const notes = buildNotes({
+			exclusions: ['Mia is excluded from Dishes.'],
+			rows: [
+				loop({
+					choreId: 'a',
+					title: 'Small',
+					points: 5,
+					status: 'active-turn',
+				}),
+				loop({ choreId: 'b', title: 'Big', points: 20, status: 'active-turn' }),
+				loop({ choreId: 'c', title: 'Dog', status: 'completed' }),
+				row({ choreId: 'd', title: 'Personal', points: 99 }),
+			],
+			currentTurn: new Map([['c', 'Leo']]),
+		});
+		expect(notes.map((n) => n.tone)).toEqual(['warning', 'info', 'success']);
+		expect(notes[1]?.text).toBe(
+			'Big is the highest-value active rotation today (20 pts).',
+		);
+		expect(notes[2]?.text).toBe('Dog is done, so Leo is up next.');
+	});
+
+	it('is empty when nothing applies, and caps unblocked notes at two', () => {
+		expect(
+			buildNotes({ exclusions: [], rows: [], currentTurn: new Map() }),
+		).toEqual([]);
+		const done = ['a', 'b', 'c'].map((id) =>
+			loop({ choreId: id, title: id, status: 'completed' }),
+		);
+		expect(
+			buildNotes({ exclusions: [], rows: done, currentTurn: new Map() }),
+		).toHaveLength(2);
 	});
 });
