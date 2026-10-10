@@ -40,7 +40,7 @@ CREATE POLICY "chore_reminders_insert" ON "chore_reminders" AS PERMISSIVE FOR IN
 				and ("chore_reminders"."assignee_member_id" is null or app.is_member_id_in("chore_reminders"."household_id", "chore_reminders"."assignee_member_id")));--> statement-breakpoint
 CREATE POLICY "chore_reminders_update" ON "chore_reminders" AS PERMISSIVE FOR UPDATE TO "authenticated_backend" USING (app.is_own_member("chore_reminders"."assignee_member_id") or app.is_household_parent("chore_reminders"."household_id")) WITH CHECK (app.is_own_member("chore_reminders"."assignee_member_id") or app.is_household_parent("chore_reminders"."household_id"));--> statement-breakpoint
 CREATE POLICY "chore_skips_select" ON "chore_skips" AS PERMISSIVE FOR SELECT TO "authenticated_backend" USING (app.is_household_member("chore_skips"."household_id"));--> statement-breakpoint
-CREATE POLICY "chore_skips_insert" ON "chore_skips" AS PERMISSIVE FOR INSERT TO "authenticated_backend" WITH CHECK (app.is_household_parent("chore_skips"."household_id"));
+CREATE POLICY "chore_skips_insert" ON "chore_skips" AS PERMISSIVE FOR INSERT TO "authenticated_backend" WITH CHECK (app.is_household_parent("chore_skips"."household_id"));--> statement-breakpoint
 
 -- RLS can't limit columns, so narrow the default privileges from 0002 (full
 -- access) to what the policies allow. Both tables are append-only logs: a
