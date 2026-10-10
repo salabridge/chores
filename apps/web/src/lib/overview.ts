@@ -294,10 +294,14 @@ export function joinNames(names: string[]): string {
 	return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-/** The actions a row offers: Skip and Remind while open, Reopen and View Loop once done. */
+/**
+ * The actions a row offers: Skip and Remind while open, Reopen and View Loop
+ * once done. A loop whose stages are under way can't be skipped (the turn would
+ * move on and strand the progress).
+ */
 export function rowActions(row: ChoreStatusRow) {
 	return {
-		skip: isOpen(row),
+		skip: isOpen(row) && !(row.isLoop && row.status === 'staged'),
 		remind: isOpen(row),
 		reopen: !isOpen(row),
 		viewLoop: !isOpen(row) && row.isLoop,

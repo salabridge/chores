@@ -28,6 +28,18 @@ describe('planSkip', () => {
 		);
 	});
 
+	it('refuses to skip a rotation turn once its stages are under way', () => {
+		expect(planSkip(facts({ started: true }))).toMatchObject({
+			ok: false,
+			status: 409,
+			message: expect.stringMatching(/under way/),
+		});
+		// A personal chore has no turn to strand, so it can still be skipped.
+		expect(planSkip(facts({ type: 'personal', started: true }))).toMatchObject({
+			ok: true,
+		});
+	});
+
 	it.each([
 		['done', { completed: true }],
 		['not due today', { dueToday: false }],

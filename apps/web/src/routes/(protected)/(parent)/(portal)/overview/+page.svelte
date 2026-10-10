@@ -17,16 +17,24 @@
 
 	// Reopen needs a parent-authenticated call to app.reopen_chore_completion
 	// (SB-26) and has no web endpoint yet, so the table renders it disabled.
-	// Pass a handler through `actions` when it lands. Each handler refreshes
-	// the page data afterwards so the table shows the change.
+	// Pass a handler through `actions` when it lands. Skip refreshes the page
+	// data so the table shows the new turn-holder. Remind changes nothing on
+	// this page, so it confirms with a notice instead of reloading.
+	let notice = $state<string | null>(null);
 	const actions: ChoreRowActions = {
 		skip: async (row) => {
+			notice = null;
 			await skipChoreAction({ choreId: row.choreId });
 			await invalidateAll();
 		},
 		remind: async (row) => {
-			await remindChoreAction({ choreId: row.choreId });
-			await invalidateAll();
+			notice = null;
+			const { assigneeName, sent } = await remindChoreAction({
+				choreId: row.choreId,
+			});
+			notice = sent
+				? `Reminder sent to ${assigneeName}.`
+				: `${assigneeName} was just reminded.`;
 		},
 	};
 </script>
@@ -48,6 +56,7 @@
 <div class="grid items-start gap-16 xl:grid-cols-[minmax(0,1fr)_340px]">
 	<div class="flex min-w-0 flex-col gap-16" data-slot="overview-main">
 		<ChoreStatusTable rows={data.overview.rows} {actions} unavailableHint="Coming soon" />
+		<p role="status" class="text-[13px] text-text-secondary empty:hidden">{notice}</p>
 		<UpcomingRotationsPanel rotations={data.overview.rotations} />
 	</div>
 	<aside

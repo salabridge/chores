@@ -1,5 +1,5 @@
 {
-	"id": "ff854202-5c7f-4c74-9a43-b6d83d4d722e",
+	"id": "6e85afdc-6197-41d2-9045-ff996200387f",
 	"prevId": "017d5751-b0cf-40e7-ab6a-c4f0ef727888",
 	"version": "7",
 	"dialect": "postgresql",
@@ -498,8 +498,8 @@
 					"as": "PERMISSIVE",
 					"for": "UPDATE",
 					"to": ["authenticated_backend"],
-					"using": "app.is_household_member(\"chore_reminders\".\"household_id\")",
-					"withCheck": "app.is_household_member(\"chore_reminders\".\"household_id\")"
+					"using": "app.is_own_member(\"chore_reminders\".\"assignee_member_id\") or app.is_household_parent(\"chore_reminders\".\"household_id\")",
+					"withCheck": "app.is_own_member(\"chore_reminders\".\"assignee_member_id\") or app.is_household_parent(\"chore_reminders\".\"household_id\")"
 				}
 			},
 			"checkConstraints": {},
@@ -900,27 +900,6 @@
 				}
 			},
 			"indexes": {
-				"chore_skips_chore_id_period_start_idx": {
-					"name": "chore_skips_chore_id_period_start_idx",
-					"columns": [
-						{
-							"expression": "chore_id",
-							"isExpression": false,
-							"asc": true,
-							"nulls": "last"
-						},
-						{
-							"expression": "period_start",
-							"isExpression": false,
-							"asc": true,
-							"nulls": "last"
-						}
-					],
-					"isUnique": false,
-					"concurrently": false,
-					"method": "btree",
-					"with": {}
-				},
 				"chore_skips_household_id_created_at_idx": {
 					"name": "chore_skips_household_id_created_at_idx",
 					"columns": [
@@ -983,7 +962,13 @@
 				}
 			},
 			"compositePrimaryKeys": {},
-			"uniqueConstraints": {},
+			"uniqueConstraints": {
+				"chore_skips_chore_period_member_key": {
+					"name": "chore_skips_chore_period_member_key",
+					"nullsNotDistinct": false,
+					"columns": ["chore_id", "period_start", "member_id"]
+				}
+			},
 			"policies": {
 				"chore_skips_select": {
 					"name": "chore_skips_select",

@@ -9,7 +9,8 @@ import {
 	chores,
 	householdMembers,
 } from '@chore/db';
-import { chorePeriodStart, localDate } from '@chore/db/recurrence';
+import { addDays, chorePeriodStart, localDate } from '@chore/db/recurrence';
+import { skipKey } from '@chore/db/streaks';
 import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
 import {
 	buildNotes,
@@ -26,15 +27,12 @@ import {
 	type UpcomingRotation,
 } from '../overview.ts';
 import { db } from './drizzle.ts';
+import { householdClock } from './household-today.ts';
 
 // Reads for the Household Overview (SB-46). Like the rotation loops, the web
 // app talks to Postgres as the table owner, so every query is scoped by the
 // `householdId` from the caller's own profile and the page load must be
 // parent-only.
-
-// Households have no time zone yet, so "today" is the UTC date. Swap this for
-// the household's zone once it is stored.
-const HOUSEHOLD_TIME_ZONE = 'UTC';
 
 /** Days of completions to look back over for the interim family streak. */
 const STREAK_LOOKBACK_DAYS = 90;
@@ -43,41 +41,64 @@ export async function loadHouseholdOverview(
 	householdId: string,
 	now: Date = new Date(),
 ): Promise<HouseholdOverview> {
-	const today = localDate(HOUSEHOLD_TIME_ZONE, now);
 	const since = new Date(now.getTime() - STREAK_LOOKBACK_DAYS * 86_400_000);
 
-	const [choreRows, memberRows, rotationRows, loopMemberRows, recent] =
-		await Promise.all([
-			db.select().from(chores).where(eq(chores.householdId, householdId)),
-			db
-				.select({ id: householdMembers.id, name: householdMembers.displayName })
-				.from(householdMembers)
-				.where(eq(householdMembers.householdId, householdId)),
-			db
-				.select()
-				.from(choreRotations)
-				.where(eq(choreRotations.householdId, householdId)),
-			db
-				.select({
-					choreId: choreRotationMembers.choreId,
-					memberId: choreRotationMembers.memberId,
-					position: choreRotationMembers.position,
-					eligible: choreRotationMembers.eligible,
-					reason: choreRotationMembers.exclusionReason,
-				})
-				.from(choreRotationMembers)
-				.where(eq(choreRotationMembers.householdId, householdId)),
-			db
-				.select({ completedAt: choreCompletions.completedAt })
-				.from(choreCompletions)
-				.where(
-					and(
-						eq(choreCompletions.householdId, householdId),
-						isNull(choreCompletions.reopenedAt),
-						gte(choreCompletions.completedAt, since),
-					),
+	const [
+		choreRows,
+		memberRows,
+		rotationRows,
+		loopMemberRows,
+		recent,
+		{ timeZone, today },
+		skips,
+	] = await Promise.all([
+		db.select().from(chores).where(eq(chores.householdId, householdId)),
+		db
+			.select({ id: householdMembers.id, name: householdMembers.displayName })
+			.from(householdMembers)
+			.where(eq(householdMembers.householdId, householdId)),
+		db
+			.select()
+			.from(choreRotations)
+			.where(eq(choreRotations.householdId, householdId)),
+		db
+			.select({
+				choreId: choreRotationMembers.choreId,
+				memberId: choreRotationMembers.memberId,
+				position: choreRotationMembers.position,
+				eligible: choreRotationMembers.eligible,
+				reason: choreRotationMembers.exclusionReason,
+			})
+			.from(choreRotationMembers)
+			.where(eq(choreRotationMembers.householdId, householdId)),
+		db
+			.select({ completedAt: choreCompletions.completedAt })
+			.from(choreCompletions)
+			.where(
+				and(
+					eq(choreCompletions.householdId, householdId),
+					isNull(choreCompletions.reopenedAt),
+					gte(choreCompletions.completedAt, since),
 				),
-		]);
+			),
+		householdClock(householdId, now),
+		// A parent's Skip of a personal chore (SB-29) takes it off the list for
+		// its period. Only periods that can still be current matter (a weekly
+		// period is at most 7 days); bound by UTC today minus 8 so any time zone
+		// is covered without waiting on the household's own date.
+		db
+			.select({
+				choreId: choreSkips.choreId,
+				periodStart: choreSkips.periodStart,
+			})
+			.from(choreSkips)
+			.where(
+				and(
+					eq(choreSkips.householdId, householdId),
+					gte(choreSkips.periodStart, addDays(localDate('UTC', now), -8)),
+				),
+			),
+	]);
 
 	const names = new Map(memberRows.map((m) => [m.id, m.name]));
 	const rotations = new Map(rotationRows.map((r) => [r.choreId, r]));
@@ -85,21 +106,15 @@ export async function loadHouseholdOverview(
 
 	// Today's period for each chore; a chore that doesn't occur today (a
 	// weekends chore on a weekday) isn't due, so it has no row.
-	// A personal chore a parent skipped (SB-29) is off the list for its period.
 	// A skipped rotation turn has already moved on, so its loop stays listed.
-	const skips = await db
-		.select({
-			choreId: choreSkips.choreId,
-			periodStart: choreSkips.periodStart,
-		})
-		.from(choreSkips)
-		.where(eq(choreSkips.householdId, householdId));
-	const isSkipped = (choreId: string, periodStart: string) =>
-		skips.some((s) => s.choreId === choreId && s.periodStart === periodStart);
+	const skipped = new Set(skips.map((s) => skipKey(s.choreId, s.periodStart)));
 	const dueChores = choreRows.flatMap((chore) => {
 		const periodStart = chorePeriodStart(chore.frequency, today);
 		if (!periodStart) return [];
-		if (chore.type === 'personal' && isSkipped(chore.id, periodStart)) {
+		if (
+			chore.type === 'personal' &&
+			skipped.has(skipKey(chore.id, periodStart))
+		) {
 			return [];
 		}
 		return [{ chore, periodStart }];
@@ -312,7 +327,7 @@ export async function loadHouseholdOverview(
 	const notes = buildNotes({ exclusions, rows: sorted, currentTurn });
 
 	const streakDays = familyStreakDays(
-		recent.map((c) => localDate(HOUSEHOLD_TIME_ZONE, c.completedAt)),
+		recent.map((c) => localDate(timeZone, c.completedAt)),
 		today,
 	);
 

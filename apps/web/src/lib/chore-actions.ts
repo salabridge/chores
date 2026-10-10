@@ -13,6 +13,8 @@ export interface ChoreActionFacts {
 	holderId: string | null;
 	/** A personal chore already skipped for this period. */
 	alreadySkipped?: boolean;
+	/** Stage progress exists on this period's instance: the turn is under way. */
+	started?: boolean;
 }
 
 export type ActionPlan =
@@ -46,6 +48,12 @@ function openHolder(facts: ChoreActionFacts): ActionPlan {
 export function planSkip(facts: ChoreActionFacts): ActionPlan {
 	const plan = openHolder(facts);
 	if (!plan.ok) return plan;
+	// Moving the turn on would strand the stage progress on the skipped member.
+	if (facts.type === 'rotation' && facts.started) {
+		return refuse(
+			'Stages are already under way on this turn. Finish or reopen it instead.',
+		);
+	}
 	if (facts.type === 'personal' && facts.alreadySkipped) {
 		return { ...plan, noop: true };
 	}

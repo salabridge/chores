@@ -8,7 +8,7 @@ import {
 	chores,
 	householdMembers,
 } from '@chore/db';
-import { chorePeriodStart, localDate } from '@chore/db/recurrence';
+import { chorePeriodStart } from '@chore/db/recurrence';
 import { rotationTurns } from '@chore/db/rotation';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import {
@@ -17,6 +17,7 @@ import {
 	stageStates,
 } from '../rotation-detail.ts';
 import { db } from './drizzle.ts';
+import { householdToday } from './household-today.ts';
 import type { ProfileState } from './profile-state.ts';
 
 // Reads and writes for the shared rotation chore screen (SB-41). As with the
@@ -29,10 +30,6 @@ import type { ProfileState } from './profile-state.ts';
 // the turn hand-off in one transaction. They authorize by `app.current_user_id()`,
 // which reads the `request.jwt.claims` setting, so each call runs in a batch
 // (one transaction on the HTTP driver) that sets the signed-in user first.
-
-// Households have no time zone yet, so "today" is the UTC date (as in the
-// Overview). Swap this for the household's zone once it is stored.
-const HOUSEHOLD_TIME_ZONE = 'UTC';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -124,7 +121,7 @@ export async function loadRotationDetail(
 	);
 	const periodStart = chorePeriodStart(
 		chore.frequency,
-		localDate(HOUSEHOLD_TIME_ZONE, now),
+		await householdToday(viewer.householdId, now),
 	);
 	const instance = periodStart
 		? await findInstance(choreId, periodStart)
@@ -251,7 +248,7 @@ async function prepare(state: ProfileState, choreId: string) {
 	}
 	const periodStart = chorePeriodStart(
 		chore.frequency,
-		localDate(HOUSEHOLD_TIME_ZONE),
+		await householdToday(householdId),
 	);
 	if (!periodStart) {
 		throw new RotationDetailError("This chore isn't due today.", 409);

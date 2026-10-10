@@ -347,19 +347,24 @@ completed (`ChoreNotAssignedError`).
 The Overview's parent-only **Skip** and **Remind** actions (SB-29) each leave
 a log row, so the Overview can show "reminders or skips".
 
-- `chore_skips`: one row per skip. A rotation skip moves the turn on with
-  `advanceRotation(..., { outcome: 'skipped' })` (no completion, no points,
-  Done Last unchanged) and records whose turn it was; a personal chore is
-  marked skipped for `period_start` and drops off the Overview for that
-  period. Keyed by `period_start`, not an instance, because instances are
-  created lazily.
+- `chore_skips`: one row per skip, unique per (chore, period, member) so a
+  double tap or a second parent adds nothing. A rotation skip moves the turn
+  on with `advanceRotation(..., { outcome: 'skipped' })` (no completion, no
+  points, Done Last unchanged) and records whose turn it was; it's refused
+  once stages are under way. A personal chore is marked skipped for
+  `period_start`, drops off the Overview for that period, and `householdStreaks`
+  counts that period as skipped instead of missed. Keyed by `period_start`, not
+  an instance, because instances are created lazily.
 - `chore_reminders`: one row per nudge (chore, assignee, `created_by`,
   `created_at`). MVP delivery is in-app only: the assignee's Today screen
-  shows undismissed rows as a banner (`dismissed_at` clears one). There's no
-  push or email; that would be a separate ticket.
+  shows undismissed rows as a banner. There's no push or email; that would be
+  a separate ticket. The web app sends at most one per assignee and chore every
+  10 minutes.
 
-Both are readable by household members and insertable by parents. The web app
-writes them as the table owner after its own parent check.
+Both are readable by household members and insertable by parents. A reminder
+can only have `dismissed_at` changed, by its assignee or a parent (a column
+grant plus the update policy). The web app writes them as the table owner
+after its own parent check.
 
 ### Rewards
 

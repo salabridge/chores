@@ -188,6 +188,10 @@ export function familyStreak(
 	);
 }
 
+/** Key for a parent's skip of one chore in one period, as `chore_skips` stores it. */
+export const skipKey = (choreId: string, periodStart: string) =>
+	`${choreId}|${periodStart}`;
+
 /** One chore's data, as `resolveDueChores()` needs it. */
 export interface StreakChore {
 	id: string;
@@ -215,7 +219,8 @@ export interface StreakCompletion {
  *
  * - A period is *done* if an open completion's local date (in `timeZone`)
  *   falls inside the period. Finishing it late doesn't count.
- * - It's *skipped* if its instance id is in `skippedInstanceIds`.
+ * - It's *skipped* if a parent skipped the chore for that period
+ *   (`skippedPeriods`, see `skipKey()`). A skip needs no instance row.
  * - Otherwise it's *missed*, including a period nobody touched (no instance
  *   row), which belongs to the chore's assignee. A rotation chore with no
  *   instance has no known turn-holder, so it's left out.
@@ -229,7 +234,7 @@ export function resolveDueChores(input: {
 	timeZone: string;
 	from: string;
 	today: string;
-	skippedInstanceIds?: ReadonlySet<string>;
+	skippedPeriods?: ReadonlySet<string>;
 }): DueChore[] {
 	const { timeZone, from, today } = input;
 	const instanceByPeriod = new Map(
@@ -256,7 +261,7 @@ export function resolveDueChores(input: {
 				: chore.assignedMemberId;
 			if (!memberId) continue;
 			let outcome: DueChore['outcome'] = 'missed';
-			if (instance && input.skippedInstanceIds?.has(instance.id)) {
+			if (input.skippedPeriods?.has(skipKey(chore.id, start))) {
 				outcome = 'skipped';
 			} else if (
 				(completedDates.get(instance?.id ?? '') ?? []).some(

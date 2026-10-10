@@ -1,6 +1,7 @@
 import { and, eq, gte, isNull } from 'drizzle-orm';
 import { choreCompletions } from '../schema/chore-completions.table.ts';
 import { choreInstances } from '../schema/chore-instances.table.ts';
+import { choreSkips } from '../schema/chore-skips.table.ts';
 import { chores } from '../schema/chores.table.ts';
 import { householdMembers } from '../schema/household-members.table.ts';
 import { households } from '../schema/households.table.ts';
@@ -13,11 +14,15 @@ import {
 	personalStreak,
 	resolveDueChores,
 	type Streak,
+	skipKey,
 } from './streaks.ts';
 
 // Server-side streak query (SB-28). Call it inside `withAuth()`; RLS limits
 // what the signed-in user can read. Streaks are computed on read from
-// `chore_completions`, not stored.
+// `chore_completions`, not stored. A parent's Skip of a personal chore
+// (`chore_skips`, SB-29) doesn't count against the member. A rotation skip
+// needs no entry here: the turn moves on and the skipped member has no
+// instance for the period.
 
 export interface HouseholdStreaks {
 	/** Today's date in the household's time zone. */
@@ -33,12 +38,6 @@ export interface HouseholdStreaksOptions {
 	now?: Date;
 	/** How many days back to look; a longer streak is reported as this many. */
 	lookbackDays?: number;
-	/**
-	 * Chore instances a parent skipped (Overview "Skip", SB-29). Skips aren't
-	 * stored yet, so the caller supplies them; skipped chores don't count
-	 * against anyone.
-	 */
-	skippedInstanceIds?: ReadonlySet<string>;
 	/** Parent-granted exceptions, same story: nothing stores these yet. */
 	exceptions?: readonly DayException[];
 }
@@ -66,48 +65,65 @@ export async function householdStreaks(
 	// covered whatever the offset; resolveDueChores() does the exact check.
 	const since = new Date(`${addDays(from, -1)}T00:00:00Z`);
 
-	const [members, choreRows, instances, completions] = await Promise.all([
-		tx
-			.select({ id: householdMembers.id })
-			.from(householdMembers)
-			.where(eq(householdMembers.householdId, householdId)),
-		tx
-			.select({
-				id: chores.id,
-				frequency: chores.frequency,
-				assignedMemberId: chores.assignedMemberId,
-				createdAt: chores.createdAt,
-			})
-			.from(chores)
-			.where(eq(chores.householdId, householdId)),
-		tx
-			.select({
-				id: choreInstances.id,
-				choreId: choreInstances.choreId,
-				periodStart: choreInstances.periodStart,
-				assignedMemberId: choreInstances.assignedMemberId,
-			})
-			.from(choreInstances)
-			.where(
-				and(
-					eq(choreInstances.householdId, householdId),
-					gte(choreInstances.periodStart, addDays(from, -7)),
+	const [members, choreRows, instances, completions, skips] = await Promise.all(
+		[
+			tx
+				.select({ id: householdMembers.id })
+				.from(householdMembers)
+				.where(eq(householdMembers.householdId, householdId)),
+			tx
+				.select({
+					id: chores.id,
+					frequency: chores.frequency,
+					assignedMemberId: chores.assignedMemberId,
+					createdAt: chores.createdAt,
+				})
+				.from(chores)
+				.where(eq(chores.householdId, householdId)),
+			tx
+				.select({
+					id: choreInstances.id,
+					choreId: choreInstances.choreId,
+					periodStart: choreInstances.periodStart,
+					assignedMemberId: choreInstances.assignedMemberId,
+				})
+				.from(choreInstances)
+				.where(
+					and(
+						eq(choreInstances.householdId, householdId),
+						gte(choreInstances.periodStart, addDays(from, -7)),
+					),
 				),
-			),
-		tx
-			.select({
-				instanceId: choreCompletions.instanceId,
-				completedAt: choreCompletions.completedAt,
-			})
-			.from(choreCompletions)
-			.where(
-				and(
-					eq(choreCompletions.householdId, householdId),
-					isNull(choreCompletions.reopenedAt),
-					gte(choreCompletions.completedAt, since),
+			tx
+				.select({
+					instanceId: choreCompletions.instanceId,
+					completedAt: choreCompletions.completedAt,
+				})
+				.from(choreCompletions)
+				.where(
+					and(
+						eq(choreCompletions.householdId, householdId),
+						isNull(choreCompletions.reopenedAt),
+						gte(choreCompletions.completedAt, since),
+					),
 				),
-			),
-	]);
+			// Only personal chores: a rotation skip moves the turn instead.
+			tx
+				.select({
+					choreId: choreSkips.choreId,
+					periodStart: choreSkips.periodStart,
+				})
+				.from(choreSkips)
+				.innerJoin(chores, eq(chores.id, choreSkips.choreId))
+				.where(
+					and(
+						eq(choreSkips.householdId, householdId),
+						eq(chores.type, 'personal'),
+						gte(choreSkips.periodStart, addDays(from, -7)),
+					),
+				),
+		],
+	);
 
 	const due = resolveDueChores({
 		chores: choreRows,
@@ -116,7 +132,9 @@ export async function householdStreaks(
 		timeZone,
 		from,
 		today,
-		skippedInstanceIds: options.skippedInstanceIds,
+		skippedPeriods: new Set(
+			skips.map((s) => skipKey(s.choreId, s.periodStart)),
+		),
 	});
 	const exceptions = options.exceptions ?? [];
 	const memberIds = members.map((m) => m.id);

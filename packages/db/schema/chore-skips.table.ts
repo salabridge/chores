@@ -6,6 +6,7 @@ import {
 	pgPolicy,
 	pgTable,
 	timestamp,
+	unique,
 	uuid,
 } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.ts';
@@ -56,7 +57,14 @@ export const choreSkips = pgTable(
 			columns: [t.choreId, t.householdId],
 			foreignColumns: [chores.id, chores.householdId],
 		}).onDelete('cascade'),
-		index('chore_skips_chore_id_period_start_idx').on(t.choreId, t.periodStart),
+		// Skipping the same member's turn (or personal chore) twice in a period is
+		// one skip: a double tap or a second parent adds nothing. A rotation can
+		// still be skipped past several members in one period.
+		unique('chore_skips_chore_period_member_key').on(
+			t.choreId,
+			t.periodStart,
+			t.memberId,
+		),
 		index('chore_skips_household_id_created_at_idx').on(
 			t.householdId,
 			t.createdAt,

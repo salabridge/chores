@@ -5,12 +5,13 @@ import {
 	choreRotationMembers,
 	choreRotations,
 	choreSkips,
+	choreStageProgress,
 	chores,
 	householdMembers,
 } from '@chore/db';
-import { chorePeriodStart, localDate } from '@chore/db/recurrence';
+import { chorePeriodStart } from '@chore/db/recurrence';
 import { rotationTurns } from '@chore/db/rotation';
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import {
 	type ActionPlan,
 	type ChoreActionFacts,
@@ -18,6 +19,7 @@ import {
 	planSkip,
 } from '../chore-actions.ts';
 import { db } from './drizzle.ts';
+import { householdToday } from './household-today.ts';
 import type { ProfileState } from './profile-state.ts';
 
 // Parent actions on the Overview's Chore Status table: Skip and Remind (SB-29).
@@ -27,9 +29,8 @@ import type { ProfileState } from './profile-state.ts';
 // authorizes by `app.current_user_id()`; it runs in a batch (one transaction
 // on the HTTP driver) that sets the signed-in parent first.
 
-// Households have no time zone yet, so "today" is the UTC date (as in the
-// Overview). Swap this for the household's zone once it is stored.
-const HOUSEHOLD_TIME_ZONE = 'UTC';
+/** A second Remind on the same chore within this long is a no-op. */
+const REMIND_COOLDOWN_MINUTES = 10;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -61,9 +62,10 @@ async function load(householdId: string, choreId: string): Promise<Loaded> {
 		.where(and(eq(chores.id, choreId), eq(chores.householdId, householdId)));
 	if (!chore) throw notFound();
 
+	// The household's own day, the same one the Overview lists chores for.
 	const periodStart = chorePeriodStart(
 		chore.frequency,
-		localDate(HOUSEHOLD_TIME_ZONE),
+		await householdToday(householdId),
 	);
 
 	let holderId: string | null = null;
@@ -94,6 +96,7 @@ async function load(householdId: string, choreId: string): Promise<Loaded> {
 
 	let instance: typeof choreInstances.$inferSelect | undefined;
 	let completed = false;
+	let started = false;
 	let alreadySkipped = false;
 	if (periodStart) {
 		[instance] = await db
@@ -116,6 +119,12 @@ async function load(householdId: string, choreId: string): Promise<Loaded> {
 					),
 				);
 			completed = completion !== undefined;
+			const [progress] = await db
+				.select({ stageId: choreStageProgress.stageId })
+				.from(choreStageProgress)
+				.where(eq(choreStageProgress.instanceId, instance.id))
+				.limit(1);
+			started = progress !== undefined;
 		}
 		const [skip] = await db
 			.select({ id: choreSkips.id })
@@ -141,6 +150,7 @@ async function load(householdId: string, choreId: string): Promise<Loaded> {
 			completed,
 			holderId,
 			alreadySkipped,
+			started,
 		},
 	};
 }
@@ -178,7 +188,7 @@ export async function skipChore(
 	});
 
 	if (chore.type === 'personal') {
-		if (!plan.noop) await record;
+		if (!plan.noop) await record.onConflictDoNothing();
 		return { nextMemberId: null };
 	}
 
@@ -189,20 +199,20 @@ export async function skipChore(
 			db.execute<{ member_id: string }>(
 				sql`select member_id from app.advance_chore_rotation(${choreId}::uuid, ${plan.holderId}::uuid, false)`,
 			),
-			record,
-		]);
-		const nextMemberId = advanced.rows[0]?.member_id ?? null;
-		// Keep an untouched instance with the new turn-holder, so the table shows
-		// them and completing doesn't fail on a stale assignee.
-		if (nextMemberId) {
-			await db.execute(sql`
-				update chore_instances ci set assigned_member_id = ${nextMemberId}::uuid
-				where ci.chore_id = ${choreId}::uuid
+			record.onConflictDoNothing(),
+			// Keep an untouched instance with the new turn-holder, in the same
+			// transaction, so the table shows them and completing doesn't fail on a
+			// stale assignee. (A turn with stage progress can't be skipped.)
+			db.execute(sql`
+				update chore_instances ci set assigned_member_id = r.current_member_id
+				from chore_rotations r
+				where r.chore_id = ci.chore_id
+					and ci.chore_id = ${choreId}::uuid
 					and ci.period_start = ${periodStart}::date
 					and not exists (select 1 from chore_completions c where c.instance_id = ci.id)
-					and not exists (select 1 from chore_stage_progress p where p.instance_id = ci.id)`);
-		}
-		return { nextMemberId };
+					and not exists (select 1 from chore_stage_progress p where p.instance_id = ci.id)`),
+		]);
+		return { nextMemberId: advanced.rows[0]?.member_id ?? null };
 	} catch (err) {
 		throw mapError(err);
 	}
@@ -215,7 +225,7 @@ export async function skipChore(
 export async function remindChore(
 	state: ProfileState,
 	choreId: string,
-): Promise<{ assigneeId: string; assigneeName: string }> {
+): Promise<{ assigneeId: string; assigneeName: string; sent: boolean }> {
 	const householdId = state.actor.householdId;
 	const { facts } = await load(householdId, choreId);
 	const plan = planRemind(facts);
@@ -232,13 +242,41 @@ export async function remindChore(
 		);
 	if (!assignee) throw new ChoreActionError('That member was not found.', 404);
 
+	// Every row becomes a banner on the assignee's screen, so a repeat tap
+	// shortly after the last one sends nothing new.
+	const since = new Date(Date.now() - REMIND_COOLDOWN_MINUTES * 60_000);
+	const [recent] = await db
+		.select({ id: choreReminders.id })
+		.from(choreReminders)
+		.where(
+			and(
+				eq(choreReminders.choreId, choreId),
+				eq(choreReminders.assigneeMemberId, plan.holderId),
+				isNull(choreReminders.dismissedAt),
+				gte(choreReminders.createdAt, since),
+			),
+		)
+		.orderBy(desc(choreReminders.createdAt))
+		.limit(1);
+	if (recent) {
+		return {
+			assigneeId: plan.holderId,
+			assigneeName: assignee.name,
+			sent: false,
+		};
+	}
+
 	await db.insert(choreReminders).values({
 		householdId,
 		choreId,
 		assigneeMemberId: plan.holderId,
 		createdBy: state.actor.userId ?? null,
 	});
-	return { assigneeId: plan.holderId, assigneeName: assignee.name };
+	return {
+		assigneeId: plan.holderId,
+		assigneeName: assignee.name,
+		sent: true,
+	};
 }
 
 /** Turns the database's custom errors into messages for the table. */

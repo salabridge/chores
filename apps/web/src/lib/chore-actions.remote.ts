@@ -25,7 +25,7 @@ export const skipChoreAction = command(
 	'unchecked',
 	async (input: { choreId: string }) => {
 		const state = await requireParentProfile();
-		return asHttpError(() => skipChore(state, String(input.choreId)));
+		return asHttpError(() => skipChore(state, String(input?.choreId)));
 	},
 );
 
@@ -34,6 +34,6 @@ export const remindChoreAction = command(
 	'unchecked',
 	async (input: { choreId: string }) => {
 		const state = await requireParentProfile();
-		return asHttpError(() => remindChore(state, String(input.choreId)));
+		return asHttpError(() => remindChore(state, String(input?.choreId)));
 	},
 );

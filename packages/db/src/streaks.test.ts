@@ -8,6 +8,7 @@ import {
 	memberDayStatus,
 	personalStreak,
 	resolveDueChores,
+	skipKey,
 } from './streaks.ts';
 
 // 2026-10-07 is a Wednesday; 2026-10-03/04 are Saturday/Sunday.
@@ -196,7 +197,7 @@ test('a day with no instance row counts as missed', () => {
 	);
 });
 
-test('a late completion stays missed and a skipped instance is skipped', () => {
+test('a late completion stays missed and a skipped period is skipped', () => {
 	const due = resolveDueChores({
 		chores: [chore],
 		instances: [inst('2026-10-05'), inst('2026-10-06')],
@@ -210,7 +211,7 @@ test('a late completion stays missed and a skipped instance is skipped', () => {
 		timeZone: 'UTC',
 		from: '2026-10-05',
 		today: '2026-10-06',
-		skippedInstanceIds: new Set(['i-2026-10-06']),
+		skippedPeriods: new Set([skipKey(chore.id, '2026-10-06')]),
 	});
 	assert.deepEqual(
 		due.map((d) => d.outcome),

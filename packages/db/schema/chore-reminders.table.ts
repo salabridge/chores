@@ -16,6 +16,7 @@ import {
 	isHouseholdMember,
 	isHouseholdParent,
 	isMemberIdInHousehold,
+	isOwnMember,
 } from './rls.ts';
 
 /**
@@ -74,13 +75,13 @@ export const choreReminders = pgTable(
 			withCheck: sql`${isHouseholdParent(t.householdId)}
 				and ${isMemberIdInHousehold(t.householdId, t.assigneeMemberId)}`,
 		}),
-		// Dismissing is for the assignee or a parent; both are household members
-		// as far as RLS goes, and the app narrows it further.
+		// Dismissing is for the assignee or a parent. RLS can't limit columns, so
+		// the migration also grants UPDATE on `dismissed_at` only.
 		pgPolicy('chore_reminders_update', {
 			for: 'update',
 			to: backendRole,
-			using: isHouseholdMember(t.householdId),
-			withCheck: isHouseholdMember(t.householdId),
+			using: sql`${isOwnMember(t.assigneeMemberId)} or ${isHouseholdParent(t.householdId)}`,
+			withCheck: sql`${isOwnMember(t.assigneeMemberId)} or ${isHouseholdParent(t.householdId)}`,
 		}),
 	],
 );
