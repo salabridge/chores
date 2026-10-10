@@ -7,7 +7,8 @@
 		exampleDraft,
 		toCreateInput,
 	} from '#lib/chore-creator.js';
-	import { createChore } from '#lib/chores.remote.js';
+	import type { CreateRotationChoreInput } from '#lib/chore-eligibility.js';
+	import { createChore, createRotation } from '#lib/chores.remote.js';
 	import ChoreEligibilityPanel from '#lib/components/chores/ChoreEligibilityPanel.svelte';
 	import ChoreSetupForm from '#lib/components/chores/ChoreSetupForm.svelte';
 	import WorkspaceHeader from '#lib/components/shell/WorkspaceHeader.svelte';
@@ -26,7 +27,7 @@
 				: 'personal',
 		),
 	);
-	// Becomes true once a household rotation passes the setup form; SB-49's panel takes over from there.
+	// Becomes true once a household rotation passes the setup form; the Eligibility panel then saves it.
 	let eligibilityStep = $state(false);
 
 	const isRotation = $derived(draft.kind === 'rotation');
@@ -37,20 +38,33 @@
 		eligibilityStep = false;
 	}
 
+	const failure = (e: unknown) =>
+		new Error(
+			isHttpError(e) && e.body.message
+				? e.body.message
+				: 'Could not save this chore. Try again.',
+		);
+
+	async function saveRotation(input: CreateRotationChoreInput) {
+		try {
+			await createRotation(input);
+		} catch (e) {
+			throw failure(e);
+		}
+		await invalidateAll();
+		await goto('/overview');
+	}
+
 	async function onsubmit(valid: ChoreDraft) {
 		if (valid.kind === 'rotation') {
-			// Rotations are saved from the Eligibility step (SB-49).
+			// Rotations are saved from the Eligibility Setup panel.
 			eligibilityStep = true;
 			return;
 		}
 		try {
 			await createChore(toCreateInput(valid));
 		} catch (e) {
-			throw new Error(
-				isHttpError(e) && e.body.message
-					? e.body.message
-					: 'Could not save this chore. Try again.',
-			);
+			throw failure(e);
 		}
 		await invalidateAll();
 		await goto('/overview');
@@ -75,8 +89,7 @@
 
 <div class="grid items-start gap-32 xl:grid-cols-[minmax(0,1fr)_420px]">
 	<ChoreSetupForm bind:draft members={data.members} {onsubmit} cancelHref="/overview" />
-	<!-- SB-49 plugs in here: replace the body of ChoreEligibilityPanel. -->
 	<aside class="min-w-0" aria-label="Eligibility Setup">
-		<ChoreEligibilityPanel {draft} members={data.members} active={eligibilityStep} />
+		<ChoreEligibilityPanel {draft} members={data.members} active={eligibilityStep} onsave={saveRotation} />
 	</aside>
 </div>
