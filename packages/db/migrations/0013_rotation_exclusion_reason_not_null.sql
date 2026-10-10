@@ -6,9 +6,10 @@
 -- Backfill first: the only rows the old check let through and the new one
 -- rejects are excluded members with a NULL reason. Give them a placeholder so
 -- the constraint can be added validated. Touching exclusion_reason alone does
--- not fire the hand-off trigger (it is UPDATE OF eligible).
+-- not fire the hand-off trigger (it is UPDATE OF eligible). updated_at is
+-- bumped by hand because no trigger maintains it.
 
-UPDATE "chore_rotation_members" SET "exclusion_reason" = 'Excluded' WHERE "eligible" = false AND "exclusion_reason" IS NULL;--> statement-breakpoint
+UPDATE "chore_rotation_members" SET "exclusion_reason" = 'Excluded', "updated_at" = now() WHERE "eligible" = false AND "exclusion_reason" IS NULL;--> statement-breakpoint
 ALTER TABLE "chore_rotation_members" DROP CONSTRAINT "chore_rotation_members_exclusion_reason_check";--> statement-breakpoint
 ALTER TABLE "chore_rotation_members" ADD CONSTRAINT "chore_rotation_members_exclusion_reason_check" CHECK (("chore_rotation_members"."eligible" and "chore_rotation_members"."exclusion_reason" is null)
 				or (not "chore_rotation_members"."eligible" and coalesce(char_length(btrim("chore_rotation_members"."exclusion_reason")), 0) between 1 and 200));

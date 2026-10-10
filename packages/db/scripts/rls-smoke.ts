@@ -1035,6 +1035,14 @@ try {
 	);
 	ok('completing the same turn twice is refused (StaleRotationTurnError)');
 	await expectRejected(
+		'Carol completing her stale turn (privilege is checked before staleness)',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				advanceRotation(tx, trash.id, { fromMemberId: carolMemberId }),
+			),
+		/only a parent or the member whose turn it is/,
+	);
+	await expectRejected(
 		"Carol completing Mia's turn",
 		() =>
 			authed.withAuth(carol.token, (tx) =>
