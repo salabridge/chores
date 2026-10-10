@@ -1,111 +1,118 @@
 {
-	"version": "7",
-	"dialect": "postgresql",
-	"entries": [
-		{
-			"idx": 0,
-			"version": "7",
-			"when": 1790564767583,
-			"tag": "0000_rls_prereqs",
-			"breakpoints": true
-		},
-		{
-			"idx": 1,
-			"version": "7",
-			"when": 1790564769377,
-			"tag": "0001_domain_tables",
-			"breakpoints": true
-		},
-		{
-			"idx": 2,
-			"version": "7",
-			"when": 1790564776933,
-			"tag": "0002_rls_grants_and_triggers",
-			"breakpoints": true
-		},
-		{
-			"idx": 3,
-			"version": "7",
-			"when": 1790873036187,
-			"tag": "0003_member_rls_helpers",
-			"breakpoints": true
-		},
-		{
-			"idx": 4,
-			"version": "7",
-			"when": 1790873050187,
-			"tag": "0004_member_profiles_roles_invites",
-			"breakpoints": true
-		},
-		{
-			"idx": 5,
-			"version": "7",
-			"when": 1790873146232,
-			"tag": "0005_rls_grants_invites_triggers",
-			"breakpoints": true
-		},
-		{
-			"idx": 6,
-			"version": "7",
-			"when": 1790886832331,
-			"tag": "0006_chore_types_points_frequency_stages",
-			"breakpoints": true
-		},
-		{
-			"idx": 7,
-			"version": "7",
-			"when": 1790887359521,
-			"tag": "0007_kid_profile_pin_lock_device_profiles",
-			"breakpoints": true
-		},
-		{
-			"idx": 8,
-			"version": "7",
-			"when": 1790901659868,
-			"tag": "0008_chore_rotations",
-			"breakpoints": true
-		},
-		{
-			"idx": 9,
-			"version": "7",
-			"when": 1790901715265,
-			"tag": "0009_chore_rotation_turns",
-			"breakpoints": true
-		},
-		{
-			"idx": 10,
-			"version": "7",
-			"when": 1791146147173,
-			"tag": "0010_chore_completions_points_ledger",
-			"breakpoints": true
-		},
-		{
-			"idx": 11,
-			"version": "7",
-			"when": 1791146191071,
-			"tag": "0011_complete_and_reopen_chores",
-			"breakpoints": true
-		},
-		{
-			"idx": 12,
-			"version": "7",
-			"when": 1791581810471,
-			"tag": "0012_rewards_catalog_claims",
-			"breakpoints": true
-		},
-		{
-			"idx": 13,
-			"version": "7",
-			"when": 1791586997072,
-			"tag": "0013_rotation_exclusion_reason_not_null",
-			"breakpoints": true
-		},
-		{
-			"idx": 14,
-			"version": "7",
-			"when": 1791622573003,
-			"tag": "0014_household_timezone",
-			"breakpoints": true
-		}
-	]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790564767583,
+      "tag": "0000_rls_prereqs",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790564769377,
+      "tag": "0001_domain_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790564776933,
+      "tag": "0002_rls_grants_and_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790873036187,
+      "tag": "0003_member_rls_helpers",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790873050187,
+      "tag": "0004_member_profiles_roles_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790873146232,
+      "tag": "0005_rls_grants_invites_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790886832331,
+      "tag": "0006_chore_types_points_frequency_stages",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790887359521,
+      "tag": "0007_kid_profile_pin_lock_device_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790901659868,
+      "tag": "0008_chore_rotations",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790901715265,
+      "tag": "0009_chore_rotation_turns",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791146147173,
+      "tag": "0010_chore_completions_points_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791146191071,
+      "tag": "0011_complete_and_reopen_chores",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791581810471,
+      "tag": "0012_rewards_catalog_claims",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791586997072,
+      "tag": "0013_rotation_exclusion_reason_not_null",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791622573003,
+      "tag": "0014_household_timezone",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791658856243,
+      "tag": "0015_chore_reminders_and_skips",
+      "breakpoints": true
+    }
+  ]
 }

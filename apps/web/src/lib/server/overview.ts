@@ -3,6 +3,7 @@ import {
 	choreInstances,
 	choreRotationMembers,
 	choreRotations,
+	choreSkips,
 	choreStageProgress,
 	choreStages,
 	chores,
@@ -84,9 +85,24 @@ export async function loadHouseholdOverview(
 
 	// Today's period for each chore; a chore that doesn't occur today (a
 	// weekends chore on a weekday) isn't due, so it has no row.
+	// A personal chore a parent skipped (SB-29) is off the list for its period.
+	// A skipped rotation turn has already moved on, so its loop stays listed.
+	const skips = await db
+		.select({
+			choreId: choreSkips.choreId,
+			periodStart: choreSkips.periodStart,
+		})
+		.from(choreSkips)
+		.where(eq(choreSkips.householdId, householdId));
+	const isSkipped = (choreId: string, periodStart: string) =>
+		skips.some((s) => s.choreId === choreId && s.periodStart === periodStart);
 	const dueChores = choreRows.flatMap((chore) => {
 		const periodStart = chorePeriodStart(chore.frequency, today);
-		return periodStart ? [{ chore, periodStart }] : [];
+		if (!periodStart) return [];
+		if (chore.type === 'personal' && isSkipped(chore.id, periodStart)) {
+			return [];
+		}
+		return [{ chore, periodStart }];
 	});
 	const choreIds = dueChores.map((d) => d.chore.id);
 

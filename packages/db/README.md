@@ -342,6 +342,25 @@ Who may complete: a parent, or someone who can act as the instance's assignee
 (themselves, or a managed kid they parent). Chores with no assignee can't be
 completed (`ChoreNotAssignedError`).
 
+### Skips and reminders
+
+The Overview's parent-only **Skip** and **Remind** actions (SB-29) each leave
+a log row, so the Overview can show "reminders or skips".
+
+- `chore_skips`: one row per skip. A rotation skip moves the turn on with
+  `advanceRotation(..., { outcome: 'skipped' })` (no completion, no points,
+  Done Last unchanged) and records whose turn it was; a personal chore is
+  marked skipped for `period_start` and drops off the Overview for that
+  period. Keyed by `period_start`, not an instance, because instances are
+  created lazily.
+- `chore_reminders`: one row per nudge (chore, assignee, `created_by`,
+  `created_at`). MVP delivery is in-app only: the assignee's Today screen
+  shows undismissed rows as a banner (`dismissed_at` clears one). There's no
+  push or email; that would be a separate ticket.
+
+Both are readable by household members and insertable by parents. The web app
+writes them as the table owner after its own parent check.
+
 ### Rewards
 
 Parents keep a catalog of `rewards` (SB-27); kids spend points on them (the Rewards
