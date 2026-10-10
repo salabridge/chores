@@ -16,6 +16,20 @@ describe('RotationOrderPreview.svelte', () => {
 		expect(items[2].hasAttribute('data-reset')).toBe(true);
 	});
 
+	it('puts the reset tag where the loop wraps', async () => {
+		const { container } = render(RotationOrderPreview, {
+			members: [{ name: 'Leo' }, { name: 'Mia' }, { name: 'Mom' }],
+			resetAt: 1,
+			showSummary: true,
+		});
+		await expect
+			.element(page.getByText('Leo → loop reset → Mia → Mom'))
+			.toBeVisible();
+		const items = [...container.querySelectorAll('li')];
+		expect(items).toHaveLength(4);
+		expect(items[1].hasAttribute('data-reset')).toBe(true);
+	});
+
 	it('puts an arrow before every item except the first', async () => {
 		const { container } = render(RotationOrderPreview, { members });
 		await expect.element(page.getByText('Leo')).toBeVisible();

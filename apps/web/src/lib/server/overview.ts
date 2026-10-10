@@ -11,13 +11,18 @@ import {
 import { chorePeriodStart, localDate } from '@chore/db/recurrence';
 import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
 import {
+	buildNotes,
+	buildWorkload,
 	type ChoreStatus,
 	type ChoreStatusRow,
 	dueText,
 	familyStreakDays,
 	type HouseholdOverview,
+	handoffText,
 	percentOf,
+	rotationChain,
 	sortRows,
+	type UpcomingRotation,
 } from '../overview.ts';
 import { db } from './drizzle.ts';
 
@@ -40,7 +45,7 @@ export async function loadHouseholdOverview(
 	const today = localDate(HOUSEHOLD_TIME_ZONE, now);
 	const since = new Date(now.getTime() - STREAK_LOOKBACK_DAYS * 86_400_000);
 
-	const [choreRows, memberRows, rotationRows, exclusionRows, recent] =
+	const [choreRows, memberRows, rotationRows, loopMemberRows, recent] =
 		await Promise.all([
 			db.select().from(chores).where(eq(chores.householdId, householdId)),
 			db
@@ -55,15 +60,12 @@ export async function loadHouseholdOverview(
 				.select({
 					choreId: choreRotationMembers.choreId,
 					memberId: choreRotationMembers.memberId,
+					position: choreRotationMembers.position,
+					eligible: choreRotationMembers.eligible,
 					reason: choreRotationMembers.exclusionReason,
 				})
 				.from(choreRotationMembers)
-				.where(
-					and(
-						eq(choreRotationMembers.householdId, householdId),
-						eq(choreRotationMembers.eligible, false),
-					),
-				),
+				.where(eq(choreRotationMembers.householdId, householdId)),
 			db
 				.select({ completedAt: choreCompletions.completedAt })
 				.from(choreCompletions)
@@ -127,6 +129,7 @@ export async function loadHouseholdOverview(
 					.select({
 						id: choreCompletions.id,
 						instanceId: choreCompletions.instanceId,
+						memberId: choreCompletions.memberId,
 					})
 					.from(choreCompletions)
 					.where(
@@ -150,6 +153,9 @@ export async function loadHouseholdOverview(
 
 	const completionByInstance = new Map(
 		completions.map((c) => [c.instanceId, c.id]),
+	);
+	const completerByInstance = new Map(
+		completions.map((c) => [c.instanceId, c.memberId]),
 	);
 	const stageCount = (choreId: string) =>
 		stages.filter((s) => s.choreId === choreId).length;
@@ -211,15 +217,83 @@ export async function loadHouseholdOverview(
 	const dueSoon = loopRows.filter((r) => r.status !== 'completed');
 	const completedToday = sorted.filter((r) => r.status === 'completed').length;
 
-	const exclusions = exclusionRows.flatMap((e) => {
-		const member = names.get(e.memberId);
-		const chore = choreById.get(e.choreId);
-		return member && chore
-			? [
-					`${member} is excluded from ${chore.title}${e.reason ? `: ${e.reason}` : ''}.`,
-				]
-			: [];
-	});
+	const exclusions = loopMemberRows
+		.filter((e) => !e.eligible)
+		.flatMap((e) => {
+			const member = names.get(e.memberId);
+			const chore = choreById.get(e.choreId);
+			return member && chore
+				? [
+						`${member} is excluded from ${chore.title}${e.reason ? `: ${e.reason}` : ''}.`,
+					]
+				: [];
+		});
+
+	// Who did (or holds) each of today's chores. A finished loop chore's turn
+	// has already moved on, so it counts for whoever completed it.
+	const workload = buildWorkload(
+		memberRows,
+		sorted.flatMap((r) => {
+			const done = r.status === 'completed';
+			const completer = r.instanceId
+				? completerByInstance.get(r.instanceId)
+				: null;
+			const memberId = done
+				? (completer ?? r.assignee?.memberId)
+				: r.assignee?.memberId;
+			return memberId ? [{ memberId, title: r.title, done }] : [];
+		}),
+	);
+
+	const rowByChore = new Map(sorted.map((r) => [r.choreId, r]));
+	const upcoming: UpcomingRotation[] = rotationRows
+		.flatMap((rotation) => {
+			const chore = choreById.get(rotation.choreId);
+			if (!chore || !rotation.currentMemberId) return [];
+			const row = rowByChore.get(chore.id);
+			const dueToday = !!row && row.status !== 'completed';
+			// No row at all means the chore doesn't occur today (a weekends chore on a
+			// weekday), which is not the same as today's turn being done.
+			const doneToday = row?.status === 'completed';
+			const { order, resetAt } = rotationChain(
+				loopMemberRows
+					.filter((m) => m.choreId === chore.id)
+					.flatMap((m) => {
+						const name = names.get(m.memberId);
+						return name ? [{ ...m, name }] : [];
+					}),
+				rotation.currentMemberId,
+			);
+			return [
+				{
+					choreId: chore.id,
+					title: chore.title,
+					handoff: handoffText({
+						dueToday,
+						doneToday,
+						dueTime: chore.dueTime,
+						dueLabel: chore.dueLabel,
+						frequency: chore.frequency,
+					}),
+					dueToday,
+					order,
+					resetAt,
+				},
+			];
+		})
+		.sort(
+			(a, b) =>
+				Number(b.dueToday) - Number(a.dueToday) ||
+				a.title.localeCompare(b.title),
+		);
+
+	const currentTurn = new Map(
+		rotationRows.flatMap((r) => {
+			const name = r.currentMemberId ? names.get(r.currentMemberId) : null;
+			return name ? [[r.choreId, name] as const] : [];
+		}),
+	);
+	const notes = buildNotes({ exclusions, rows: sorted, currentTurn });
 
 	const streakDays = familyStreakDays(
 		recent.map((c) => localDate(HOUSEHOLD_TIME_ZONE, c.completedAt)),
@@ -227,6 +301,9 @@ export async function loadHouseholdOverview(
 	);
 
 	return {
+		workload,
+		rotations: upcoming,
+		notes,
 		rows: sorted,
 		stats: {
 			totalChores: choreRows.length,

@@ -113,6 +113,7 @@
 
 <section
 	aria-labelledby={headingId}
+	id="loop-{loop.choreId}"
 	data-chore-id={loop.choreId}
 	class="flex flex-col gap-20 rounded-[16px] border border-border-subtle bg-surface-default p-24"
 >

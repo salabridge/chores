@@ -57,3 +57,16 @@
 <Story name="No members" args={{ members: [] }} />
 
 <Story name="Custom reset label" args={{ resetLabel: 'Start over' }} />
+
+<Story
+	name="Wraps mid-loop"
+	args={{
+		members: [
+			{ name: 'Mia', tone: 'blue' },
+			{ name: 'Sam', tone: 'green' },
+			{ name: 'Leo', tone: 'orange' },
+		],
+		resetAt: 1,
+		showSummary: true,
+	}}
+/>

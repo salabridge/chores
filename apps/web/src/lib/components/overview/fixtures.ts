@@ -1,4 +1,10 @@
-import type { ChoreStatusRow, OverviewStats } from '#lib/overview.js';
+import type {
+	ChoreStatusRow,
+	OverviewNote,
+	OverviewStats,
+	UpcomingRotation,
+	WorkloadOverview,
+} from '#lib/overview.js';
 
 // Fixed data for specs and stories (stories are Chromatic snapshots, so no
 // dates or randomness).
@@ -75,3 +81,86 @@ export const overviewStats: OverviewStats = {
 	exceptions: 1,
 	firstException: 'Mia is excluded from Run Dishwasher: too young.',
 };
+
+export const workloadFixture: WorkloadOverview = {
+	balance: 'balanced',
+	members: [
+		{
+			memberId: 'leo',
+			name: 'Leo',
+			active: 2,
+			done: 0,
+			summary: 'Shared Bathroom Toilet and Clean Your Room in progress.',
+			barPercent: 100,
+		},
+		{
+			memberId: 'mia',
+			name: 'Mia',
+			active: 0,
+			done: 1,
+			summary: 'Feed Dog completed.',
+			barPercent: 50,
+		},
+		{
+			memberId: 'mom',
+			name: 'Mom',
+			active: 1,
+			done: 0,
+			summary: 'Run Dishwasher in progress.',
+			barPercent: 50,
+		},
+		{
+			memberId: 'dad',
+			name: 'Dad',
+			active: 0,
+			done: 0,
+			summary: 'Nothing assigned today.',
+			barPercent: 0,
+		},
+	],
+};
+
+export const upcomingRotations: UpcomingRotation[] = [
+	{
+		choreId: 'toilet',
+		title: 'Shared Bathroom Toilet',
+		handoff: 'Next handoff at 8:00 PM',
+		dueToday: true,
+		order: ['Leo', 'Mia'],
+		resetAt: 2,
+	},
+	{
+		choreId: 'dishwasher',
+		title: 'Run Dishwasher',
+		handoff: 'Next handoff after dinner',
+		dueToday: true,
+		order: ['Leo', 'Mom', 'Dad'],
+		resetAt: 1,
+	},
+	{
+		choreId: 'dog',
+		title: 'Feed Dog',
+		handoff: 'Next handoff tomorrow',
+		dueToday: false,
+		order: ['Leo', 'Mia'],
+		resetAt: 2,
+	},
+];
+
+export const overviewNotes: OverviewNote[] = [
+	{
+		tone: 'warning',
+		kind: 'exclusion',
+		text: 'Mia is excluded from Run Dishwasher: too young.',
+	},
+	{
+		tone: 'info',
+		kind: 'priority',
+		text: 'Shared Bathroom Toilet is the highest-value active rotation today (20 pts).',
+	},
+	{
+		tone: 'success',
+		kind: 'unblocked',
+		text: 'Feed Dog is done, so Leo is up next.',
+	},
+];
