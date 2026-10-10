@@ -28,3 +28,5 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Nobody done yet" args={{ doneLast: null, active: 'Leo', nextUp: 'Mia' }} />

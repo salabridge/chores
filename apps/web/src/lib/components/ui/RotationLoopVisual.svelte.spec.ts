@@ -46,6 +46,16 @@ describe('RotationLoopVisual.svelte', () => {
 		expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
 	});
 
+	it('shows a placeholder when nobody has finished a turn yet', async () => {
+		const { container } = render(RotationLoopVisual, {
+			...props,
+			doneLast: null,
+		});
+		await expect.element(page.getByText('Nobody yet')).toBeVisible();
+		expect(container.querySelectorAll('[data-size="lg"]')).toHaveLength(2);
+		expect(container.querySelector('[data-empty]')).not.toBeNull();
+	});
+
 	it('merges a custom class', async () => {
 		const { container } = render(RotationLoopVisual, {
 			...props,
