@@ -47,20 +47,19 @@
 
 	let { draft, members, active = false, onsave }: Props = $props();
 
-	let loop = $state(untrack(() => defaultRotationMembers(members)));
+	// Start over only when the household itself changes, not on every setup edit.
+	// Writable deriveds: edits override them until `householdKey` changes.
+	const householdKey = $derived(JSON.stringify(members));
+	let loop = $derived.by(() => {
+		householdKey;
+		return untrack(() => defaultRotationMembers(members));
+	});
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 	// Members whose reason box is open: newly excluded ones, and any "Edit reason" was clicked on.
-	let editingReasons = $state<string[]>([]);
-
-	// Start over only when the household itself changes, not on every setup edit.
-	const householdKey = $derived(JSON.stringify(members));
-	$effect(() => {
+	let editingReasons = $derived.by((): string[] => {
 		householdKey;
-		untrack(() => {
-			loop = defaultRotationMembers(members);
-			editingReasons = [];
-		});
+		return [];
 	});
 
 	const ordered = $derived(inOrder(loop));
@@ -73,7 +72,7 @@
 	const canSave = $derived(active && !rotationBlocked && !setupBlocked);
 
 	function openReason(memberId: string) {
-		if (!editingReasons.includes(memberId)) editingReasons.push(memberId);
+		if (!editingReasons.includes(memberId)) editingReasons = [...editingReasons, memberId];
 	}
 
 	async function save() {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { emptyDraft, exampleDraft } from './chore-creator.ts';
+import { exampleDraft } from './chore-creator.ts';
 import {
+	type CreateRotationChoreInput,
 	defaultRotationMembers,
 	eligibilityCallout,
 	eligibilityLine,
@@ -139,6 +140,22 @@ describe('rotationInputError', () => {
 		const bad = input();
 		bad.chore = { ...bad.chore, title: '' };
 		expect(rotationInputError(bad, ids)).toBeTruthy();
-		expect(emptyDraft('rotation').kind).toBe('rotation');
+	});
+
+	it('refuses malformed input with a message instead of throwing', () => {
+		const malformed = (members: unknown) =>
+			({ ...input(), members }) as unknown as CreateRotationChoreInput;
+		const badShape = [
+			{ memberId: 'x', position: 1, eligible: false, exclusionReason: 5 },
+		];
+		expect(rotationInputError(malformed(badShape), ids)).toBe(
+			'The members are not valid.',
+		);
+		expect(rotationInputError(malformed([null]), ids)).toBe(
+			'The members are not valid.',
+		);
+		expect(
+			rotationInputError(null as unknown as CreateRotationChoreInput, ids),
+		).toBe('This is not a household rotation.');
 	});
 });

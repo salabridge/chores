@@ -88,11 +88,22 @@ export function rotationInputError(
 	input: CreateRotationChoreInput,
 	knownMemberIds?: readonly string[],
 ): string | null {
-	if (input.chore?.kind !== 'rotation')
+	// A remote function's input is unchecked, so check the shapes before using them.
+	if (input?.chore?.kind !== 'rotation')
 		return 'This is not a household rotation.';
 	const choreProblem = createInputError(input.chore);
 	if (choreProblem) return choreProblem;
-	if (!Array.isArray(input.members)) return 'The members are not valid.';
+	if (
+		!Array.isArray(input.members) ||
+		!input.members.every(
+			(m) =>
+				typeof m?.memberId === 'string' &&
+				typeof m.position === 'number' &&
+				typeof m.eligible === 'boolean' &&
+				(m.exclusionReason == null || typeof m.exclusionReason === 'string'),
+		)
+	)
+		return 'The members are not valid.';
 	if (knownMemberIds) {
 		const sent = new Set(input.members.map((m) => m.memberId));
 		if (

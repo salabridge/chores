@@ -5,6 +5,7 @@ import {
 	chores,
 	householdMembers,
 } from '@chore/db';
+import { nextEligibleMember } from '@chore/db/rotation';
 import { and, asc, eq } from 'drizzle-orm';
 import { type CreateChoreInput, createInputError } from '../chore-creator.ts';
 import {
@@ -114,8 +115,12 @@ export async function createRotationChore(
 	const ordered = members
 		.map((m) => ({ ...m }))
 		.sort((a, b) => a.position - b.position);
-	const firstTurn = ordered.find((m) => m.eligible);
-	if (!firstTurn) throw new ChoreError('Choose at least two eligible members.');
+	const firstTurn = nextEligibleMember(ordered, null)?.member;
+	if (!firstTurn) {
+		throw new Error(
+			'rotationInputError passed a rotation with no eligible member',
+		);
+	}
 
 	const id = crypto.randomUUID();
 	const insertChore = db.insert(chores).values({
