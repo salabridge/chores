@@ -33,6 +33,7 @@ const db = drizzle(process.env.DATABASE_URL!, { schema });
 | `@chore/db/auth`   | `schema/auth-schema.ts`  | Only the Neon Auth tables         |
 | `@chore/db/rls`    | `src/authenticated-db.ts`| `createAuthenticatedDb()` (RLS), member/parent helpers, invite tokens, `advanceRotation()`/`getRotationTurns()` |
 | `@chore/db/recurrence` | `src/recurrence.ts`  | `chorePeriodStart()` and other period math for recurring chores |
+| `@chore/db/rewards` | `src/rewards.ts`       | Reward rules: `rewardStatuses()`, `milestoneProgress()`, `claimDenial()` |
 | `@chore/db/rotation` | `src/rotation.ts`      | Turn-order math for rotation chores (`nextEligibleMember()`, `rotationTurns()`, `validateRotation()`) |
 
 The exports point straight at the `.ts` source; there's no build step. This
@@ -304,7 +305,7 @@ done.
   which is what makes completing twice a no-op.
 - **Ledger** (`points_ledger`): append-only. Every point change is a row with
   a `delta` and a `reason`: `completion` (+), `reversal` (-, a parent reopened
-  it), `reward_claim` (-, SB-27 will write these) or `adjustment` (a parent's
+  it), `reward_claim` (-, written with its `reward_claims` row) or `adjustment` (a parent's
   correction, with a note). A balance is the sum of the member's deltas
   (`memberPointsBalance()`); there is no stored counter. Nothing updates or
   deletes ledger rows, and `completion`/`reversal` rows are unique per
@@ -340,6 +341,39 @@ Who may complete: a parent, or someone who can act as the instance's assignee
 (themselves, or a managed kid they parent). Chores with no assignee can't be
 completed (`ChoreNotAssignedError`).
 
+### Rewards
+
+Parents keep a catalog of `rewards` (SB-27); kids spend points on them (the Rewards
+Shop screen is SB-43).
+
+- **Kinds**: `personal` rewards cost `cost_points` of the member's own points.
+  `family_milestone` rewards unlock for everyone once the household has earned
+  `cost_points` this week (completions net of reversals). Milestones are never
+  claimed and never repeatable (a check constraint).
+- **Status** (`rewardStatuses()`): `earned` (balance >= cost, or the milestone is
+  reached), `claimed` (a non-repeatable reward the member already claimed),
+  `next_up` (the closest unreached milestone), otherwise `locked`.
+- **Claiming** is `insertRewardClaim()` (`@chore/db/claim-reward`, wrapped by
+  the web app's `claimReward()`): one SQL statement checks the balance and the
+  claim limit, then inserts the `reward_claims` row and a negative
+  `reward_claim` ledger row (noted with the reward's title) together. Those
+  checks run against the statement's snapshot, so what holds under concurrency
+  is in the database: `reward_claims.single_use` (copied from
+  `NOT rewards.repeatable`) has a partial unique index, so a non-repeatable
+  reward is claimed once per member even when taps race; and a trigger on
+  `points_ledger` locks the member's row, re-sums the balance and raises
+  `RW001` if a claim would take it below zero (`claimFailure()` maps both
+  errors). The claim copies `reward_title` and `cost_points` so edits don't
+  rewrite history.
+- **Removing a reward** archives it (`rewards.archived_at`): it leaves the
+  catalog and can't be claimed or edited, but its claims stay as the record of
+  what was redeemed. `reward_claims` references rewards with RESTRICT, so a
+  reward with claims can't be hard-deleted.
+- **Household week**: points count by the week of the *completion*, so a
+  reversal of an old completion doesn't lower this week's total.
+- **RLS**: members read `rewards` and `reward_claims`; parents write `rewards`.
+  `reward_claims` is select-only for the RLS role (writes use the owner role).
+
 ## Row-level security
 
 Every domain table has RLS enabled, with policies for the `authenticated_backend`
@@ -359,6 +393,8 @@ role. Access follows household membership and role:
 | `chore_rotation_members`| members               | parents                                                                                 |
 | `chore_completions`     | members               | nobody directly; written by `app.complete_chore_instance` / `complete_chore_stage` / `reopen_chore_completion` |
 | `points_ledger`         | members               | append-only; parents insert `adjustment` rows, completions and reversals come from the functions above |
+| `rewards`               | members               | parents                                                                                 |
+| `reward_claims`         | members               | nobody directly; written by `insertRewardClaim()` with its ledger row                    |
 
 Column grants stop the app from changing a member row's `id`,
 `household_id`, `user_id`, or `joined_at`; `weekly_goal_points` can be changed

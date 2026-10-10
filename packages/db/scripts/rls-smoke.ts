@@ -36,6 +36,8 @@ import {
 	householdMembers,
 	households,
 	pointsLedger,
+	rewardClaims,
+	rewards,
 } from '../schema/index.ts';
 import {
 	acceptHouseholdInvite,
@@ -57,6 +59,7 @@ import {
 	StaleRotationTurnError,
 	weeklyPointsProgress,
 } from '../src/authenticated-db.ts';
+import { claimFailure, insertRewardClaim } from '../src/claim-reward.ts';
 import { addDays, chorePeriodStart, localDate } from '../src/recurrence.ts';
 
 const { DATABASE_URL, DATABASE_AUTHENTICATED_URL, NEON_AUTH_URL } = process.env;
@@ -1508,6 +1511,255 @@ try {
 		/no chore instance/,
 	);
 
+	console.log('Rewards:');
+	const rewardRows = await authed.withAuth(bob.token, (tx) =>
+		tx
+			.insert(rewards)
+			.values([
+				{
+					householdId: household.id,
+					title: 'Screen time',
+					costPoints: 10,
+					createdBy: bob.id,
+				},
+				{
+					householdId: household.id,
+					title: 'Too expensive',
+					costPoints: 100_000,
+					createdBy: bob.id,
+				},
+				{
+					householdId: household.id,
+					title: 'Ice cream',
+					costPoints: 40,
+					repeatable: true,
+					createdBy: bob.id,
+				},
+				{
+					householdId: household.id,
+					title: 'Sundaes on Sunday',
+					costPoints: 300,
+					kind: 'family_milestone',
+					createdBy: bob.id,
+				},
+			])
+			.returning(),
+	);
+	const reward = (title: string) => {
+		const row = rewardRows.find((r) => r.title === title);
+		assert.ok(row, `no reward ${title}`);
+		return row;
+	};
+	ok('a parent adds rewards (created_by must be their own user id)');
+	assert.equal(
+		(await authed.withAuth(carol.token, (tx) => tx.select().from(rewards)))
+			.length,
+		4,
+	);
+	ok('a kid reads the household catalog');
+	await expectRejected(
+		'a kid adding a reward',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx.insert(rewards).values({
+					householdId: household.id,
+					title: 'Free money',
+					costPoints: 1,
+					createdBy: carol.id,
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectNoRows('a kid editing a reward', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.update(rewards)
+				.set({ costPoints: 1 })
+				.where(eq(rewards.id, reward('Screen time').id))
+				.returning(),
+		),
+	);
+	await expectNoRows('a kid deleting a reward', () =>
+		authed.withAuth(carol.token, (tx) =>
+			tx
+				.delete(rewards)
+				.where(eq(rewards.id, reward('Screen time').id))
+				.returning(),
+		),
+	);
+	await expectRejected(
+		'a repeatable family milestone',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.insert(rewards).values({
+					householdId: household.id,
+					title: 'Bad milestone',
+					costPoints: 10,
+					kind: 'family_milestone',
+					repeatable: true,
+					createdBy: bob.id,
+				}),
+			),
+		/rewards_milestone_not_repeatable_check/,
+	);
+	await expectRejected(
+		'a zero-cost reward',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.insert(rewards).values({
+					householdId: household.id,
+					title: 'Free',
+					costPoints: 0,
+					createdBy: bob.id,
+				}),
+			),
+		/rewards_cost_points_check/,
+	);
+
+	// Claims go through insertRewardClaim() as the owner role, as the web app
+	// does; the RLS role can only read them.
+	const claimAs = (memberId: string, rewardId: string) =>
+		insertRewardClaim(
+			admin,
+			{ id: memberId, householdId: household.id },
+			rewardId,
+		);
+	const setBalance = async (memberId: string, target: number) => {
+		const delta = target - (await balance(memberId));
+		if (delta !== 0)
+			await admin.insert(pointsLedger).values({
+				householdId: household.id,
+				memberId,
+				delta,
+				reason: 'adjustment',
+				note: 'smoke test balance',
+			});
+		assert.equal(await balance(memberId), target);
+	};
+
+	await setBalance(carolMemberId, 25);
+	const screen = reward('Screen time');
+	const firstClaim = await claimAs(carolMemberId, screen.id);
+	assert.ok(firstClaim);
+	assert.equal(await balance(carolMemberId), 15);
+	const [spend] = await admin
+		.select()
+		.from(pointsLedger)
+		.where(eq(pointsLedger.rewardClaimId, firstClaim));
+	assert.equal(spend.delta, -10);
+	assert.equal(spend.reason, 'reward_claim');
+	assert.equal(spend.note, 'Screen time');
+	ok('an affordable claim writes the claim and a negative ledger row');
+
+	assert.equal(await claimAs(carolMemberId, screen.id), null);
+	assert.equal(await balance(carolMemberId), 15);
+	ok('a non-repeatable reward cannot be claimed twice by the same member');
+	await expectRejected(
+		'a duplicate claim row slipping past the check',
+		() =>
+			admin.insert(rewardClaims).values({
+				householdId: household.id,
+				rewardId: screen.id,
+				memberId: carolMemberId,
+				rewardTitle: screen.title,
+				costPoints: 10,
+				singleUse: true,
+			}),
+		/reward_claims_reward_id_member_id_single_use_key/,
+	);
+
+	await setBalance(mia.id, 10);
+	assert.ok(await claimAs(mia.id, screen.id));
+	ok('another member can claim the same non-repeatable reward');
+
+	assert.equal(await claimAs(carolMemberId, reward('Too expensive').id), null);
+	assert.equal(
+		await claimAs(carolMemberId, reward('Sundaes on Sunday').id),
+		null,
+	);
+	assert.equal(await balance(carolMemberId), 15);
+	ok('an unaffordable reward and a family milestone cannot be claimed');
+
+	// The statement's own balance check races, so the trigger is what stops
+	// concurrent claims of a repeatable reward from overspending.
+	const iceCream = reward('Ice cream');
+	await setBalance(carolMemberId, 50);
+	const results = await Promise.allSettled(
+		Array.from({ length: 6 }, () => claimAs(carolMemberId, iceCream.id)),
+	);
+	const won = results.filter((r) => r.status === 'fulfilled' && r.value);
+	assert.equal(won.length, 1, 'exactly one concurrent claim should win');
+	for (const r of results) {
+		if (r.status === 'rejected')
+			assert.equal(claimFailure(r.reason), 'insufficient_points');
+	}
+	assert.equal(await balance(carolMemberId), 10);
+	ok(
+		'concurrent claims of a repeatable reward cannot overspend (50 pts, cost 40)',
+	);
+
+	await setBalance(carolMemberId, 80);
+	assert.ok(await claimAs(carolMemberId, iceCream.id));
+	assert.ok(await claimAs(carolMemberId, iceCream.id));
+	assert.equal(await balance(carolMemberId), 0);
+	ok('a repeatable reward can be claimed again while affordable');
+
+	await expectRejected(
+		'the balance trigger on a direct overspend',
+		() =>
+			admin.insert(pointsLedger).values({
+				householdId: household.id,
+				memberId: carolMemberId,
+				delta: -1000,
+				reason: 'reward_claim',
+			}),
+		/not enough for a reward/,
+	);
+
+	const seenByKid = await authed.withAuth(carol.token, (tx) =>
+		tx.select().from(rewardClaims),
+	);
+	assert.ok(seenByKid.length >= 3);
+	ok('a member can read reward_claims (the SELECT grant and policy work)');
+	await expectRejected(
+		'a parent inserting a claim through the RLS role',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.insert(rewardClaims).values({
+					householdId: household.id,
+					rewardId: screen.id,
+					memberId: carolMemberId,
+					rewardTitle: screen.title,
+					costPoints: 1,
+					singleUse: false,
+				}),
+			),
+		/permission denied/,
+	);
+	await expectRejected(
+		'deleting a reward that has claims',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.delete(rewards).where(eq(rewards.id, screen.id)),
+			),
+		/reward_claims_reward_fk|foreign key/,
+	);
+	await admin
+		.update(rewards)
+		.set({ archivedAt: new Date() })
+		.where(eq(rewards.id, screen.id));
+	assert.equal(await claimAs(mia.id, screen.id), null);
+	assert.equal(
+		(
+			await admin
+				.select()
+				.from(rewardClaims)
+				.where(eq(rewardClaims.rewardId, screen.id))
+		).length,
+		2,
+	);
+	ok('an archived reward cannot be claimed and keeps its claims');
+
 	console.log('Deleting a chore:');
 	const removedChore = await authed.withAuth(alice.token, (tx) =>
 		tx.delete(chores).where(eq(chores.id, dishes.chore.id)).returning(),
@@ -1677,7 +1929,9 @@ try {
 				(select count(*)::int from chore_instances) as instances,
 				(select count(*)::int from chore_stage_progress) as progress,
 				(select count(*)::int from chore_rotations) as rotations,
-				(select count(*)::int from chore_rotation_members) as rotation_members`,
+				(select count(*)::int from chore_rotation_members) as rotation_members,
+				(select count(*)::int from rewards) as rewards,
+				(select count(*)::int from reward_claims) as reward_claims`,
 		);
 		assert.deepEqual(rows[0], {
 			chores: 0,
@@ -1690,6 +1944,8 @@ try {
 			progress: 0,
 			rotations: 0,
 			rotation_members: 0,
+			rewards: 0,
+			reward_claims: 0,
 		});
 		ok('the RLS role with no JWT claims sees 0 rows in every domain table');
 	} finally {

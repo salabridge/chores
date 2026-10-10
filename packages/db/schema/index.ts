@@ -15,5 +15,8 @@ export * from './household-role.ts';
 export * from './households.table.ts';
 export * from './points-ledger.table.ts';
 export * from './points-reason.ts';
+export * from './reward-claims.table.ts';
+export * from './reward-kind.ts';
+export * from './rewards.table.ts';
 export * from './rls.ts';
 export * from './rotation-scope.ts';
