@@ -52,6 +52,13 @@ describe('rowActions', () => {
 		});
 	});
 
+	it('does not offer Skip on a loop whose stages are under way', () => {
+		const staged = rowActions(row({ status: 'staged', isLoop: true }));
+		expect(staged).toMatchObject({ skip: false, remind: true });
+		// A personal chore has no turn to strand.
+		expect(rowActions(row({ status: 'staged' })).skip).toBe(true);
+	});
+
 	it('offers Reopen, and View Loop only for loops, once completed', () => {
 		expect(rowActions(row({ status: 'completed', isLoop: true }))).toEqual({
 			skip: false,

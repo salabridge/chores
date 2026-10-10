@@ -25,8 +25,10 @@ import { user } from '../schema/auth-schema.ts';
 import {
 	choreCompletions,
 	choreInstances,
+	choreReminders,
 	choreRotationMembers,
 	choreRotations,
+	choreSkips,
 	choreStageProgress,
 	choreStages,
 	chores,
@@ -1983,6 +1985,109 @@ try {
 			}),
 		/household_members_household_id_user_id_key/,
 	);
+
+	// Reminders and skips (SB-29): parents write them, members read them, and
+	// only the assignee or a parent may dismiss a reminder (nothing else on it).
+	const [reminderForCarol] = await admin
+		.insert(choreReminders)
+		.values({
+			householdId: household.id,
+			choreId: trash.id,
+			assigneeMemberId: carolMemberId,
+		})
+		.returning();
+	const [reminderForBob] = await admin
+		.insert(choreReminders)
+		.values({
+			householdId: household.id,
+			choreId: trash.id,
+			assigneeMemberId: bobMemberId,
+		})
+		.returning();
+	await expectRejected(
+		'Carol sending a reminder',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx.insert(choreReminders).values({
+					householdId: household.id,
+					choreId: trash.id,
+					assigneeMemberId: bobMemberId,
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectRejected(
+		'Carol skipping a chore',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx.insert(choreSkips).values({
+					householdId: household.id,
+					choreId: trash.id,
+					periodStart: '2026-10-05',
+					memberId: carolMemberId,
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectRejected(
+		'Carol editing a column other than dismissed_at',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx
+					.update(choreReminders)
+					.set({ assigneeMemberId: bobMemberId })
+					.where(eq(choreReminders.id, reminderForCarol.id)),
+			),
+		/permission denied/,
+	);
+	await authed.withAuth(carol.token, (tx) =>
+		tx
+			.update(choreReminders)
+			.set({ dismissedAt: new Date() })
+			.where(eq(choreReminders.id, reminderForBob.id)),
+	);
+	const [bobReminder] = await admin
+		.select({ dismissedAt: choreReminders.dismissedAt })
+		.from(choreReminders)
+		.where(eq(choreReminders.id, reminderForBob.id));
+	assert.equal(
+		bobReminder.dismissedAt,
+		null,
+		"Carol can't dismiss Bob's reminder",
+	);
+	await authed.withAuth(carol.token, (tx) =>
+		tx
+			.update(choreReminders)
+			.set({ dismissedAt: new Date() })
+			.where(eq(choreReminders.id, reminderForCarol.id)),
+	);
+	const [carolReminder] = await admin
+		.select({ dismissedAt: choreReminders.dismissedAt })
+		.from(choreReminders)
+		.where(eq(choreReminders.id, reminderForCarol.id));
+	assert.ok(carolReminder.dismissedAt, 'Carol dismisses her own reminder');
+	await authed.withAuth(bob.token, (tx) =>
+		tx.insert(choreSkips).values({
+			householdId: household.id,
+			choreId: trash.id,
+			periodStart: '2026-10-05',
+			memberId: carolMemberId,
+		}),
+	);
+	await expectRejected(
+		'logging the same skip twice',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.insert(choreSkips).values({
+					householdId: household.id,
+					choreId: trash.id,
+					periodStart: '2026-10-05',
+					memberId: carolMemberId,
+				}),
+			),
+		/chore_skips_chore_period_member_key/,
+	);
+	ok('reminders and skips: parents write, members read, assignees dismiss');
 
 	console.log('\nAll RLS smoke checks passed.');
 } finally {
