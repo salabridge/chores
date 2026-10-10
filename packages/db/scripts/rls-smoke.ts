@@ -1025,13 +1025,23 @@ try {
 	);
 	assert.deepEqual(afterCarol, { memberId: mia.id, wrapped: false });
 	ok('Carol completes her turn; it passes to Mia');
+	// A parent, not Carol: Carol no longer holds the turn, so the function would
+	// refuse her on privilege (checked first) before it reached the stale check.
 	await assert.rejects(
-		authed.withAuth(carol.token, (tx) =>
+		authed.withAuth(alice.token, (tx) =>
 			advanceRotation(tx, trash.id, { fromMemberId: carolMemberId }),
 		),
 		StaleRotationTurnError,
 	);
 	ok('completing the same turn twice is refused (StaleRotationTurnError)');
+	await expectRejected(
+		'Carol completing her stale turn (privilege is checked before staleness)',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				advanceRotation(tx, trash.id, { fromMemberId: carolMemberId }),
+			),
+		/only a parent or the member whose turn it is/,
+	);
 	await expectRejected(
 		"Carol completing Mia's turn",
 		() =>
