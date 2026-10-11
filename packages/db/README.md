@@ -141,6 +141,14 @@ per device and signed-in parent (SB-51). Kept on the server so the client never
 sends a member id; `active_member_id` NULL means the parent's own view. See the
 Kid profiles section of `apps/web/README.md`.
 
+**Landing screen** (SB-57): `device_profiles.landing_route` (the `landing_route` enum:
+`today`, `overview`) is where signing in opens on that device. `user_preferences`
+holds a per-user fallback (`default_landing_route`), copied from the first device
+that sets one and never overwritten afterwards. NULL on both means Today. It is an
+enum, never a path, so a stored value can't become an open redirect. The web app
+resolves it on the server (`getLandingPath()`), and kid profiles, non-parents and
+users who still need setup ignore it.
+
 ## Chores
 
 A chore (`chores`) is a definition: what to do, for how many points, and how

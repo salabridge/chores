@@ -40,6 +40,7 @@ import {
 	pointsLedger,
 	rewardClaims,
 	rewards,
+	userPreferences,
 } from '../schema/index.ts';
 import {
 	acceptHouseholdInvite,
@@ -1886,6 +1887,65 @@ try {
 		),
 	);
 	ok("Alice can't see or change Bob's device profiles");
+
+	console.log('Landing route (SB-57):');
+	await authed.withAuth(bob.token, (tx) =>
+		tx
+			.update(deviceProfiles)
+			.set({ landingRoute: 'overview' })
+			.where(eq(deviceProfiles.deviceHash, 'device-a')),
+	);
+	const [bobDevice] = await authed.withAuth(bob.token, (tx) =>
+		tx
+			.select({ landingRoute: deviceProfiles.landingRoute })
+			.from(deviceProfiles)
+			.where(eq(deviceProfiles.deviceHash, 'device-a')),
+	);
+	assert.equal(bobDevice?.landingRoute, 'overview');
+	await expectRejected(
+		'a landing route outside the enum',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.execute(
+					sql`update device_profiles set landing_route = '/evil' where device_hash = 'device-a'`,
+				),
+			),
+		/invalid input value for enum/,
+	);
+	ok(
+		'a parent sets the landing route for a device; only enum values are accepted',
+	);
+	await authed.withAuth(bob.token, (tx) =>
+		tx.insert(userPreferences).values({
+			userId: bob.id,
+			defaultLandingRoute: 'overview',
+		}),
+	);
+	await expectRejected(
+		"Alice writing Bob's preferences",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx.insert(userPreferences).values({
+					userId: bob.id,
+					defaultLandingRoute: 'today',
+				}),
+			),
+		RLS_DENIED,
+	);
+	const alicePrefs = await authed.withAuth(alice.token, (tx) =>
+		tx.select().from(userPreferences),
+	);
+	assert.equal(alicePrefs.length, 0);
+	await expectNoRows("Alice changing Bob's preferences", () =>
+		authed.withAuth(alice.token, (tx) =>
+			tx
+				.update(userPreferences)
+				.set({ defaultLandingRoute: 'today' })
+				.where(eq(userPreferences.userId, bob.id))
+				.returning(),
+		),
+	);
+	ok("a user's default landing route is theirs alone");
 
 	console.log('Leaving and removing:');
 	await expectNoRows('Bob removing Alice (owner)', () =>

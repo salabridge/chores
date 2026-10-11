@@ -120,6 +120,13 @@
 			"when": 1791758494840,
 			"tag": "0016_household_setup_completed",
 			"breakpoints": true
+		},
+		{
+			"idx": 17,
+			"version": "7",
+			"when": 1791758955396,
+			"tag": "0017_landing_route",
+			"breakpoints": true
 		}
 	]
 }

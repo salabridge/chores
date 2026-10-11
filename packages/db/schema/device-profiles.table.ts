@@ -10,6 +10,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.ts';
 import { householdMembers } from './household-members.table.ts';
+import { landingRoute } from './landing-route.ts';
 import { backendRole, currentUserId } from './rls.ts';
 
 /**
@@ -28,6 +29,11 @@ import { backendRole, currentUserId } from './rls.ts';
  *   fallback key: if someone clears only the device cookie, the row is found
  *   again through the session.
  *
+ * - `landing_route` is where signing in on this device opens (SB-57), or NULL
+ *   to fall back to the user's `user_preferences.default_landing_route`, then
+ *   to Today. It is a per-device setting, so a laptop can open the dashboard
+ *   while a shared tablet opens Today.
+ *
  * The server re-checks on every request that the user is a parent in the same
  * household as `active_member_id` before trusting it.
  */
@@ -43,6 +49,7 @@ export const deviceProfiles = pgTable(
 			{ onDelete: 'set null' },
 		),
 		sessionId: text('session_id'),
+		landingRoute: landingRoute('landing_route'),
 		createdAt: timestamp('created_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),
