@@ -1,6 +1,8 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import { fn } from 'storybook/test';
+	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+	import * as thisFile from './ChoreStatusTable.stories.svelte';
 	import ChoreStatusTable from './ChoreStatusTable.svelte';
 	import { overviewRows } from './fixtures.ts';
 
@@ -27,3 +29,13 @@
 <Story name="Failing action" args={{ actions: failing }} />
 
 <Story name="Empty" args={{ rows: [] }} />
+
+<Story
+	name="Visual test"
+	tags={['visual-test', '!autodocs']}
+	parameters={visualTestParameters}
+>
+	{#snippet template(_args, context)}
+		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
+	{/snippet}
+</Story>

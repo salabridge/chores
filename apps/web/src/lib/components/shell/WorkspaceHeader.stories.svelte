@@ -2,6 +2,8 @@
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
+	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+	import * as thisFile from './WorkspaceHeader.stories.svelte';
 	import WorkspaceHeader from './WorkspaceHeader.svelte';
 
 	const { Story } = defineMeta({
@@ -32,3 +34,13 @@
 <Story name="With subtitle" />
 
 <Story name="With actions" args={{ actions }} />
+
+<Story
+	name="Visual test"
+	tags={['visual-test', '!autodocs']}
+	parameters={visualTestParameters}
+>
+	{#snippet template(_args, context)}
+		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
+	{/snippet}
+</Story>

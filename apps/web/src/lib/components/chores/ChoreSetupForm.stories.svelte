@@ -3,7 +3,9 @@
 	import { fn } from 'storybook/test';
 	import type { ComponentProps } from 'svelte';
 	import { emptyDraft, exampleDraft } from '#lib/chore-creator.js';
+	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
 	import Host from './ChoreSetupForm.host.svelte';
+	import * as thisFile from './ChoreSetupForm.stories.svelte';
 	import ChoreSetupForm from './ChoreSetupForm.svelte';
 	import { householdMembers } from './fixtures.ts';
 
@@ -43,3 +45,13 @@
 <Story name="Household rotation" {template} args={{ draft: exampleDraft() }} />
 
 <Story name="Saving" {template} args={{ draft: exampleDraft(), pending: true }} />
+
+<Story
+	name="Visual test"
+	tags={['visual-test', '!autodocs']}
+	parameters={visualTestParameters}
+>
+	{#snippet template(_args, context)}
+		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
+	{/snippet}
+</Story>

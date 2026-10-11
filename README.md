@@ -117,6 +117,12 @@ visual tests. It runs on PRs and on pushes to `main` that touch `apps/web`,
 project's **Manage → Configure** page. Fork PRs don't get the secret, so the
 job skips them.
 
+- Each stories file has exactly one **Visual test** story, which renders all of
+  that file's other stories on one canvas (`apps/web/src/lib/visual-test/`).
+  Only those are snapshotted, each in light and dark, so a build takes two
+  snapshots per stories file. Every other story has snapshots turned off in
+  `.storybook/preview.ts`, so it's still in the published Storybook but never
+  diffed on its own.
 - TurboSnap (`onlyChanged`) snapshots only the stories whose dependencies
   changed. A change under `packages/tokens/` or `apps/web/static/`
   re-snapshots everything, because the bundler can't trace those files.

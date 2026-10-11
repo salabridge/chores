@@ -38,6 +38,9 @@ const preview: Preview = {
 			},
 		},
 		a11y: { test: 'todo' },
+		// Chromatic only snapshots each file's "Visual test" story, which
+		// renders that file's other stories on one canvas (src/lib/visual-test).
+		chromatic: { disableSnapshot: true },
 	},
 };
 

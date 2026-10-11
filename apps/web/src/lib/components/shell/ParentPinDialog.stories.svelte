@@ -1,5 +1,7 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
+	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+	import * as thisFile from './ParentPinDialog.stories.svelte';
 	import ParentPinDialog from './ParentPinDialog.svelte';
 
 	// No autodocs: the docs page renders every story at once, and each open
@@ -16,3 +18,13 @@
 <Story name="Enter PIN" />
 
 <Story name="Locked (password unlock)" args={{ locked: true }} />
+
+<Story
+	name="Visual test"
+	tags={['visual-test', '!autodocs']}
+	parameters={visualTestParameters}
+>
+	{#snippet template(_args, context)}
+		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
+	{/snippet}
+</Story>

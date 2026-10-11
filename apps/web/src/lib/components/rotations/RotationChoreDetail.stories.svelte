@@ -1,12 +1,14 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import { fn } from 'storybook/test';
+	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
 	import {
 		dishwasherDetail,
 		toiletDetail,
 		toiletDone,
 		toiletWaiting,
 	} from './fixtures.ts';
+	import * as thisFile from './RotationChoreDetail.stories.svelte';
 	import RotationChoreDetail from './RotationChoreDetail.svelte';
 
 	const { Story } = defineMeta({
@@ -52,3 +54,13 @@
 		},
 	}}
 />
+
+<Story
+	name="Visual test"
+	tags={['visual-test', '!autodocs']}
+	parameters={visualTestParameters}
+>
+	{#snippet template(_args, context)}
+		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
+	{/snippet}
+</Story>

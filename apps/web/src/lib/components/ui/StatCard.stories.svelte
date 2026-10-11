@@ -1,6 +1,8 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
+	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
 	import Badge from './Badge.svelte';
+	import * as thisFile from './StatCard.stories.svelte';
 	import StatCard from './StatCard.svelte';
 
 	const { Story } = defineMeta({
@@ -24,3 +26,13 @@
 <Story name="With badge" args={{ badge }} />
 
 <Story name="Value only" args={{ caption: undefined }} />
+
+<Story
+	name="Visual test"
+	tags={['visual-test', '!autodocs']}
+	parameters={visualTestParameters}
+>
+	{#snippet template(_args, context)}
+		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
+	{/snippet}
+</Story>

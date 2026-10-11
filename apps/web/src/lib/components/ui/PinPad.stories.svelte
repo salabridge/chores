@@ -1,5 +1,7 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
+	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+	import * as thisFile from './PinPad.stories.svelte';
 	import PinPad from './PinPad.svelte';
 
 	const { Story } = defineMeta({
@@ -39,5 +41,15 @@
 <Story name="Disabled" args={{ disabled: true, value: '12' }}>
 	{#snippet template(args)}
 		<div class="max-w-[320px]"><PinPad {...args} /></div>
+	{/snippet}
+</Story>
+
+<Story
+	name="Visual test"
+	tags={['visual-test', '!autodocs']}
+	parameters={visualTestParameters}
+>
+	{#snippet template(_args, context)}
+		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
 	{/snippet}
 </Story>
