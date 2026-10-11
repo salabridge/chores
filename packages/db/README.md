@@ -121,6 +121,15 @@ invitee signs up or in, then calls `acceptHouseholdInvite(tx, token)`
 their verified email matches, then creates their member row. The invite is
 the parent's approval; there's no separate approval step.
 
+**Setup** (`households.setup_completed_at`, SB-56): NULL while the creator is in the
+web app's first-run setup flow (`/setup`); set when they finish. Households that
+existed when column `0016` landed were backfilled as finished, and a partial
+unique index allows one unfinished household per creator, so a double submit can't
+create a second one. Invited members never go through setup: the web app only
+sends the household's creator (and only while it is unfinished). The web app's
+setup writes use the owner connection like its other modules, with the household
+resolved on the server.
+
 **PINs** (`household_member_pins`): one hashed PIN per parent membership for
 the managed-kid profile lock (SB-51). Only the parent themselves can read or
 write their row. Store a password hash (argon2id/scrypt), never the PIN. The row

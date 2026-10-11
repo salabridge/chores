@@ -5,6 +5,7 @@ import {
 	pgTable,
 	text,
 	timestamp,
+	uniqueIndex,
 	uuid,
 } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.ts';
@@ -37,6 +38,13 @@ export const households = pgTable(
 			.notNull()
 			.default(sql`app.current_user_id()`)
 			.references(() => user.id, { onDelete: 'cascade' }),
+		/**
+		 * Set when the creator finishes the first-run setup flow (SB-56). NULL
+		 * means setup is still going: the creator is sent back to `/setup` and
+		 * resumes at the first unfinished step. Households that existed before
+		 * the flow, and ones made through an invite, are not sent through it.
+		 */
+		setupCompletedAt: timestamp('setup_completed_at', { withTimezone: true }),
 		createdAt: timestamp('created_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),
@@ -46,6 +54,11 @@ export const households = pgTable(
 			.notNull(),
 	},
 	(t) => [
+		// One unfinished household per creator, so a double submit or a second
+		// tab on setup step 1 can't leave the creator with two.
+		uniqueIndex('households_created_by_unfinished_setup_key')
+			.on(t.createdBy)
+			.where(sql`${t.setupCompletedAt} is null`),
 		check(
 			'households_timezone_check',
 			sql`char_length(${t.timezone}) between 1 and 64`,

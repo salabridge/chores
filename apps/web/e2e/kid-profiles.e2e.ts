@@ -34,8 +34,8 @@ async function seed() {
 		select id, household_id from household_members where user_id = ${user.id} limit 1`;
 	if (!parent) {
 		const [household] = await db`
-			insert into households (name, created_by)
-			values ('E2E household', ${user.id}) returning id`;
+			insert into households (name, created_by, setup_completed_at)
+			values ('E2E household', ${user.id}, now()) returning id`;
 		[parent] = await db`
 			select id, household_id from household_members
 			where user_id = ${user.id} and household_id = ${household?.id}`;

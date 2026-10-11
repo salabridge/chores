@@ -2,7 +2,8 @@ import type { Handle } from '@sveltejs/kit';
 import { error, redirect } from '@sveltejs/kit';
 import { fetchSession, hasSessionCookie, signInUrl } from '#lib/server/auth.js';
 import { parentGuard } from '#lib/server/profile-state.js';
-import { getProfileState } from '#lib/server/profiles.js';
+import { getProfileState, getSetupStatus } from '#lib/server/profiles.js';
+import { SETUP_ROUTE_ID, setupRedirect } from '#lib/setup.js';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.user = null;
@@ -26,6 +27,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// and endpoints under the group, which a layout load can be skipped for.
 	if (event.route.id?.startsWith('/(protected)') && !event.locals.user) {
 		redirect(303, signInUrl(event.url));
+	}
+
+	// First-run setup (SB-56): a user with no finished household is sent to
+	// /setup from `/` and every protected page, and everyone else is kept off
+	// /setup. Fails closed like the parent guard below. Remote functions have no
+	// route id; the setup ones check again on their own.
+	if (
+		event.locals.user &&
+		(setupRedirect(event.route.id, true) || event.route.id === SETUP_ROUTE_ID)
+	) {
+		const setup = await getSetupStatus();
+		const to = setupRedirect(event.route.id, setup?.needsSetup ?? false);
+		if (to) redirect(303, to);
 	}
 
 	// Parent-only pages. While a kid profile is active the session still belongs

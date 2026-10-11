@@ -14,7 +14,7 @@ function field(name: string) {
 	};
 }
 
-function mockForm() {
+export function mockForm() {
 	const fields = new Proxy(
 		{ issues: (): Issue[] | undefined => undefined },
 		{
@@ -26,14 +26,24 @@ function mockForm() {
 		ReturnType<typeof field>
 	>;
 
-	return {
-		enhance: (_callback: unknown) => ({
-			method: 'POST',
-			action: '#',
-			onsubmit: (event: SubmitEvent) => event.preventDefault(),
-		}),
-		fields,
-		pending: 0,
+	const attributes = {
+		method: 'POST',
+		action: '#',
+		onsubmit: (event: SubmitEvent) => event.preventDefault(),
+	};
+	// `<form {...form}>` spreads the form object, so only the attributes are
+	// enumerable, like the real remote form.
+	return Object.defineProperties(
+		{ ...attributes },
+		{
+			enhance: { value: (_callback: unknown) => ({ ...attributes }) },
+			fields: { value: fields },
+			pending: { value: 0 },
+		},
+	) as typeof attributes & {
+		enhance: (callback: unknown) => typeof attributes;
+		fields: typeof fields;
+		pending: number;
 	};
 }
 
