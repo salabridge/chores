@@ -55,7 +55,7 @@ export async function loadChore(householdId: string, choreId: string) {
 	return chore ?? null;
 }
 
-async function loadRotation(householdId: string, choreId: string) {
+export async function loadRotation(householdId: string, choreId: string) {
 	const [rotation] = await db
 		.select()
 		.from(choreRotations)

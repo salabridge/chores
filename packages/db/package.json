@@ -19,7 +19,8 @@
 		"./rewards": "./src/rewards.ts",
 		"./rotation": "./src/rotation.ts",
 		"./streaks": "./src/streaks.ts",
-		"./household-streaks": "./src/household-streaks.ts"
+		"./household-streaks": "./src/household-streaks.ts",
+		"./completions": "./src/completions.ts"
 	},
 	"dependencies": {
 		"@neondatabase/serverless": "^1.1.0",
