@@ -18,7 +18,8 @@
 		"./claim-reward": "./src/claim-reward.ts",
 		"./rewards": "./src/rewards.ts",
 		"./rotation": "./src/rotation.ts",
-		"./streaks": "./src/streaks.ts"
+		"./streaks": "./src/streaks.ts",
+		"./household-streaks": "./src/household-streaks.ts"
 	},
 	"dependencies": {
 		"@neondatabase/serverless": "^1.1.0",

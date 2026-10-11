@@ -1,6 +1,19 @@
+<script lang="ts">
+	import TodayScreen from '#lib/components/today/TodayScreen.svelte';
+
+	let { data } = $props();
+</script>
+
 <svelte:head><title>Today · ChoreLoop</title></svelte:head>
 
-<div class="flex flex-col gap-8 p-24">
-	<h1 class="font-display text-[24px] font-bold">Today</h1>
-	<p class="text-[14px] text-text-secondary">Coming soon.</p>
-</div>
+{#if data.today}
+	<TodayScreen data={data.today} />
+{:else}
+	<div class="flex flex-col gap-8 p-24">
+		<h1 class="font-display text-[24px] font-bold text-text-primary">Today</h1>
+		<p class="text-[14px] text-text-secondary">
+			You aren't part of a household yet. Once you create or join one, your
+			chores will show up here.
+		</p>
+	</div>
+{/if}
