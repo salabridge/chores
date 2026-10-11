@@ -27,7 +27,9 @@
 
 <Story name="Claimable" />
 
-<Story name="Claimed" args={{ status: 'claimed' }} />
+<Story name="Claim link" args={{ claimHref: '#' }} />
+
+<Story name="Claimed"args={{ status: 'claimed' }} />
 
 <Story name="Locked" args={{ status: 'locked', cost: 500, title: 'Day trip' }} />
 

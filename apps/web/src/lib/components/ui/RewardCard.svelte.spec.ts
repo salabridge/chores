@@ -52,4 +52,19 @@ describe('RewardCard.svelte', () => {
 		await expect.element(page.getByText('Custom')).toBeVisible();
 		expect(page.getByRole('button').elements()).toHaveLength(0);
 	});
+
+	it('renders Claim as a link to claimHref when given', async () => {
+		render(RewardCard, { ...base, status: 'claimable', claimHref: '/x?y=1' });
+		await expect
+			.element(page.getByRole('link', { name: /Claim/ }))
+			.toHaveAttribute('href', '/x?y=1');
+	});
+
+	it('keeps a locked reward a disabled button even with claimHref', async () => {
+		render(RewardCard, { ...base, status: 'locked', claimHref: '/x' });
+		expect(page.getByRole('link').elements()).toHaveLength(0);
+		await expect
+			.element(page.getByRole('button', { name: 'Claim' }))
+			.toBeDisabled();
+	});
 });
