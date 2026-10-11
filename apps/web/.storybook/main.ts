@@ -31,6 +31,12 @@ const config: StorybookConfig = {
 					new URL('./mocks/setup-remote.ts', import.meta.url),
 				),
 			},
+			{
+				find: /^#lib\/personal-detail\.remote\.js$/,
+				replacement: fileURLToPath(
+					new URL('./mocks/personal-detail-remote.ts', import.meta.url),
+				),
+			},
 		];
 		const alias = config.resolve?.alias ?? [];
 		config.resolve = {

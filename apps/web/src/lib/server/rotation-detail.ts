@@ -31,7 +31,8 @@ import type { ProfileState } from './profile-state.ts';
 // which reads the `request.jwt.claims` setting, so each call runs in a batch
 // (one transaction on the HTTP driver) that sets the signed-in user first.
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A problem with the request, worded for the screen. */
 export class RotationDetailError extends Error {
@@ -45,7 +46,7 @@ export class RotationDetailError extends Error {
 	}
 }
 
-async function loadChore(householdId: string, choreId: string) {
+export async function loadChore(householdId: string, choreId: string) {
 	if (!UUID.test(choreId)) return null;
 	const [chore] = await db
 		.select()
@@ -84,7 +85,7 @@ async function loadRotation(householdId: string, choreId: string) {
 }
 
 /** This period's instance, if anyone has touched the chore yet. */
-async function findInstance(choreId: string, periodStart: string) {
+export async function findInstance(choreId: string, periodStart: string) {
 	const [instance] = await db
 		.select()
 		.from(choreInstances)
@@ -180,6 +181,8 @@ export async function loadRotationDetail(
 }
 
 export interface TurnResult {
+	/** The completion this call wrote or found; null while stages remain. */
+	completionId: string | null;
 	/** Points awarded by this call. */
 	points: number;
 	/** False when only a stage (not the last one) was checked off. */
@@ -191,7 +194,7 @@ export interface TurnResult {
  * that an untouched one isn't left assigned to someone the turn has moved on
  * from (a parent's skip), which would make completing it fail.
  */
-async function ensureInstance(
+export async function ensureInstance(
 	householdId: string,
 	choreId: string,
 	periodStart: string,
@@ -278,14 +281,22 @@ export async function completeRotationTurn(
 	try {
 		const [, completed] = await db.batch([
 			db.execute(sql`select set_config('request.jwt.claims', ${claims}, true)`),
-			db.execute<{ points: number; already_completed: boolean }>(
-				sql`select points, already_completed from app.complete_chore_instance(${instance.id}::uuid)`,
+			db.execute<{
+				completion_id: string;
+				points: number;
+				already_completed: boolean;
+			}>(
+				sql`select completion_id, points, already_completed from app.complete_chore_instance(${instance.id}::uuid)`,
 			),
 		]);
 		const row = completed.rows[0];
 		if (!row) throw new Error('complete_chore_instance returned no row');
 		if (row.already_completed) throw alreadyDone();
-		return { points: row.points, choreCompleted: true };
+		return {
+			completionId: row.completion_id,
+			points: row.points,
+			choreCompleted: true,
+		};
 	} catch (err) {
 		throw mapError(err);
 	}
@@ -309,16 +320,21 @@ export async function completeRotationStage(
 			db.execute(sql`select set_config('request.jwt.claims', ${claims}, true)`),
 			db.execute<{
 				chore_completed: boolean;
+				completion_id: string | null;
 				points: number;
 				already_completed: boolean;
 			}>(
-				sql`select chore_completed, points, already_completed from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid)`,
+				sql`select chore_completed, completion_id, points, already_completed from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid)`,
 			),
 		]);
 		const row = stage.rows[0];
 		if (!row) throw new Error('complete_chore_stage returned no row');
 		if (row.chore_completed && row.already_completed) throw alreadyDone();
-		return { points: row.points, choreCompleted: row.chore_completed };
+		return {
+			completionId: row.completion_id,
+			points: row.points,
+			choreCompleted: row.chore_completed,
+		};
 	} catch (err) {
 		throw mapError(err);
 	}
@@ -351,7 +367,7 @@ function mapError(err: unknown): unknown {
 }
 
 /** The Postgres SQLSTATE of an error or of what it wraps. */
-function sqlState(err: unknown): string | undefined {
+export function sqlState(err: unknown): string | undefined {
 	let e: unknown = err;
 	while (e instanceof Error) {
 		const code = (e as { code?: unknown }).code;

@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { isHttpError } from '@sveltejs/kit';
+	import { completionHref } from '#lib/chore-completion.js';
+	import PersonalChoreDetail from '#lib/components/chores/PersonalChoreDetail.svelte';
 	import RotationChoreDetail from '#lib/components/rotations/RotationChoreDetail.svelte';
 	import PageHeader from '#lib/components/shell/PageHeader.svelte';
-	import StickyActionBar from '#lib/components/shell/StickyActionBar.svelte';
-	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import { completeStage, completeTurn } from '#lib/rotation-detail.remote.js';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
@@ -17,14 +17,18 @@
 		isHttpError(e) && e.body.message ? e.body.message : fallback;
 
 	async function oncomplete() {
+		let result: Awaited<ReturnType<typeof completeTurn>>;
 		try {
-			await completeTurn({ choreId: id });
+			result = await completeTurn({ choreId: id });
 		} catch (e) {
 			// The turn may have moved on (another device); show what's true now.
 			await invalidateAll();
 			throw new Error(messageOf(e, 'Could not complete this turn. Try again.'));
 		}
-		await goto(`/chores/${id}/complete`);
+		// A completion id means the points are in the ledger; the done screen reads them.
+		await (result.completionId
+			? goto(completionHref(id, result.completionId))
+			: invalidateAll());
 	}
 
 	async function oncompletestage(stageId: string) {
@@ -35,25 +39,18 @@
 			await invalidateAll();
 			throw new Error(messageOf(e, 'Could not save this stage. Try again.'));
 		}
-		if (result.choreCompleted) await goto(`/chores/${id}/complete`);
-		else await invalidateAll();
+		if (result.choreCompleted && result.completionId) {
+			await goto(completionHref(id, result.completionId));
+		} else await invalidateAll();
 	}
 </script>
 
-<svelte:head><title>{data.rotation?.title ?? 'Chore'} · ChoreLoop</title></svelte:head>
+<svelte:head><title>{(data.rotation ?? data.personal)?.title ?? 'Chore'} · ChoreLoop</title></svelte:head>
 
 {#if data.rotation}
 	<PageHeader label="Rotation Loop" />
 	<RotationChoreDetail detail={data.rotation} {oncomplete} {oncompletestage} />
-{:else}
+{:else if data.personal}
 	<PageHeader label="Personal Chore" />
-
-	<div class="flex flex-1 flex-col gap-8 p-24">
-		<p class="text-[14px] text-text-secondary">Chore {id} details coming soon.</p>
-	</div>
-
-	<StickyActionBar>
-		{#snippet summary()}Reward after all 3 stages · 15 pts{/snippet}
-		<PrimaryButton href="/chores/{id}/complete">Start</PrimaryButton>
-	</StickyActionBar>
+	<PersonalChoreDetail detail={data.personal} onstagedone={() => invalidateAll()} />
 {/if}
