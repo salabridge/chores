@@ -117,9 +117,16 @@ visual tests. It runs on PRs and on pushes to `main` that touch `apps/web`,
 project's **Manage → Configure** page. Fork PRs don't get the secret, so the
 job skips them.
 
-- TurboSnap (`onlyChanged`) snapshots only the stories whose dependencies
-  changed. A change under `packages/tokens/` or `apps/web/static/`
-  re-snapshots everything, because the bundler can't trace those files.
+- Only one story is snapshotted: **Visual Test / All stories**
+  (`apps/web/src/lib/visual-test/`). It renders every other story in the app
+  on one page and is captured twice, light and dark, at a 1600px viewport.
+  Every other story has snapshots turned off in `.storybook/preview.ts`, so it's
+  still in the published Storybook but never diffed on its own. A new story is
+  picked up by the Visual Test page automatically.
+- TurboSnap (`onlyChanged`) skips the snapshot when nothing the Visual Test
+  story depends on (that is, any story or component) changed. A change under
+  `packages/tokens/` or `apps/web/static/` always re-snapshots it, because the
+  bundler can't trace those files.
 - Visual changes don't fail the job (`exitZeroOnChanges`). They show up as the
   **UI Tests** and **UI Review** checks on the PR, alongside a link to the
   published Storybook. The Chromatic GitHub app posts both, so it needs to be

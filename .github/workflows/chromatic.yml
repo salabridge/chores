@@ -3,6 +3,8 @@ name: Chromatic
 # Publishes apps/web's Storybook to Chromatic and runs visual tests. PR runs
 # post a Storybook link and UI Tests / UI Review checks through the Chromatic
 # GitHub app. Pushes to main auto-accept, which keeps the baselines current.
+# Only the Visual Test story (apps/web/src/lib/visual-test) is snapshotted, in
+# light and dark; it renders every other story on one page.
 on:
   pull_request:
     paths:

@@ -24,9 +24,17 @@ Both need `packages/tokens/dist`, so build `@chores/tokens` first in a fresh wor
 CI publishes this Storybook to Chromatic on every PR that touches `apps/web` or
 `packages/tokens` (`.github/workflows/chromatic.yml`; see the root README's CI section).
 The PR gets a Storybook link and UI Tests / UI Review checks. Visual diffs don't fail CI;
-accept or deny them in Chromatic's UI Review. Since every story is a snapshot, a story
-that renders nondeterministic output, such as the current date or random data, shows up
-as a change on every build. Pass fixed values through `args` instead.
+accept or deny them in Chromatic's UI Review.
+
+Chromatic snapshots exactly one story, **Visual Test / All stories**
+([src/lib/visual-test/](src/lib/visual-test/)), in light and dark. It globs every
+`*.stories.svelte` file and renders each story on one page, so a new story is covered with
+no extra setup. Every other story has `chromatic.disableSnapshot` set in `preview.ts`; don't
+turn it back on per story. Because every story ends up in that one snapshot, a story that
+renders nondeterministic output, such as the current date or random data, makes the whole
+snapshot change on every build. Pass fixed values through `args` instead. Animations are
+frozen and modal dialogs open in place on that page, so a story that relies on either still
+renders, just statically.
 
 Config is in [.storybook/](.storybook/): `preview.ts` imports `src/routes/layout.css`
 (Tailwind, tokens, fonts) and adds a **Theme** toolbar that sets `data-theme` on `<html>`,
