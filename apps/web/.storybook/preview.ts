@@ -38,8 +38,8 @@ const preview: Preview = {
 			},
 		},
 		a11y: { test: 'todo' },
-		// Chromatic only snapshots the Visual Test story
-		// (src/lib/visual-test), which renders every other story on one page.
+		// Chromatic only snapshots each file's "Visual test" story, which
+		// renders that file's other stories on one canvas (src/lib/visual-test).
 		chromatic: { disableSnapshot: true },
 	},
 };

@@ -1,5 +1,7 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
+	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+	import * as thisFile from './Callout.stories.svelte';
 	import Callout from './Callout.svelte';
 
 	const { Story } = defineMeta({
@@ -43,5 +45,15 @@
 <Story name="Body only" args={{ title: undefined }}>
 	{#snippet template(args)}
 		<Callout {...args}>A callout without a heading.</Callout>
+	{/snippet}
+</Story>
+
+<Story
+	name="Visual test"
+	tags={['visual-test', '!autodocs']}
+	parameters={visualTestParameters}
+>
+	{#snippet template(_args, context)}
+		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
 	{/snippet}
 </Story>

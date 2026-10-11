@@ -1,6 +1,8 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
+	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
 	import OptionCard from './OptionCard.svelte';
+	import * as thisFile from './OptionCardGroup.stories.svelte';
 	import OptionCardGroup from './OptionCardGroup.svelte';
 
 	const { Story } = defineMeta({
@@ -48,5 +50,15 @@
 			<OptionCard value="personal" label="Personal Chore" />
 			<OptionCard value="shared" label="Household Rotation" />
 		</OptionCardGroup>
+	{/snippet}
+</Story>
+
+<Story
+	name="Visual test"
+	tags={['visual-test', '!autodocs']}
+	parameters={visualTestParameters}
+>
+	{#snippet template(_args, context)}
+		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
 	{/snippet}
 </Story>

@@ -26,15 +26,14 @@ CI publishes this Storybook to Chromatic on every PR that touches `apps/web` or
 The PR gets a Storybook link and UI Tests / UI Review checks. Visual diffs don't fail CI;
 accept or deny them in Chromatic's UI Review.
 
-Chromatic snapshots exactly one story, **Visual Test / All stories**
-([src/lib/visual-test/](src/lib/visual-test/)), in light and dark. It globs every
-`*.stories.svelte` file and renders each story on one page, so a new story is covered with
-no extra setup. Every other story has `chromatic.disableSnapshot` set in `preview.ts`; don't
-turn it back on per story. Because every story ends up in that one snapshot, a story that
-renders nondeterministic output, such as the current date or random data, makes the whole
-snapshot change on every build. Pass fixed values through `args` instead. Animations are
-frozen and modal dialogs open in place on that page, so a story that relies on either still
-renders, just statically.
+Chromatic only snapshots one story per stories file: its **Visual test** story, in light
+and dark. It renders every other story in the file on one canvas through `VisualTestGrid`
+([src/lib/visual-test/](src/lib/visual-test/)), so adding a story to a file adds it to that
+file's snapshot. Every other story has `chromatic.disableSnapshot` set in `preview.ts`;
+don't turn it back on per story. A story that renders nondeterministic output, such as the
+current date or random data, makes its file's snapshot change on every build. Pass fixed
+values through `args` instead. Animations are frozen and modal dialogs open in place in the
+grid, so a story that relies on either still renders, just statically.
 
 Config is in [.storybook/](.storybook/): `preview.ts` imports `src/routes/layout.css`
 (Tailwind, tokens, fonts) and adds a **Theme** toolbar that sets `data-theme` on `<html>`,
@@ -65,3 +64,23 @@ in a `<script module>`). Follow the existing stories:
 - Components that render list items (e.g. `StageStep`'s `<li>`) need a `<ul>` wrapper.
   Full-width shell pieces use `parameters: { layout: 'fullscreen' }`.
 - Don't link to real routes from stories. Use `#` hrefs.
+- End every stories file with exactly one `Visual test` story that renders the file's own
+  module (`visual-test.test.ts` fails without it):
+
+  ```svelte
+  <script module lang="ts">
+  	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+  	import * as thisFile from './Name.stories.svelte';
+  	// ...
+  </script>
+
+  <Story
+  	name="Visual test"
+  	tags={['visual-test', '!autodocs']}
+  	parameters={visualTestParameters}
+  >
+  	{#snippet template(_args, context)}
+  		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
+  	{/snippet}
+  </Story>
+  ```

@@ -1,5 +1,7 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
+	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+	import * as thisFile from './BottomNav.stories.svelte';
 	import BottomNav from './BottomNav.svelte';
 
 	const { Story } = defineMeta({
@@ -24,3 +26,13 @@
 <Story name="Nested route" args={{ pathname: '/streak/history' }} />
 
 <Story name="No active tab" args={{ pathname: '/settings' }} />
+
+<Story
+	name="Visual test"
+	tags={['visual-test', '!autodocs']}
+	parameters={visualTestParameters}
+>
+	{#snippet template(_args, context)}
+		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
+	{/snippet}
+</Story>
