@@ -1,7 +1,7 @@
 <script lang="ts">
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import SetPinForm from '#lib/components/profiles/SetPinForm.svelte';
-	import PinPad from '#lib/components/ui/PinPad.svelte';
+	import PinInput from '#lib/components/ui/PinInput.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
@@ -22,7 +22,7 @@
 
 	let dialog: HTMLDialogElement | undefined = $state();
 	let pin = $state('');
-	// The PIN pad owns the value (bound below), so drop the one in the spread.
+	// The PIN input owns the value (bound below), so drop the one in the spread.
 	const pinField = $derived.by(() => {
 		const { value: _value, ...rest } = leaveKidProfile.fields._pin.as('password');
 		return rest;
@@ -91,7 +91,7 @@
 			>
 				<input {...leaveKidProfile.fields.target.as('hidden', 'parent')} />
 				<FormAlert issues={leaveKidProfile.fields.issues()} />
-				<PinPad
+				<PinInput
 					{...pinField}
 					label="Enter PIN"
 					bind:value={pin}
