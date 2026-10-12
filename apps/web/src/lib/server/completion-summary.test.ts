@@ -1,22 +1,37 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The queries themselves can't run here (they need Neon). Selects come off a
-// queue (one result per query, in the order the code issues them). Every way
-// of writing is a spy, so the tests can show that opening the screen only reads.
+// The queries themselves can't run here (they need Neon). The loader reads
+// in parallel, so each select's result comes off a queue for the table it
+// reads (`from()`), in the order that table is read. Every way of writing is a
+// spy, so the tests can show that opening the screen only reads.
 const mocks = vi.hoisted(() => {
-	const queue: unknown[][] = [];
+	const queues = new Map<string, unknown[][]>();
 	const select = vi.fn(() => {
+		let table = '';
 		const chain: Record<string, unknown> = {
+			from: (t: unknown) => {
+				table = tableName(t);
+				return chain;
+			},
 			// biome-ignore lint/suspicious/noThenProperty: drizzle query builders are awaitable
-			then: (resolve: (v: unknown) => void) => resolve(queue.shift() ?? []),
+			then: (resolve: (v: unknown) => void) =>
+				resolve(queues.get(table)?.shift() ?? []),
 		};
-		for (const m of ['from', 'where', 'orderBy', 'limit', 'innerJoin']) {
+		for (const m of ['where', 'orderBy', 'limit', 'innerJoin']) {
 			chain[m] = () => chain;
 		}
 		return chain;
 	});
+	const tableName = (t: unknown) =>
+		(t as Record<symbol, string>)[Symbol.for('drizzle:Name')];
+	const push = (table: string, rows: unknown[]) => {
+		const queue = queues.get(table) ?? [];
+		queue.push(rows);
+		queues.set(table, queue);
+	};
 	return {
-		queue,
+		queues,
+		push,
 		select,
 		insert: vi.fn(),
 		update: vi.fn(),
@@ -49,7 +64,7 @@ const chore = (over: Record<string, unknown> = {}) => ({
 	...over,
 });
 
-/** Queues what a successful load reads, in order. */
+/** Queues what a load reads, per table. */
 function queueLoad(
 	opts: {
 		completion?: Record<string, unknown> | null;
@@ -64,35 +79,34 @@ function queueLoad(
 		opts.completion === undefined
 			? { memberId: 'leo', points: 20, reopenedAt: null }
 			: opts.completion;
-	mocks.queue.push(completion ? [completion] : []);
-	if (!completion || completion.reopenedAt) return;
+	mocks.push('chore_completions', completion ? [completion] : []);
 	const c = opts.chore ?? chore();
-	mocks.queue.push([c]);
-	mocks.queue.push([{ total: opts.balance ?? 160 }]);
-	mocks.queue.push([{ goal: opts.goal ?? 200 }]);
-	mocks.queue.push([{ total: opts.week ?? 160 }]);
-	if (c.type === 'rotation') {
-		const r = opts.rotation ?? { current: 'mia', last: 'leo' };
-		mocks.queue.push([
-			{ currentMemberId: r.current, lastCompletedMemberId: r.last },
-		]);
-		mocks.queue.push([
-			{
-				memberId: 'leo',
-				name: 'Leo',
-				position: 1,
-				eligible: true,
-				exclusionReason: null,
-			},
-			{
-				memberId: 'mia',
-				name: 'Mia',
-				position: 2,
-				eligible: true,
-				exclusionReason: null,
-			},
-		]);
-	}
+	mocks.push('chores', [c]);
+	mocks.push('points_ledger', [
+		{ total: opts.balance ?? 160, week: opts.week ?? 160 },
+	]);
+	mocks.push('household_members', [{ goal: opts.goal ?? 200 }]);
+	if (c.type !== 'rotation') return;
+	const r = opts.rotation ?? { current: 'mia', last: 'leo' };
+	mocks.push('chore_rotations', [
+		{ currentMemberId: r.current, lastCompletedMemberId: r.last },
+	]);
+	mocks.push('chore_rotation_members', [
+		{
+			memberId: 'leo',
+			name: 'Leo',
+			position: 1,
+			eligible: true,
+			exclusionReason: null,
+		},
+		{
+			memberId: 'mia',
+			name: 'Mia',
+			position: 2,
+			eligible: true,
+			exclusionReason: null,
+		},
+	]);
 }
 
 const expectNoWrites = () => {
@@ -105,7 +119,7 @@ const expectNoWrites = () => {
 };
 
 beforeEach(() => {
-	mocks.queue.length = 0;
+	mocks.queues.clear();
 	for (const m of Object.values(mocks)) {
 		if (typeof m === 'function' && 'mockClear' in m) m.mockClear();
 	}
@@ -158,7 +172,9 @@ describe('loadCompletionSummary', () => {
 	});
 
 	it('is only for the member who earned it', async () => {
-		mocks.queue.push([{ memberId: 'mia', points: 20, reopenedAt: null }]);
+		queueLoad({
+			completion: { memberId: 'mia', points: 20, reopenedAt: null },
+		});
 		expect(await loadCompletionSummary(leo, CHORE, COMPLETION)).toBeUndefined();
 		expectNoWrites();
 	});

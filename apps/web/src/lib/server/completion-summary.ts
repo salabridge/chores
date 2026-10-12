@@ -29,57 +29,54 @@ export async function loadCompletionSummary(
 ): Promise<CompletionSummary | null | undefined> {
 	if (!UUID.test(choreId) || !UUID.test(completionId)) return undefined;
 
-	const [completion] = await db
-		.select({
-			memberId: choreCompletions.memberId,
-			points: choreCompletions.points,
-			reopenedAt: choreCompletions.reopenedAt,
-		})
-		.from(choreCompletions)
-		.where(
-			and(
-				eq(choreCompletions.id, completionId),
-				eq(choreCompletions.choreId, choreId),
-				eq(choreCompletions.householdId, viewer.householdId),
+	// One fan-out. The ownership check runs alongside the rest rather than
+	// before it: everything else read here is the viewer's own (their balance,
+	// goal and household), so nothing is exposed when the check then fails.
+	// This is the screen every completion lands on, so it's on the main loop.
+	const [[completion], chore, [member], ledger, loaded] = await Promise.all([
+		db
+			.select({
+				memberId: choreCompletions.memberId,
+				points: choreCompletions.points,
+				reopenedAt: choreCompletions.reopenedAt,
+			})
+			.from(choreCompletions)
+			.where(
+				and(
+					eq(choreCompletions.id, completionId),
+					eq(choreCompletions.choreId, choreId),
+					eq(choreCompletions.householdId, viewer.householdId),
+				),
 			),
-		);
+		loadChore(viewer.householdId, choreId),
+		db
+			.select({ goal: householdMembers.weeklyGoalPoints })
+			.from(householdMembers)
+			.where(eq(householdMembers.id, viewer.id)),
+		// The week is the household's own Monday, as an instant in its time
+		// zone, so only the ledger read waits on the clock. Balance and this
+		// week's points come from the same scan.
+		householdClock(viewer.householdId, now).then(({ timeZone, today }) => {
+			const monday = chorePeriodStart('weekly', today) ?? today;
+			return db
+				.select({
+					total: sql<number>`coalesce(sum(${pointsLedger.delta}), 0)::int`,
+					week: sql<number>`coalesce(sum(${pointsLedger.delta}) filter (where ${pointsLedger.reason} in ('completion', 'reversal') and ${pointsLedger.createdAt} >= (${monday}::date)::timestamp at time zone ${timeZone}), 0)::int`,
+				})
+				.from(pointsLedger)
+				.where(eq(pointsLedger.memberId, viewer.id));
+		}),
+		// Null for a personal chore (no rotation row), so running it either way
+		// costs at most one indexed lookup.
+		loadRotation(viewer.householdId, choreId),
+	]);
 	if (!completion || completion.memberId !== viewer.id) return undefined;
 	if (completion.reopenedAt) return null;
-
-	const chore = await loadChore(viewer.householdId, choreId);
 	if (!chore) return undefined;
-
-	const [balance] = await db
-		.select({
-			total: sql<number>`coalesce(sum(${pointsLedger.delta}), 0)::int`,
-		})
-		.from(pointsLedger)
-		.where(eq(pointsLedger.memberId, viewer.id));
-
-	const [member] = await db
-		.select({ goal: householdMembers.weeklyGoalPoints })
-		.from(householdMembers)
-		.where(eq(householdMembers.id, viewer.id));
-
-	// The week is the household's own Monday, as an instant in its time zone.
-	const { timeZone, today } = await householdClock(viewer.householdId, now);
-	const monday = chorePeriodStart('weekly', today) ?? today;
-	const [week] = await db
-		.select({
-			total: sql<number>`coalesce(sum(${pointsLedger.delta}), 0)::int`,
-		})
-		.from(pointsLedger)
-		.where(
-			and(
-				eq(pointsLedger.memberId, viewer.id),
-				sql`${pointsLedger.reason} in ('completion', 'reversal')`,
-				sql`${pointsLedger.createdAt} >= (${monday}::date)::timestamp at time zone ${timeZone}`,
-			),
-		);
+	const [totals] = ledger;
 
 	let rotation: CompletionSummary['rotation'] = null;
 	if (chore.type === 'rotation') {
-		const loaded = await loadRotation(viewer.householdId, choreId);
 		const holder = loaded
 			? rotationTurns(
 					loaded.members,
@@ -98,8 +95,8 @@ export async function loadCompletionSummary(
 		title: chore.title,
 		memberName: viewer.displayName,
 		points: completion.points,
-		totalPoints: balance?.total ?? 0,
+		totalPoints: totals?.total ?? 0,
 		rotation,
-		goal: weeklyGoalProgress(week?.total ?? 0, member?.goal ?? 0),
+		goal: weeklyGoalProgress(totals?.week ?? 0, member?.goal ?? 0),
 	};
 }
