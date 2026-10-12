@@ -7,8 +7,8 @@ import {
 import { householdStreaks } from '@chore/db/household-streaks';
 import { addDays, chorePeriodStart } from '@chore/db/recurrence';
 import type { AuthenticatedTx } from '@chore/db/rls';
-import { skipKey } from '@chore/db/streaks';
-import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { SCREEN_STREAK_LOOKBACK_DAYS, skipKey } from '@chore/db/streaks';
+import { and, eq, gte, isNull } from 'drizzle-orm';
 import {
 	MAX_SUGGESTED_CHORES,
 	type RewardsShopView,
@@ -22,9 +22,6 @@ import { loadRewardShop } from './rewards.ts';
 // Reads for the Rewards Shop screen (SB-43). Rewards, claims and milestones
 // come from rewards.ts (SB-27), the streak from SB-28.
 
-/** How far back the personal streak walk looks. */
-const STREAK_LOOKBACK_DAYS = 120;
-
 /**
  * Chores the member still has open today: their personal chores and the
  * rotation loops whose turn this period is theirs, minus anything already
@@ -34,38 +31,42 @@ export async function openChoresFor(
 	member: { id: string; householdId: string },
 	today: string,
 ): Promise<SuggestedChore[]> {
-	const rows = await db
-		.select({
-			id: chores.id,
-			title: chores.title,
-			type: chores.type,
-			frequency: chores.frequency,
-			assignedMemberId: chores.assignedMemberId,
-		})
-		.from(chores)
-		.where(eq(chores.householdId, member.householdId));
-
-	const due = rows.flatMap((chore) => {
-		const periodStart = chorePeriodStart(chore.frequency, today);
-		return periodStart ? [{ chore, periodStart }] : [];
-	});
-	const choreIds = due.map((d) => d.chore.id);
-	if (choreIds.length === 0) return [];
-
-	const [instances, skips] = await Promise.all([
+	// One round trip: the instance read is already bounded by the household
+	// and the last week, so it doesn't need to wait for the due chore ids.
+	const since = addDays(today, -7);
+	const [rows, instances, skips] = await Promise.all([
+		db
+			.select({
+				id: chores.id,
+				title: chores.title,
+				type: chores.type,
+				frequency: chores.frequency,
+				assignedMemberId: chores.assignedMemberId,
+			})
+			.from(chores)
+			.where(eq(chores.householdId, member.householdId)),
+		// At most one open completion per instance (partial unique index), so
+		// the join can't fan out.
 		db
 			.select({
 				id: choreInstances.id,
 				choreId: choreInstances.choreId,
 				periodStart: choreInstances.periodStart,
 				assignedMemberId: choreInstances.assignedMemberId,
+				completionId: choreCompletions.id,
 			})
 			.from(choreInstances)
+			.leftJoin(
+				choreCompletions,
+				and(
+					eq(choreCompletions.instanceId, choreInstances.id),
+					isNull(choreCompletions.reopenedAt),
+				),
+			)
 			.where(
 				and(
 					eq(choreInstances.householdId, member.householdId),
-					inArray(choreInstances.choreId, choreIds),
-					gte(choreInstances.periodStart, addDays(today, -7)),
+					gte(choreInstances.periodStart, since),
 				),
 			),
 		db
@@ -77,24 +78,20 @@ export async function openChoresFor(
 			.where(
 				and(
 					eq(choreSkips.householdId, member.householdId),
-					gte(choreSkips.periodStart, addDays(today, -7)),
+					gte(choreSkips.periodStart, since),
 				),
 			),
 	]);
-	const instanceIds = instances.map((i) => i.id);
-	const completions = instanceIds.length
-		? await db
-				.select({ instanceId: choreCompletions.instanceId })
-				.from(choreCompletions)
-				.where(
-					and(
-						inArray(choreCompletions.instanceId, instanceIds),
-						isNull(choreCompletions.reopenedAt),
-					),
-				)
-		: [];
 
-	const done = new Set(completions.map((c) => c.instanceId));
+	const due = rows.flatMap((chore) => {
+		const periodStart = chorePeriodStart(chore.frequency, today);
+		return periodStart ? [{ chore, periodStart }] : [];
+	});
+	if (due.length === 0) return [];
+
+	const done = new Set(
+		instances.flatMap((i) => (i.completionId ? [i.id] : [])),
+	);
 	const skipped = new Set(skips.map((s) => skipKey(s.choreId, s.periodStart)));
 	const instanceOf = new Map(
 		instances.map((i) => [skipKey(i.choreId, i.periodStart), i]),
@@ -126,7 +123,7 @@ export async function personalStreakDays(
 	const streaks = await householdStreaks(
 		db as unknown as AuthenticatedTx,
 		member.householdId,
-		{ now, lookbackDays: STREAK_LOOKBACK_DAYS },
+		{ now, lookbackDays: SCREEN_STREAK_LOOKBACK_DAYS },
 	);
 	return streaks.members[member.id]?.days ?? 0;
 }
@@ -135,11 +132,13 @@ export async function loadRewardsShop(
 	member: { id: string; householdId: string },
 	now: Date = new Date(),
 ): Promise<RewardsShopView> {
-	const { today } = await householdClock(member.householdId, now);
+	// Only the chips need the household's date; the rest doesn't wait on it.
 	const [shop, streakDays, suggested] = await Promise.all([
 		loadRewardShop(member, now),
 		personalStreakDays(member, now),
-		openChoresFor(member, today),
+		householdClock(member.householdId, now).then(({ today }) =>
+			openChoresFor(member, today),
+		),
 	]);
 	return shapeRewardsShop({ shop, streakDays, suggested });
 }
