@@ -4,6 +4,7 @@
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
 	import { savePin } from '#lib/profiles.remote.js';
+	import { noPasswordManager } from '#lib/shared-device.js';
 
 	let {
 		requirePassword = false,
@@ -46,11 +47,17 @@
 		bind:value={pin}
 	/>
 	<PinInput {...confirmField} label="Confirm PIN" bind:value={confirmPin} />
+	<p class="text-[13px] text-text-secondary">
+		If your kids use this device, don't let your browser save this PIN: a saved
+		PIN fills itself in for them.
+	</p>
 	{#if requirePassword}
+		<!-- Changing the PIN happens in the kid's profile, on their device, so a
+		     saved account password mustn't fill in here either. -->
 		<TextInput
 			{...savePin.fields._password.as('password')}
+			{...noPasswordManager}
 			label="Account password"
-			autocomplete="current-password"
 			required
 		/>
 	{/if}

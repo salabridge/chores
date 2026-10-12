@@ -6,6 +6,7 @@
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
 	import { leaveKidProfile, unlockPin } from '#lib/profiles.remote.js';
+	import { noPasswordManager } from '#lib/shared-device.js';
 	import { invalidateAll } from '$app/navigation';
 
 	let {
@@ -68,10 +69,12 @@
 					]}
 				/>
 				<FormAlert issues={unlockPin.fields.issues()} />
+				<!-- The kid holds this device, so a saved account password mustn't
+				     fill in here: it would unlock the PIN for them. -->
 				<TextInput
 					{...unlockPin.fields._password.as('password')}
+					{...noPasswordManager}
 					label="Account password"
-					autocomplete="current-password"
 					required
 				/>
 				<PrimaryButton type="submit" pending={unlockPin.pending > 0}>

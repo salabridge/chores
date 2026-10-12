@@ -15,6 +15,15 @@ describe('PinInput.svelte', () => {
 		await expect.element(input).toHaveAttribute('name', '_pin');
 	});
 
+	it('opts out of password managers', async () => {
+		render(PinInput, { label: 'Parent PIN', autocomplete: 'current-password' });
+		const input = page.getByLabelText('Parent PIN');
+		await expect.element(input).toHaveAttribute('autocomplete', 'off');
+		await expect.element(input).toHaveAttribute('data-1p-ignore');
+		await expect.element(input).toHaveAttribute('data-lpignore', 'true');
+		await expect.element(input).toHaveAttribute('data-bwignore');
+	});
+
 	it('renders no keypad buttons', async () => {
 		const { container } = render(PinInput, { label: 'Parent PIN' });
 		expect(container.querySelectorAll('button')).toHaveLength(0);

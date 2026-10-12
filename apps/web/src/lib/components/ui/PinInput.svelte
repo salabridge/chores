@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { HTMLInputAttributes } from 'svelte/elements';
+	import { noPasswordManager } from '#lib/shared-device.js';
 
 	interface Props extends Omit<HTMLInputAttributes, 'class' | 'value'> {
 		/** Visible label of the PIN field. */
@@ -26,14 +27,15 @@
 	<label for={id} class="text-[14px] font-semibold text-text-secondary">
 		{label}
 	</label>
-	<!-- A plain input, so the OS number pad, a hardware keyboard, paste and
-	     password managers all work. -->
+	<!-- A plain input, so the OS number pad, a hardware keyboard and paste
+	     work. Password managers are opted out on purpose: this is a shared
+	     device, and an autofilled PIN would let the kid leave their profile. -->
 	<input
 		{...rest}
+		{...noPasswordManager}
 		{id}
 		type="password"
 		inputmode="numeric"
-		autocomplete="off"
 		pattern={'[0-9]{4,6}'}
 		maxlength={maxLength}
 		aria-describedby={issues?.length ? `${id}-issues` : undefined}
