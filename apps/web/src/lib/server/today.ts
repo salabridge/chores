@@ -34,42 +34,59 @@ export async function loadToday(
 	now: Date = new Date(),
 ): Promise<TodayData> {
 	const householdId = member.householdId;
-	const [choreRows, memberRows, rotationRows, loopMembers, clock, skips] =
-		await Promise.all([
-			db.select().from(chores).where(eq(chores.householdId, householdId)),
-			db
-				.select({ id: householdMembers.id, name: householdMembers.displayName })
-				.from(householdMembers)
-				.where(eq(householdMembers.householdId, householdId)),
-			db
-				.select()
-				.from(choreRotations)
-				.where(eq(choreRotations.householdId, householdId)),
-			db
-				.select({
-					choreId: choreRotationMembers.choreId,
-					memberId: choreRotationMembers.memberId,
-					position: choreRotationMembers.position,
-					eligible: choreRotationMembers.eligible,
-				})
-				.from(choreRotationMembers)
-				.where(eq(choreRotationMembers.householdId, householdId)),
-			householdClock(householdId, now),
-			// A parent's Skip takes a personal chore off the list for its period;
-			// see overview.ts for why the bound is UTC today minus 8.
-			db
-				.select({
-					choreId: choreSkips.choreId,
-					periodStart: choreSkips.periodStart,
-				})
-				.from(choreSkips)
-				.where(
-					and(
-						eq(choreSkips.householdId, householdId),
-						gte(choreSkips.periodStart, addDays(localDate('UTC', now), -8)),
-					),
+	// Everything that doesn't depend on the household's date goes out in the
+	// first round trip, so the page costs two: this, then the period's rows.
+	const [
+		choreRows,
+		memberRows,
+		rotationRows,
+		loopMembers,
+		stages,
+		clock,
+		skips,
+		points,
+		streak,
+	] = await Promise.all([
+		db.select().from(chores).where(eq(chores.householdId, householdId)),
+		db
+			.select({ id: householdMembers.id, name: householdMembers.displayName })
+			.from(householdMembers)
+			.where(eq(householdMembers.householdId, householdId)),
+		db
+			.select()
+			.from(choreRotations)
+			.where(eq(choreRotations.householdId, householdId)),
+		db
+			.select({
+				choreId: choreRotationMembers.choreId,
+				memberId: choreRotationMembers.memberId,
+				position: choreRotationMembers.position,
+				eligible: choreRotationMembers.eligible,
+			})
+			.from(choreRotationMembers)
+			.where(eq(choreRotationMembers.householdId, householdId)),
+		db
+			.select({ choreId: choreStages.choreId })
+			.from(choreStages)
+			.where(eq(choreStages.householdId, householdId)),
+		householdClock(householdId, now),
+		// A parent's Skip takes a personal chore off the list for its period;
+		// see overview.ts for why the bound is UTC today minus 8.
+		db
+			.select({
+				choreId: choreSkips.choreId,
+				periodStart: choreSkips.periodStart,
+			})
+			.from(choreSkips)
+			.where(
+				and(
+					eq(choreSkips.householdId, householdId),
+					gte(choreSkips.periodStart, addDays(localDate('UTC', now), -8)),
 				),
-		]);
+			),
+		memberPointsBalance(member.id),
+		memberStreak({ id: householdId }, member.id, now),
+	]);
 
 	const names = new Map(memberRows.map((m) => [m.id, m.name]));
 	const rotationByChore = new Map(rotationRows.map((r) => [r.choreId, r]));
@@ -89,30 +106,49 @@ export async function loadToday(
 		return periodStart ? [{ chore, periodStart }] : [];
 	});
 	const choreIds = dueChores.map((d) => d.chore.id);
+	// At most two distinct values (today, this Monday), so the instance reads
+	// stay bounded to the current periods instead of the chore's whole history.
+	const periodStarts = [...new Set(dueChores.map((d) => d.periodStart))];
+	const currentInstances = and(
+		eq(choreInstances.householdId, householdId),
+		inArray(choreInstances.choreId, choreIds),
+		inArray(choreInstances.periodStart, periodStarts),
+	);
 
-	const [instances, stages] = choreIds.length
+	const [instances, progress] = choreIds.length
 		? await Promise.all([
+				// At most one open completion per instance (partial unique index),
+				// so the join can't fan out.
 				db
-					.select()
+					.select({
+						id: choreInstances.id,
+						choreId: choreInstances.choreId,
+						periodStart: choreInstances.periodStart,
+						assignedMemberId: choreInstances.assignedMemberId,
+						completerId: choreCompletions.memberId,
+					})
 					.from(choreInstances)
-					.where(
+					.leftJoin(
+						choreCompletions,
 						and(
-							eq(choreInstances.householdId, householdId),
-							inArray(choreInstances.choreId, choreIds),
+							eq(choreCompletions.instanceId, choreInstances.id),
+							isNull(choreCompletions.reopenedAt),
 						),
-					),
+					)
+					.where(currentInstances),
 				db
-					.select({ choreId: choreStages.choreId })
-					.from(choreStages)
-					.where(
-						and(
-							eq(choreStages.householdId, householdId),
-							inArray(choreStages.choreId, choreIds),
-						),
-					),
+					.select({ instanceId: choreStageProgress.instanceId })
+					.from(choreStageProgress)
+					.innerJoin(
+						choreInstances,
+						eq(choreInstances.id, choreStageProgress.instanceId),
+					)
+					.where(currentInstances),
 			])
 		: [[], []];
 
+	// The period lists are shared, so a daily chore can also match its Monday
+	// instance; keep only the one for the chore's own period.
 	const periodByChore = new Map(
 		dueChores.map((d) => [d.chore.id, d.periodStart]),
 	);
@@ -123,50 +159,26 @@ export async function loadToday(
 				: [],
 		),
 	);
-	const instanceIds = [...instanceByChore.values()].map((i) => i.id);
 
-	const [completions, progress] = instanceIds.length
-		? await Promise.all([
-				db
-					.select({
-						instanceId: choreCompletions.instanceId,
-						memberId: choreCompletions.memberId,
-					})
-					.from(choreCompletions)
-					.where(
-						and(
-							eq(choreCompletions.householdId, householdId),
-							inArray(choreCompletions.instanceId, instanceIds),
-							isNull(choreCompletions.reopenedAt),
-						),
-					),
-				db
-					.select({ instanceId: choreStageProgress.instanceId })
-					.from(choreStageProgress)
-					.where(
-						and(
-							eq(choreStageProgress.householdId, householdId),
-							inArray(choreStageProgress.instanceId, instanceIds),
-						),
-					),
-			])
-		: [[], []];
-
-	const completerByInstance = new Map(
-		completions.map((c) => [c.instanceId, c.memberId]),
-	);
+	const countBy = <T>(rows: T[], key: (row: T) => string) => {
+		const counts = new Map<string, number>();
+		for (const row of rows) {
+			counts.set(key(row), (counts.get(key(row)) ?? 0) + 1);
+		}
+		return counts;
+	};
+	const stageTotals = countBy(stages, (s) => s.choreId);
+	const stagesDone = countBy(progress, (p) => p.instanceId);
 	const stagesFor = (choreId: string, instanceId: string | undefined) => ({
-		total: stages.filter((s) => s.choreId === choreId).length,
-		done: instanceId
-			? progress.filter((p) => p.instanceId === instanceId).length
-			: 0,
+		total: stageTotals.get(choreId) ?? 0,
+		done: instanceId ? (stagesDone.get(instanceId) ?? 0) : 0,
 	});
 
 	const personal: PersonalFacts[] = [];
 	const rotations: RotationFacts[] = [];
 	for (const { chore, periodStart } of dueChores) {
 		const instance = instanceByChore.get(chore.id);
-		const completed = instance ? completerByInstance.has(instance.id) : false;
+		const completed = instance?.completerId != null;
 
 		if (chore.type === 'personal') {
 			const owner = instance?.assignedMemberId ?? chore.assignedMemberId;
@@ -196,7 +208,7 @@ export async function loadToday(
 					rotation.lastCompletedMemberId,
 				).activeTurn
 			: null;
-		const completerId = instance ? completerByInstance.get(instance.id) : null;
+		const completerId = instance?.completerId;
 		rotations.push({
 			choreId: chore.id,
 			title: chore.title,
@@ -208,11 +220,6 @@ export async function loadToday(
 			completedByName: completerId ? (names.get(completerId) ?? null) : null,
 		});
 	}
-
-	const [points, streak] = await Promise.all([
-		memberPointsBalance(member.id),
-		memberStreak({ id: householdId }, member.id, now),
-	]);
 
 	return buildToday({
 		member: { id: member.id, name: member.displayName },
