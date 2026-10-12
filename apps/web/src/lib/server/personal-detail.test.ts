@@ -13,7 +13,14 @@ const mocks = vi.hoisted(() => {
 			// biome-ignore lint/suspicious/noThenProperty: drizzle query builders are awaitable
 			then: (resolve: (v: unknown) => void) => resolve(queue.shift() ?? []),
 		};
-		for (const m of ['from', 'where', 'orderBy', 'limit', 'innerJoin']) {
+		for (const m of [
+			'from',
+			'where',
+			'orderBy',
+			'limit',
+			'innerJoin',
+			'leftJoin',
+		]) {
 			chain[m] = () => chain;
 		}
 		return chain;
@@ -86,8 +93,10 @@ const stages = [
 const instance = { id: INSTANCE, assignedMemberId: 'leo' };
 
 /**
- * Queues what `loadState()` reads after the chore: instance, stages, and (when
- * there is an instance) the open completion and stage progress.
+ * Queues what `loadState()` reads after the chore: the stages, then (when the
+ * chore is due today) the instance with its open completion, and the stage
+ * progress. `name` is the assignee lookup `loadPersonalDetail()` runs
+ * alongside, which goes out after the stages and before the period's rows.
  */
 function queueState(
 	opts: {
@@ -95,15 +104,16 @@ function queueState(
 		instance?: Record<string, unknown> | null;
 		completion?: string;
 		doneStages?: string[];
+		name?: string;
 	} = {},
 ) {
 	const inst = opts.instance === undefined ? instance : opts.instance;
-	mocks.queue.push(inst ? [inst] : []);
 	mocks.queue.push(opts.stageRows ?? stages);
-	if (inst) {
-		mocks.queue.push(opts.completion ? [{ id: opts.completion }] : []);
-		mocks.queue.push((opts.doneStages ?? []).map((stageId) => ({ stageId })));
-	}
+	if (opts.name !== undefined) mocks.queue.push([{ name: opts.name }]);
+	mocks.queue.push(
+		inst ? [{ ...inst, completionId: opts.completion ?? null }] : [],
+	);
+	mocks.queue.push((opts.doneStages ?? []).map((stageId) => ({ stageId })));
 }
 
 /** What `ensureInstance()` reads once the write is allowed. */
@@ -222,7 +232,6 @@ describe('completePersonalStep: stages and points', () => {
 	it('checks off a stage in one batch (user, then the SB-26 function) without points', async () => {
 		mocks.queue.push([chore()]);
 		queueState({ doneStages: [S1] });
-		queueEnsure();
 		mocks.batch.mockResolvedValue([[], { rows: [stageRow({})] }]);
 
 		const result = await completePersonalStep(leoState, CHORE, S2);
@@ -245,7 +254,6 @@ describe('completePersonalStep: stages and points', () => {
 	it('awards the points on the last stage and returns the completion', async () => {
 		mocks.queue.push([chore()]);
 		queueState({ doneStages: [S1, S2] });
-		queueEnsure();
 		mocks.batch.mockResolvedValue([
 			[],
 			{
@@ -267,13 +275,13 @@ describe('completePersonalStep: stages and points', () => {
 		// One call, one transaction: the stage, the completion and the ledger row
 		// are all written by the database function, never by this module.
 		expect(mocks.batch).toHaveBeenCalledTimes(1);
-		expect(mocks.inserts).toHaveLength(1); // only the instance row
+		// The period's instance already exists, so this module inserts nothing.
+		expect(mocks.inserts).toHaveLength(0);
 	});
 
 	it('completes a chore without stages with complete_chore_instance', async () => {
 		mocks.queue.push([chore({ points: 10 })]);
 		queueState({ stageRows: [] });
-		queueEnsure();
 		mocks.batch.mockResolvedValue([
 			[],
 			{ rows: [{ completion_id: COMPLETION, points: 10 }] },
@@ -321,7 +329,6 @@ describe('completePersonalStep: stages and points', () => {
 	it('maps a locked stage to a message for the screen', async () => {
 		mocks.queue.push([chore()]);
 		queueState({ doneStages: [S1] });
-		queueEnsure();
 		mocks.batch.mockRejectedValue(
 			Object.assign(new Error('locked'), { code: 'CP001' }),
 		);
@@ -335,7 +342,6 @@ describe('completePersonalStep: stages and points', () => {
 	it('maps a database refusal (drizzle wraps it) to a 403', async () => {
 		mocks.queue.push([chore()]);
 		queueState({ doneStages: [S1] });
-		queueEnsure();
 		const cause = Object.assign(new Error('pg'), { code: '42501' });
 		mocks.batch.mockRejectedValue(new Error('wrapped', { cause }));
 		expect(
@@ -349,8 +355,7 @@ describe('loadPersonalDetail', () => {
 
 	it('lets the assignee complete, with the stages in order', async () => {
 		mocks.queue.push([chore()]);
-		queueState({ doneStages: [S1] });
-		mocks.queue.push([{ name: 'Leo' }]);
+		queueState({ doneStages: [S1], name: 'Leo' });
 		const detail = await loadPersonalDetail(leo, CHORE);
 		expect(detail).toMatchObject({
 			title: 'Clean Your Room',
@@ -369,8 +374,7 @@ describe('loadPersonalDetail', () => {
 
 	it('reads as view only for anyone else', async () => {
 		mocks.queue.push([chore()]);
-		queueState();
-		mocks.queue.push([{ name: 'Leo' }]);
+		queueState({ name: 'Leo' });
 		const detail = await loadPersonalDetail(
 			{ id: 'mia', householdId: 'h1' },
 			CHORE,
@@ -384,18 +388,32 @@ describe('loadPersonalDetail', () => {
 
 	it('shows a finished chore as all done with no button', async () => {
 		mocks.queue.push([chore()]);
-		queueState({ completion: COMPLETION, doneStages: [S1, S2, S3] });
-		mocks.queue.push([{ name: 'Leo' }]);
+		queueState({
+			completion: COMPLETION,
+			doneStages: [S1, S2, S3],
+			name: 'Leo',
+		});
 		const detail = await loadPersonalDetail(leo, CHORE);
 		expect(detail?.completedThisPeriod).toBe(true);
 		expect(detail?.canComplete).toBe(false);
 		expect(detail?.stages.every((s) => s.state === 'completed')).toBe(true);
 	});
 
+	it("names the period's assignee when it was handed to someone else", async () => {
+		mocks.queue.push([chore()]);
+		queueState({
+			instance: { id: INSTANCE, assignedMemberId: 'mia' },
+			doneStages: [S1],
+			name: 'Leo',
+		});
+		mocks.queue.push([{ name: 'Mia' }]);
+		const detail = await loadPersonalDetail(leo, CHORE);
+		expect(detail).toMatchObject({ assigneeName: 'Mia', isAssignee: false });
+	});
+
 	it('only reads: nothing is written by looking at the screen', async () => {
 		mocks.queue.push([chore()]);
-		queueState();
-		mocks.queue.push([{ name: 'Leo' }]);
+		queueState({ name: 'Leo' });
 		await loadPersonalDetail(leo, CHORE);
 		expect(mocks.inserts).toHaveLength(0);
 		expect(mocks.batch).not.toHaveBeenCalled();

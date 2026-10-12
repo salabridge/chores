@@ -1,5 +1,6 @@
 import {
 	choreCompletions,
+	choreInstances,
 	choreStageProgress,
 	choreStages,
 	householdMembers,
@@ -13,7 +14,6 @@ import { householdToday } from './household-today.ts';
 import type { ProfileState } from './profile-state.ts';
 import {
 	ensureInstance,
-	findInstance,
 	loadChore,
 	sqlState,
 	UUID,
@@ -48,6 +48,8 @@ type Chore = NonNullable<Awaited<ReturnType<typeof loadChore>>>;
 interface PersonalState {
 	chore: Chore;
 	periodStart: string | null;
+	/** This period's instance, if anyone has touched the chore yet. */
+	instance: { id: string; assignedMemberId: string | null } | null;
 	/** The open completion for this period, if any. */
 	completionId: string | null;
 	doneStageIds: Set<string>;
@@ -56,46 +58,68 @@ interface PersonalState {
 	assigneeId: string | null;
 }
 
-/** Everything the screen and the writes need about one personal chore today. */
+/**
+ * Everything the screen and the writes need about one personal chore today,
+ * in two round trips: the household's date and the stages (which don't need
+ * it), then this period's instance, its open completion and stage progress.
+ */
 async function loadState(
 	chore: Chore,
 	now: Date = new Date(),
 ): Promise<PersonalState> {
-	const periodStart = chorePeriodStart(
-		chore.frequency,
-		await householdToday(chore.householdId, now),
-	);
-	const instance = periodStart
-		? await findInstance(chore.id, periodStart)
-		: null;
+	const [today, stages] = await Promise.all([
+		householdToday(chore.householdId, now),
+		db
+			.select({
+				id: choreStages.id,
+				title: choreStages.title,
+				hint: choreStages.hint,
+			})
+			.from(choreStages)
+			.where(eq(choreStages.choreId, chore.id))
+			.orderBy(asc(choreStages.position)),
+	]);
+	const periodStart = chorePeriodStart(chore.frequency, today);
 
-	const stages = await db
-		.select({
-			id: choreStages.id,
-			title: choreStages.title,
-			hint: choreStages.hint,
-		})
-		.from(choreStages)
-		.where(eq(choreStages.choreId, chore.id))
-		.orderBy(asc(choreStages.position));
-
+	let instance: PersonalState['instance'] = null;
 	let completionId: string | null = null;
 	let doneStageIds = new Set<string>();
-	if (instance) {
-		const [completion] = await db
-			.select({ id: choreCompletions.id })
-			.from(choreCompletions)
-			.where(
-				and(
-					eq(choreCompletions.instanceId, instance.id),
-					isNull(choreCompletions.reopenedAt),
-				),
-			);
-		completionId = completion?.id ?? null;
-		const progress = await db
-			.select({ stageId: choreStageProgress.stageId })
-			.from(choreStageProgress)
-			.where(eq(choreStageProgress.instanceId, instance.id));
+	if (periodStart) {
+		const thisPeriod = and(
+			eq(choreInstances.choreId, chore.id),
+			eq(choreInstances.periodStart, periodStart),
+		);
+		const [[row], progress] = await Promise.all([
+			// At most one open completion per instance (partial unique index), so
+			// the join can't fan out.
+			db
+				.select({
+					id: choreInstances.id,
+					assignedMemberId: choreInstances.assignedMemberId,
+					completionId: choreCompletions.id,
+				})
+				.from(choreInstances)
+				.leftJoin(
+					choreCompletions,
+					and(
+						eq(choreCompletions.instanceId, choreInstances.id),
+						isNull(choreCompletions.reopenedAt),
+					),
+				)
+				.where(thisPeriod),
+			db
+				.select({ stageId: choreStageProgress.stageId })
+				.from(choreStageProgress)
+				.innerJoin(
+					choreInstances,
+					eq(choreInstances.id, choreStageProgress.instanceId),
+				)
+				.where(thisPeriod),
+		]);
+		if (row) {
+			instance = { id: row.id, assignedMemberId: row.assignedMemberId };
+			completionId = row.completionId ?? null;
+		}
 		doneStageIds = new Set(progress.map((p) => p.stageId));
 	}
 	const assigneeId = effectiveAssignee({
@@ -103,7 +127,33 @@ async function loadState(
 		instanceAssigneeId: instance?.assignedMemberId ?? null,
 		touched: completionId !== null || doneStageIds.size > 0,
 	});
-	return { chore, periodStart, completionId, doneStageIds, stages, assigneeId };
+	return {
+		chore,
+		periodStart,
+		instance,
+		completionId,
+		doneStageIds,
+		stages,
+		assigneeId,
+	};
+}
+
+/** A member's display name, scoped to the household. */
+async function memberName(
+	householdId: string,
+	memberId: string | null,
+): Promise<string | null> {
+	if (!memberId) return null;
+	const [member] = await db
+		.select({ name: householdMembers.displayName })
+		.from(householdMembers)
+		.where(
+			and(
+				eq(householdMembers.id, memberId),
+				eq(householdMembers.householdId, householdId),
+			),
+		);
+	return member?.name ?? null;
 }
 
 /**
@@ -119,22 +169,18 @@ export async function loadPersonalDetail(
 	const chore = await loadChore(viewer.householdId, choreId);
 	if (!chore) return undefined;
 	if (chore.type !== 'personal') return null;
-	const state = await loadState(chore, now);
+	// The assignee is almost always the chore's own, so its name is read
+	// alongside the state; only a period handed to someone else needs another.
+	const [state, choreAssigneeName] = await Promise.all([
+		loadState(chore, now),
+		memberName(viewer.householdId, chore.assignedMemberId),
+	]);
 
 	const completed = state.completionId !== null;
-	let assigneeName: string | null = null;
-	if (state.assigneeId) {
-		const [assignee] = await db
-			.select({ name: householdMembers.displayName })
-			.from(householdMembers)
-			.where(
-				and(
-					eq(householdMembers.id, state.assigneeId),
-					eq(householdMembers.householdId, viewer.householdId),
-				),
-			);
-		assigneeName = assignee?.name ?? null;
-	}
+	const assigneeName =
+		state.assigneeId === chore.assignedMemberId
+			? choreAssigneeName
+			: await memberName(viewer.householdId, state.assigneeId);
 	const isAssignee = state.assigneeId === viewer.id;
 	const availableToday = state.periodStart !== null;
 	const doneIds = completed
@@ -223,12 +269,12 @@ export async function completePersonalStep(
 	// the database authorizes; it may act as the kid.
 	const userId = state.actor.userId;
 	if (!userId) throw new PersonalDetailError('Sign in again to continue.', 403);
-	const instance = await ensureInstance(
-		householdId,
-		choreId,
-		periodStart,
-		assigneeId,
-	);
+	// After the first tap of the period the instance already exists for this
+	// assignee, so later taps skip ensureInstance's extra round trips.
+	const instance =
+		loaded.instance?.assignedMemberId === assigneeId
+			? loaded.instance
+			: await ensureInstance(householdId, choreId, periodStart, assigneeId);
 	const claims = JSON.stringify({ sub: userId });
 
 	try {
