@@ -1,10 +1,5 @@
-import {
-	chores,
-	householdMemberPins,
-	householdMembers,
-	households,
-} from '@chore/db';
-import { and, asc, count, eq, isNull, sql } from 'drizzle-orm';
+import { householdMemberPins, householdMembers, households } from '@chore/db';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { type CreateChoreInput, createInputError } from '../chore-creator.ts';
 import {
 	type HouseholdInput,
@@ -190,6 +185,11 @@ function requireHousehold(status: SetupStatus): SetupHousehold {
 	return status.household;
 }
 
+// `status` was read before this request's write, so another tab may have
+// finished setup since. Each write below re-checks it in the same statement.
+const stillInSetup = (householdId: string) =>
+	sql`exists (select 1 from households h where h.id = ${householdId} and h.setup_completed_at is null)`;
+
 /** Step 2. The parent's own display name and avatar. */
 export async function saveParent(
 	status: SetupStatus,
@@ -203,37 +203,47 @@ export async function saveParent(
 			avatarColor: input.avatarColor,
 			avatarInitial: input.avatarInitial,
 		})
-		.where(eq(householdMembers.id, household.memberId));
+		.where(
+			and(
+				eq(householdMembers.id, household.memberId),
+				stillInSetup(household.id),
+			),
+		);
 }
 
-/** Step 3. Adds a managed kid (no login). */
+/**
+ * Step 3. Adds a managed kid (no login). Counting and inserting in separate
+ * requests would let a double submit (or two tabs) both see room and go past
+ * `MAX_KIDS`, so both run in one transaction behind a lock on the household
+ * row: a concurrent add waits for this one to commit, then counts its kid.
+ */
 export async function addKid(
 	status: SetupStatus,
 	input: KidInput,
 ): Promise<void> {
 	const household = requireHousehold(status);
-	const [{ kids = 0 } = {}] = await db
-		.select({ kids: count() })
-		.from(householdMembers)
-		.where(
-			and(
-				eq(householdMembers.householdId, household.id),
-				eq(householdMembers.role, 'kid'),
-			),
-		);
-	if (kids >= MAX_KIDS) {
+	const [, added] = await db.batch([
+		db.execute(
+			sql`select 1 from households where id = ${household.id} for update`,
+		),
+		// A new statement, so it sees kids committed while it waited on the lock.
+		db.execute<{ id: string }>(sql`
+			insert into household_members
+				(household_id, user_id, role, display_name, avatar_color, avatar_initial, birth_year, weekly_goal_points)
+			select h.id, null, 'kid', ${input.displayName}, ${input.avatarColor}, ${input.avatarInitial},
+				${input.birthYear}::smallint, ${input.weeklyGoalPoints}::integer
+			from households h
+			where h.id = ${household.id}
+				and h.setup_completed_at is null
+				and (
+					select count(*) from household_members m
+					where m.household_id = h.id and m.role = 'kid'
+				) < ${MAX_KIDS}
+			returning id`),
+	]);
+	if (added.rows.length === 0) {
 		throw new SetupError(`You can add up to ${MAX_KIDS} kids during setup.`);
 	}
-	await db.insert(householdMembers).values({
-		householdId: household.id,
-		userId: null,
-		role: 'kid',
-		displayName: input.displayName,
-		avatarColor: input.avatarColor,
-		avatarInitial: input.avatarInitial,
-		birthYear: input.birthYear,
-		weeklyGoalPoints: input.weeklyGoalPoints,
-	});
 }
 
 /** Removes a kid added during setup. Only managed kids of this household. */
@@ -244,6 +254,8 @@ export async function removeKid(
 	const household = requireHousehold(status);
 	if (typeof kidId !== 'string')
 		throw new SetupError('Choose a kid to remove.');
+	// Once setup is finished the kid may have chores and points; removing them
+	// then belongs to the profiles screen, not a stale setup tab.
 	await db
 		.delete(householdMembers)
 		.where(
@@ -252,14 +264,15 @@ export async function removeKid(
 				eq(householdMembers.householdId, household.id),
 				eq(householdMembers.role, 'kid'),
 				isNull(householdMembers.userId),
+				stillInSetup(household.id),
 			),
 		);
 }
 
 /**
  * Step 6. Optionally creates the picked starter chores (a personal chore per
- * chosen kid) and marks setup finished, all in one batch so a failure leaves
- * setup open to retry. Refuses until the household, parent, a kid and the PIN
+ * chosen kid) and marks setup finished, in one statement so a failure leaves
+ * setup open to retry and a second submit creates nothing. Refuses until the household, parent, a kid and the PIN
  * are saved.
  */
 export async function finishSetup(
@@ -288,7 +301,7 @@ export async function finishSetup(
 		throw new SetupError('Choose who gets the chores.');
 	}
 
-	const inserts = picked.flatMap((chore) =>
+	const values = picked.flatMap((chore) =>
 		assignees.map((assigneeId) => {
 			const input: CreateChoreInput = {
 				title: chore.title,
@@ -301,29 +314,35 @@ export async function finishSetup(
 			};
 			const problem = createInputError(input);
 			if (problem) throw new SetupError(problem);
-			return db.insert(chores).values({
-				householdId: household.id,
-				title: chore.title,
-				description: null,
-				type: 'personal',
-				points: chore.points,
-				frequency: chore.frequency,
-				assignedMemberId: assigneeId,
-				createdBy: userId,
-			});
+			return sql`(${chore.title}, ${chore.points}::integer, ${chore.frequency}::chore_frequency, ${assigneeId}::uuid)`;
 		}),
 	);
-	const complete = db
-		.update(households)
-		.set({ setupCompletedAt: sql`now()` })
-		.where(
-			and(
-				eq(households.id, household.id),
-				eq(households.createdBy, userId),
-				isNull(households.setupCompletedAt),
-			),
-		);
-	await db.batch([...inserts, complete] as unknown as Parameters<
-		typeof db.batch
-	>[0]);
+	if (values.length === 0) {
+		await db
+			.update(households)
+			.set({ setupCompletedAt: sql`now()` })
+			.where(
+				and(
+					eq(households.id, household.id),
+					eq(households.createdBy, userId),
+					isNull(households.setupCompletedAt),
+				),
+			);
+		return;
+	}
+	// One statement: the update claims the unfinished household, and the chores
+	// are only inserted by the request that claimed it. A concurrent submit
+	// waits on the row lock, then matches nothing and inserts nothing.
+	await db.execute(sql`
+		with done as (
+			update households set setup_completed_at = now()
+			where id = ${household.id}
+				and created_by = ${userId}
+				and setup_completed_at is null
+			returning id
+		)
+		insert into chores (household_id, title, type, points, frequency, assigned_member_id, created_by)
+		select done.id, v.title, 'personal', v.points, v.frequency, v.assignee, ${userId}::uuid
+		from done
+		cross join (values ${sql.join(values, sql`, `)}) as v(title, points, frequency, assignee)`);
 }
