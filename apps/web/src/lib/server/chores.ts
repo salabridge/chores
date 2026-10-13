@@ -15,6 +15,7 @@ import {
 	type CreateChoreInput,
 	createInputError,
 	type EditableChore,
+	FREQUENCY_LOCKED_MESSAGE,
 	STALE_CHORE_MESSAGE,
 	type UpdateChoreInput,
 } from '../chore-creator.ts';
@@ -232,6 +233,48 @@ export async function loadEditableChore(
 }
 
 /**
+ * This period's `period_start` for the chore's current frequency (the
+ * household's own day, as Today uses), or null when it isn't due today.
+ */
+async function currentPeriodStart(
+	householdId: string,
+	frequency: EditableChore['frequency'],
+): Promise<string | null> {
+	return chorePeriodStart(frequency, await householdToday(householdId));
+}
+
+/**
+ * Whether the chore has an open completion in the current period. Changing
+ * how often a chore repeats re-keys its periods, which would make a finished
+ * chore look undone, so the edit page locks frequency while this is true.
+ * (A proper fix is SB-65.)
+ */
+export async function isDoneThisPeriod(
+	householdId: string,
+	choreId: string,
+	frequency: EditableChore['frequency'],
+): Promise<boolean> {
+	const periodStart = await currentPeriodStart(householdId, frequency);
+	if (!periodStart) return false;
+	const rows = await db
+		.select({ id: choreCompletions.id })
+		.from(choreCompletions)
+		.innerJoin(
+			choreInstances,
+			eq(choreInstances.id, choreCompletions.instanceId),
+		)
+		.where(
+			and(
+				eq(choreInstances.choreId, choreId),
+				eq(choreInstances.periodStart, periodStart),
+				isNull(choreCompletions.reopenedAt),
+			),
+		)
+		.limit(1);
+	return rows.length > 0;
+}
+
+/**
  * Stages sit above this while they are being reordered, so no two rows ever
  * share a position (`chore_stages_chore_id_position_key` is checked per row).
  */
@@ -288,6 +331,15 @@ export async function updateChoreFromInput(
 		throw new ChoreError('The stages are out of date. Reload and try again.');
 	}
 
+	// Refuse the whole save, not just the frequency, when the chore is done.
+	const frequencyChanged = input.frequency !== current.frequency;
+	if (
+		frequencyChanged &&
+		(await isDoneThisPeriod(actor.householdId, current.id, current.frequency))
+	) {
+		throw new ChoreError(FREQUENCY_LOCKED_MESSAGE, 409);
+	}
+
 	let assigneeId: string | null = null;
 	if (current.type === 'personal') {
 		const [assignee] = await db
@@ -304,6 +356,10 @@ export async function updateChoreFromInput(
 	}
 
 	const choreId = current.id;
+	const periodStart = await currentPeriodStart(
+		actor.householdId,
+		current.frequency,
+	);
 	const stamp = new Date(Math.max(Date.now(), loadedAt.getTime() + 1));
 	// True only inside the transaction where the chore row below was updated.
 	const saved = sql`exists (select 1 from ${chores} where ${chores.id} = ${choreId} and date_trunc('milliseconds', ${chores.updatedAt}) = ${stamp.toISOString()}::timestamptz)`;
@@ -325,6 +381,11 @@ export async function updateChoreFromInput(
 					eq(chores.householdId, actor.householdId),
 					// Postgres keeps microseconds and JS dates keep milliseconds.
 					sql`date_trunc('milliseconds', ${chores.updatedAt}) = ${loadedAt.toISOString()}::timestamptz`,
+					// Re-checked here so a completion landing after the check above
+					// can't slip a frequency change through.
+					frequencyChanged && periodStart
+						? sql`not exists (select 1 from chore_completions c join chore_instances i on i.id = c.instance_id where i.chore_id = ${choreId} and i.period_start = ${periodStart}::date and c.reopened_at is null)`
+						: undefined,
 				),
 			)
 			.returning({ id: chores.id }),
@@ -393,10 +454,6 @@ export async function updateChoreFromInput(
 
 	// A new assignee picks up this period's instance, unless it's already done.
 	if (current.type === 'personal' && assigneeId !== current.assignedMemberId) {
-		const periodStart = chorePeriodStart(
-			current.frequency,
-			await householdToday(actor.householdId),
-		);
 		if (periodStart) {
 			queries.push(
 				db
@@ -429,6 +486,13 @@ export async function updateChoreFromInput(
 	);
 	// The guard matched nothing: someone saved between the check above and the batch.
 	if ((first as unknown[]).length === 0) {
+		if (frequencyChanged) {
+			// Either guard may have fired; the chore row tells them apart.
+			const now = await loadEditableChore(actor.householdId, choreId);
+			if (now && now.updatedAt.getTime() === loadedAt.getTime()) {
+				throw new ChoreError(FREQUENCY_LOCKED_MESSAGE, 409);
+			}
+		}
 		throw new ChoreError(STALE_CHORE_MESSAGE, 409);
 	}
 	return { id: choreId };

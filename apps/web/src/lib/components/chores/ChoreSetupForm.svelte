@@ -5,6 +5,7 @@
 		type ChoreKind,
 		emptyStage,
 		FREQUENCIES,
+		FREQUENCY_LOCKED_MESSAGE,
 		type Frequency,
 		frequencyLabel,
 		frequencySummary,
@@ -49,6 +50,11 @@
 		 * rotation's members stay in the Rotation Builder.
 		 */
 		mode?: 'create' | 'edit';
+		/**
+		 * Edit mode: the chore is done for this period, so how often it repeats
+		 * can't change until it resets (SB-65 is the proper fix).
+		 */
+		frequencyLocked?: boolean;
 	}
 
 	let {
@@ -58,6 +64,7 @@
 		cancelHref,
 		pending = false,
 		mode = 'create',
+		frequencyLocked = false,
 	}: Props = $props();
 
 	let showErrors = $state(false);
@@ -262,9 +269,15 @@
 			<span class="text-[13px] font-semibold text-text-primary">Frequency</span>
 			<ChoiceChips
 				label="Frequency"
+				disabled={frequencyLocked}
 				options={FREQUENCIES.map((value) => ({ value, label: frequencyLabel(value) }))}
 				bind:value={() => draft.frequency, (v) => (draft.frequency = v as Frequency)}
 			/>
+			{#if frequencyLocked}
+				<p class="text-[13px] text-text-secondary" data-testid="frequency-locked">
+					{FREQUENCY_LOCKED_MESSAGE}
+				</p>
+			{/if}
 		</div>
 		<div class="flex flex-col gap-8">
 			<span class="text-[13px] font-semibold text-text-primary">Reward Points</span>

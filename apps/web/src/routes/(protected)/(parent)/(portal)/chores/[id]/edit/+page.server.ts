@@ -1,6 +1,10 @@
 import { error } from '@sveltejs/kit';
 import { choreToDraft } from '#lib/chore-creator.js';
-import { listHouseholdMembers, loadEditableChore } from '#lib/server/chores.js';
+import {
+	isDoneThisPeriod,
+	listHouseholdMembers,
+	loadEditableChore,
+} from '#lib/server/chores.js';
 import { requireParentProfile } from '#lib/server/guards.js';
 import type { PageServerLoad } from './$types';
 
@@ -16,6 +20,12 @@ export const load: PageServerLoad = async ({ params }) => {
 		draft: choreToDraft(chore),
 		// Sent back with the save so a stale form is refused.
 		updatedAt: chore.updatedAt.toISOString(),
+		// Changing frequency is refused while the chore is done for this period.
+		frequencyLocked: await isDoneThisPeriod(
+			actor.householdId,
+			chore.id,
+			chore.frequency,
+		),
 		members: await listHouseholdMembers(actor.householdId),
 	};
 };

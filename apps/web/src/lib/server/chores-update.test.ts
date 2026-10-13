@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	choreToDraft,
+	FREQUENCY_LOCKED_MESSAGE,
 	STALE_CHORE_MESSAGE,
 	toUpdateInput,
 } from '../chore-creator.ts';
@@ -21,7 +22,7 @@ const mocks = vi.hoisted(() => {
 			// biome-ignore lint/suspicious/noThenProperty: drizzle query builders are awaitable
 			then: (resolve: (v: unknown) => void) => resolve(queue.shift() ?? []),
 		};
-		for (const m of ['from', 'where', 'orderBy', 'limit'])
+		for (const m of ['from', 'innerJoin', 'where', 'orderBy', 'limit'])
 			chain[m] = () => chain;
 		return chain;
 	});
@@ -81,13 +82,19 @@ const stageRows = [
 	{ id: S3, title: 'Vacuum', hint: null, position: 3 },
 ];
 
-/** Queues what the code reads: the chore, its stages, then (personal) the assignee. */
+/**
+ * Queues what the code reads: the chore, its stages, the "done this period"
+ * lookup (only when the frequency changes, so only when `done` is given), then
+ * (personal) the assignee.
+ */
 function saved(
 	chore: Record<string, unknown> = {},
 	stages = stageRows,
 	assignee: { id: string } | null = { id: 'leo' },
+	done?: boolean,
 ) {
 	mocks.queue.push([choreRow(chore)], stages);
+	if (done !== undefined) mocks.queue.push(done ? [{ id: 'completion' }] : []);
 	if (choreRow(chore).type === 'personal') {
 		mocks.queue.push(assignee ? [assignee] : []);
 	}
@@ -117,7 +124,7 @@ beforeEach(() => {
 
 describe('updateChoreFromInput', () => {
 	it('updates the chore row alone when only its fields change', async () => {
-		saved();
+		saved({}, stageRows, { id: 'leo' }, false);
 		const { id } = await updateChoreFromInput(
 			actor,
 			input((d) => {
@@ -297,5 +304,56 @@ describe('updateChoreFromInput', () => {
 			),
 		).rejects.toThrow(/title/);
 		expect(mocks.select).not.toHaveBeenCalled();
+	});
+});
+
+describe('changing frequency', () => {
+	const weekly = (d: ReturnType<typeof choreToDraft>) => {
+		d.frequency = 'weekly';
+	};
+
+	it('is refused when the chore is done this period, writing nothing', async () => {
+		saved({}, stageRows, { id: 'leo' }, true);
+		const error = await updateChoreFromInput(
+			actor,
+			input((d) => {
+				weekly(d);
+				d.title = 'Renamed too';
+			}),
+		).catch((e) => e);
+		expect(error).toBeInstanceOf(ChoreError);
+		expect(error.message).toBe(FREQUENCY_LOCKED_MESSAGE);
+		expect(error.status).toBe(409);
+		// The whole save is refused, so the rename didn't apply either.
+		expect(mocks.batch).not.toHaveBeenCalled();
+	});
+
+	it('is allowed when the chore is not done yet', async () => {
+		saved({}, stageRows, { id: 'leo' }, false);
+		await updateChoreFromInput(actor, input(weekly));
+		expect(sent()[0].set).toMatchObject({ frequency: 'weekly' });
+	});
+
+	it('does not look for a completion when the frequency is unchanged, so other edits still save', async () => {
+		saved();
+		await updateChoreFromInput(
+			actor,
+			input((d) => {
+				d.title = 'Renamed';
+				d.points = 20;
+			}),
+		);
+		expect(sent()[0].set).toMatchObject({ title: 'Renamed', points: 20 });
+	});
+
+	it('reports the done message when a completion lands after the check', async () => {
+		saved({}, stageRows, { id: 'leo' }, false);
+		// The guarded update matches nothing, and the chore row itself is unchanged.
+		mocks.batch.mockResolvedValue([[]]);
+		mocks.queue.push([choreRow()], stageRows);
+		const error = await updateChoreFromInput(actor, input(weekly)).catch(
+			(e) => e,
+		);
+		expect(error.message).toBe(FREQUENCY_LOCKED_MESSAGE);
 	});
 });

@@ -317,6 +317,10 @@ export const toUpdateInput = (
 export const STALE_CHORE_MESSAGE =
 	'This chore was changed by someone else. Reload to see their changes.';
 
+/** Shown when a frequency change is refused because the chore is done for now (SB-65 is the proper fix). */
+export const FREQUENCY_LOCKED_MESSAGE =
+	'This chore is already done for this period. Change how often it repeats after it resets.';
+
 /** The line under Rotation Preview. */
 export const rotationPreviewNote =
 	'Eligibility is confirmed on the next step. Anyone you exclude there drops out of this rotation.';

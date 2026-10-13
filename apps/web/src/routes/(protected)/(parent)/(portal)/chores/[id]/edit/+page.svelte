@@ -46,6 +46,7 @@
 <ChoreSetupForm
 	bind:draft
 	mode="edit"
+	frequencyLocked={data.frequencyLocked}
 	members={data.members}
 	{onsubmit}
 	cancelHref="/overview"

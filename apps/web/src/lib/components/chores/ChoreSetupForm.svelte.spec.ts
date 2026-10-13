@@ -124,13 +124,18 @@ describe('ChoreSetupForm.svelte', () => {
 			stages: exampleDraft().stages.map((s, i) => ({ ...s, id: `s${i + 1}` })),
 			...over,
 		});
-		const edit = (draft: ChoreDraft, onsubmit = vi.fn()) => {
+		const edit = (
+			draft: ChoreDraft,
+			onsubmit = vi.fn(),
+			frequencyLocked = false,
+		) => {
 			render(Host, {
 				draft,
 				members: householdMembers,
 				onsubmit,
 				cancelHref: '#',
 				mode: 'edit',
+				frequencyLocked,
 			});
 			return onsubmit;
 		};
@@ -188,6 +193,24 @@ describe('ChoreSetupForm.svelte', () => {
 			const sent = onsubmit.mock.calls[0][0] as ChoreDraft;
 			expect(sent.title).toBe('Load Dishwasher');
 			expect(sent.stages.map((s) => s.id)).toEqual(['s2', 's1']);
+		});
+
+		it('disables frequency, with a hint, when the chore is done this period', async () => {
+			edit(saved(), vi.fn(), true);
+			await expect
+				.element(page.getByRole('radio', { name: 'Weekly' }))
+				.toBeDisabled();
+			await expect
+				.element(page.getByTestId('frequency-locked'))
+				.toHaveTextContent('already done for this period');
+		});
+
+		it('keeps frequency editable otherwise', async () => {
+			edit(saved());
+			await expect
+				.element(page.getByRole('radio', { name: 'Weekly' }))
+				.toBeEnabled();
+			expect(page.getByTestId('frequency-locked').elements()).toHaveLength(0);
 		});
 
 		it('shows the server message when the chore is stale', async () => {
