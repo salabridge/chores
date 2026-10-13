@@ -1,9 +1,10 @@
 <script lang="ts">
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
-	import PinPad from '#lib/components/ui/PinPad.svelte';
+	import PinInput from '#lib/components/ui/PinInput.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
 	import { savePin } from '#lib/profiles.remote.js';
+	import { noPasswordManager } from '#lib/shared-device.js';
 
 	let {
 		requirePassword = false,
@@ -15,9 +16,14 @@
 	} = $props();
 
 	let pin = $state('');
-	// The PIN pad owns the value (bound below), so drop the one in the spread.
+	let confirmPin = $state('');
+	// The PIN inputs own their values (bound below), so drop the spread ones.
 	const pinField = $derived.by(() => {
 		const { value: _value, ...rest } = savePin.fields._pin.as('password');
+		return rest;
+	});
+	const confirmField = $derived.by(() => {
+		const { value: _value, ...rest } = savePin.fields._confirmPin.as('password');
 		return rest;
 	});
 </script>
@@ -26,6 +32,7 @@
 	{...savePin.enhance(async (form) => {
 		const saved = await form.submit();
 		pin = '';
+		confirmPin = '';
 		if (saved) {
 			form.element.reset();
 			onsaved?.();
@@ -34,22 +41,23 @@
 	class="flex flex-col gap-16"
 >
 	<FormAlert issues={savePin.fields.issues()} />
-	<PinPad
+	<PinInput
 		{...pinField}
 		label="New PIN (4 to 6 digits)"
 		bind:value={pin}
 	/>
-	<TextInput
-		{...savePin.fields._confirmPin.as('password')}
-		label="Confirm PIN"
-		inputmode="numeric"
-		autocomplete="off"
-	/>
+	<PinInput {...confirmField} label="Confirm PIN" bind:value={confirmPin} />
+	<p class="text-[13px] text-text-secondary">
+		If your kids use this device, don't let your browser save this PIN: a saved
+		PIN fills itself in for them.
+	</p>
 	{#if requirePassword}
+		<!-- Changing the PIN happens in the kid's profile, on their device, so a
+		     saved account password mustn't fill in here either. -->
 		<TextInput
 			{...savePin.fields._password.as('password')}
+			{...noPasswordManager}
 			label="Account password"
-			autocomplete="current-password"
 			required
 		/>
 	{/if}
