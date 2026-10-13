@@ -4,12 +4,14 @@ import type { Cookies } from '@sveltejs/kit';
 import { and, asc, eq, inArray, or } from 'drizzle-orm';
 import { dev } from '$app/env';
 import { getRequestEvent } from '$app/server';
+import type { SetupStatus } from '../setup.ts';
 import { db } from './drizzle.ts';
 import {
 	type MemberSummary,
 	type ProfileState,
 	resolveProfile,
 } from './profile-state.ts';
+import { loadSetupStatus } from './setup.ts';
 
 // Where the active profile lives (SB-51)
 //
@@ -131,40 +133,60 @@ async function findDeviceProfile(
 
 type RequestEvent = ReturnType<typeof getRequestEvent>;
 
-const cache = new WeakMap<
-	RequestEvent['locals'],
-	Promise<ProfileState | null>
->();
+interface Loaded {
+	state: ProfileState | null;
+	setup: SetupStatus | null;
+}
+
+const cache = new WeakMap<RequestEvent['locals'], Promise<Loaded>>();
+
+function load(event: RequestEvent): Promise<Loaded> {
+	let loaded = cache.get(event.locals);
+	if (!loaded) {
+		loaded = loadProfileState(event);
+		cache.set(event.locals, loaded);
+	}
+	return loaded;
+}
 
 /**
  * Who this request is acting as, or null when signed out or not in a
  * household yet. Resolved once per request. Throws if the database can't be
  * reached, so callers that gate on it fail closed.
  */
-export function getProfileState(): Promise<ProfileState | null> {
-	const event = getRequestEvent();
-	let state = cache.get(event.locals);
-	if (!state) {
-		state = loadProfileState(event);
-		cache.set(event.locals, state);
-	}
-	return state;
+export async function getProfileState(): Promise<ProfileState | null> {
+	return (await load(getRequestEvent())).state;
+}
+
+/** Forgets this request's cached profile and setup status, after a write changed them. */
+export function resetProfileCache() {
+	cache.delete(getRequestEvent().locals);
+}
+
+/**
+ * Whether this request's user still has to go through first-run setup (SB-56),
+ * loaded in the same round trip as the profile and cached with it. Null when
+ * signed out.
+ */
+export async function getSetupStatus(): Promise<SetupStatus | null> {
+	return (await load(getRequestEvent())).setup;
 }
 
 async function loadProfileState({
 	locals,
 	cookies,
-}: RequestEvent): Promise<ProfileState | null> {
+}: RequestEvent): Promise<Loaded> {
 	const { user, session } = locals;
-	if (!user) return null;
+	if (!user) return { state: null, setup: null };
 
 	const deviceId = cookies.get(DEVICE_COOKIE);
 	const deviceHash = deviceId ? hashDevice(deviceId) : null;
 	const sessionId = session?.id ?? null;
 
-	const [memberships, device] = await Promise.all([
+	const [memberships, device, setup] = await Promise.all([
 		loadMemberships(user.id),
 		findDeviceProfile(user.id, deviceHash, sessionId),
+		loadSetupStatus(user.id),
 	]);
 
 	const state = resolveProfile(
@@ -195,7 +217,7 @@ async function loadProfileState({
 			console.error('Could not refresh the device profile', error);
 		}
 	}
-	return state;
+	return { state, setup };
 }
 
 /**
