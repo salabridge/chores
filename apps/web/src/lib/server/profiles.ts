@@ -1,5 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { deviceProfiles, householdMembers, parentRoles } from '@chore/db';
+import {
+	deviceProfiles,
+	householdMembers,
+	type LandingRoute,
+	parentRoles,
+} from '@chore/db';
 import type { Cookies } from '@sveltejs/kit';
 import { and, asc, eq, inArray, or } from 'drizzle-orm';
 import { dev } from '$app/env';
@@ -119,6 +124,7 @@ async function findDeviceProfile(
 			deviceHash: deviceProfiles.deviceHash,
 			sessionId: deviceProfiles.sessionId,
 			activeMemberId: deviceProfiles.activeMemberId,
+			landingRoute: deviceProfiles.landingRoute,
 			activeMember: memberColumns,
 		})
 		.from(deviceProfiles)
@@ -136,6 +142,8 @@ type RequestEvent = ReturnType<typeof getRequestEvent>;
 interface Loaded {
 	state: ProfileState | null;
 	setup: SetupStatus | null;
+	/** The landing screen saved for this device (SB-57), if any. */
+	deviceLandingRoute: LandingRoute | null;
 }
 
 const cache = new WeakMap<RequestEvent['locals'], Promise<Loaded>>();
@@ -163,6 +171,11 @@ export function resetProfileCache() {
 	cache.delete(getRequestEvent().locals);
 }
 
+/** The landing screen saved for this device, or null when it has none (SB-57). */
+export async function getDeviceLandingRoute(): Promise<LandingRoute | null> {
+	return (await load(getRequestEvent())).deviceLandingRoute;
+}
+
 /**
  * Whether this request's user still has to go through first-run setup (SB-56),
  * loaded in the same round trip as the profile and cached with it. Null when
@@ -177,7 +190,7 @@ async function loadProfileState({
 	cookies,
 }: RequestEvent): Promise<Loaded> {
 	const { user, session } = locals;
-	if (!user) return { state: null, setup: null };
+	if (!user) return { state: null, setup: null, deviceLandingRoute: null };
 
 	const deviceId = cookies.get(DEVICE_COOKIE);
 	const deviceHash = deviceId ? hashDevice(deviceId) : null;
@@ -217,7 +230,11 @@ async function loadProfileState({
 			console.error('Could not refresh the device profile', error);
 		}
 	}
-	return { state, setup };
+	return {
+		state,
+		setup,
+		deviceLandingRoute: device?.landingRoute ?? null,
+	};
 }
 
 /**
@@ -226,30 +243,51 @@ async function loadProfileState({
  * rows, that the signed-in user may open that member (`canOpenKidProfile`).
  */
 export async function setActiveMember(memberId: string | null) {
+	const { event, values } = deviceRow();
+	await db
+		.insert(deviceProfiles)
+		.values({ ...values, activeMemberId: memberId })
+		.onConflictDoUpdate({
+			target: [deviceProfiles.deviceHash, deviceProfiles.userId],
+			set: { activeMemberId: memberId, sessionId: values.sessionId },
+		});
+	cache.delete(event.locals);
+}
+
+/**
+ * Saves where signing in opens on this device (SB-57), keeping whichever kid
+ * profile is active. The caller must already have checked the user is a parent
+ * and that `route` is one of the enum values.
+ */
+export async function setDeviceLandingRoute(route: LandingRoute) {
+	const { event, values } = deviceRow();
+	await db
+		.insert(deviceProfiles)
+		.values({ ...values, activeMemberId: null, landingRoute: route })
+		.onConflictDoUpdate({
+			target: [deviceProfiles.deviceHash, deviceProfiles.userId],
+			set: { landingRoute: route, sessionId: values.sessionId },
+		});
+	cache.delete(event.locals);
+}
+
+/** This device's `device_profiles` key for the signed-in user, issuing the device cookie if it has none. */
+function deviceRow() {
 	const event = getRequestEvent();
 	const { user, session } = event.locals;
-	if (!user) throw new Error('setActiveMember needs a signed-in user');
+	if (!user) throw new Error('A device row needs a signed-in user');
 
 	let deviceId = event.cookies.get(DEVICE_COOKIE);
 	if (!deviceId) {
 		deviceId = randomBytes(32).toString('base64url');
 		setDeviceCookie(event.cookies, deviceId);
 	}
-	const values = {
-		deviceHash: hashDevice(deviceId),
-		userId: user.id,
-		activeMemberId: memberId,
-		sessionId: session?.id ?? null,
+	return {
+		event,
+		values: {
+			deviceHash: hashDevice(deviceId),
+			userId: user.id,
+			sessionId: session?.id ?? null,
+		},
 	};
-	await db
-		.insert(deviceProfiles)
-		.values(values)
-		.onConflictDoUpdate({
-			target: [deviceProfiles.deviceHash, deviceProfiles.userId],
-			set: {
-				activeMemberId: values.activeMemberId,
-				sessionId: values.sessionId,
-			},
-		});
-	cache.delete(event.locals);
 }

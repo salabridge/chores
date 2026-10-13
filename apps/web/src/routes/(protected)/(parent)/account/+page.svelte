@@ -3,6 +3,7 @@
 	import AuthHeading from '#lib/components/auth/AuthHeading.svelte';
 	import AuthShell from '#lib/components/auth/AuthShell.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
+	import LandingRouteForm from '#lib/components/profiles/LandingRouteForm.svelte';
 	import Logo from '#lib/components/ui/Logo.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
@@ -60,6 +61,8 @@
 				Update password
 			</PrimaryButton>
 		</form>
+
+		<LandingRouteForm landingRoute={data.landingRoute} />
 
 		<form {...signOut}>
 			<button

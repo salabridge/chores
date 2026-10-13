@@ -1,6 +1,7 @@
 import { error, invalid, redirect } from '@sveltejs/kit';
 import { requireUser, verifyAccountPassword } from '#lib/server/auth.js';
 import { requireProfile } from '#lib/server/guards.js';
+import { getLandingPath } from '#lib/server/landing.js';
 import { hashPin, isValidPin } from '#lib/server/pin.js';
 import { checkPin, pinFailureMessage } from '#lib/server/pin-lock.js';
 import { pinStore, savePinHash } from '#lib/server/pin-store.js';
@@ -41,7 +42,7 @@ export const selectProfile = form(
 
 		if (data.memberId === actor.id) {
 			await setActiveMember(null);
-			redirect(303, '/today');
+			redirect(303, await getLandingPath());
 		}
 		const kid = await openableKid(actor, data.memberId);
 		if (!(await pinStore.get(actor.id))) {

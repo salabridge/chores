@@ -20,6 +20,12 @@ const config: StorybookConfig = {
 				),
 			},
 			{
+				find: /^#lib\/landing\.remote\.js$/,
+				replacement: fileURLToPath(
+					new URL('./mocks/landing-remote.ts', import.meta.url),
+				),
+			},
+			{
 				find: /^#lib\/setup\.remote\.js$/,
 				replacement: fileURLToPath(
 					new URL('./mocks/setup-remote.ts', import.meta.url),
