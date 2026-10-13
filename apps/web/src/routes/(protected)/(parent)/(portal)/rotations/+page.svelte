@@ -53,7 +53,7 @@
 		{#each data.loops as loop (loop.choreId)}
 			<RotationLoopCard
 				{loop}
-				editHref="/chores/new?edit={loop.choreId}"
+				editHref="/chores/{loop.choreId}/edit"
 				{onsave}
 				{onreset}
 			/>

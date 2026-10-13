@@ -19,6 +19,8 @@ export const MAX_STAGES = 12;
 export interface StageDraft {
 	/** Client-only key so reordering keeps each row's focus and text. */
 	key: string;
+	/** The saved stage's id when editing (SB-63); absent on stages added in the form. */
+	id?: string;
 	title: string;
 	hint: string;
 }
@@ -254,6 +256,66 @@ export function createInputError(input: CreateChoreInput): string | null {
 		null
 	);
 }
+
+/** A saved chore, as the edit form loads it (SB-63). */
+export interface EditableChore {
+	title: string;
+	description: string | null;
+	type: ChoreKind;
+	frequency: Frequency;
+	points: number;
+	assignedMemberId: string | null;
+	/** In position order. */
+	stages: { id: string; title: string; hint: string | null }[];
+}
+
+/** Loads a saved chore into the draft the form edits. Each stage keeps its id as its key. */
+export const choreToDraft = (chore: EditableChore): ChoreDraft => ({
+	title: chore.title,
+	note: chore.description ?? '',
+	kind: chore.type,
+	useStages: chore.stages.length > 0,
+	stages: chore.stages.map((s) => ({
+		key: s.id,
+		id: s.id,
+		title: s.title,
+		hint: s.hint ?? '',
+	})),
+	frequency: chore.frequency,
+	points: chore.points,
+	assigneeId: chore.type === 'personal' ? chore.assignedMemberId : null,
+});
+
+/**
+ * What the server accepts to save changes to a chore. Stages are a diff by id:
+ * a stage with an `id` is updated in place, one without is new, and a saved
+ * stage left out is removed. The order of the list is the new order.
+ */
+export interface UpdateChoreInput extends CreateChoreInput {
+	choreId: string;
+	/** The chore's `updated_at` when the form loaded, so a stale save is refused. */
+	updatedAt: string;
+	stages: { id: string | null; title: string; hint: string | null }[];
+}
+
+export const toUpdateInput = (
+	draft: ChoreDraft,
+	choreId: string,
+	updatedAt: string,
+): UpdateChoreInput => ({
+	...toCreateInput(draft),
+	choreId,
+	updatedAt,
+	stages: activeStages(draft).map((s) => ({
+		id: s.id ?? null,
+		title: s.title.trim(),
+		hint: s.hint.trim() || null,
+	})),
+});
+
+/** Shown when another parent saved first. */
+export const STALE_CHORE_MESSAGE =
+	'This chore was changed by someone else. Reload to see their changes.';
 
 /** The line under Rotation Preview. */
 export const rotationPreviewNote =

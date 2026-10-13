@@ -114,4 +114,99 @@ describe('ChoreSetupForm.svelte', () => {
 		await page.getByRole('button', { name: 'Create Chore' }).click();
 		await expect.element(page.getByText('Server said no.')).toBeVisible();
 	});
+
+	describe('edit mode', () => {
+		const saved = (over: Partial<ChoreDraft> = {}): ChoreDraft => ({
+			...exampleDraft(),
+			kind: 'personal',
+			title: 'Run Dishwasher',
+			assigneeId: 'leo',
+			stages: exampleDraft().stages.map((s, i) => ({ ...s, id: `s${i + 1}` })),
+			...over,
+		});
+		const edit = (draft: ChoreDraft, onsubmit = vi.fn()) => {
+			render(Host, {
+				draft,
+				members: householdMembers,
+				onsubmit,
+				cancelHref: '#',
+				mode: 'edit',
+			});
+			return onsubmit;
+		};
+
+		it('loads the current values and offers Save Changes', async () => {
+			edit(saved());
+			await expect
+				.element(page.getByLabelText('Chore Title'))
+				.toHaveValue('Run Dishwasher');
+			await expect
+				.element(page.getByLabelText('Stage 1 title'))
+				.toHaveValue('Clear the counter');
+			await expect
+				.element(page.getByRole('radio', { name: 'Leo' }))
+				.toBeChecked();
+			await expect
+				.element(page.getByRole('button', { name: 'Save Changes' }))
+				.toBeVisible();
+			expect(
+				page.getByRole('button', { name: 'Create Chore' }).elements(),
+			).toHaveLength(0);
+		});
+
+		it('shows the type read-only', async () => {
+			edit(saved());
+			await expect
+				.element(page.getByTestId('chore-kind'))
+				.toHaveTextContent('Personal Chore');
+			expect(
+				page.getByRole('radio', { name: 'Personal Chore' }).elements(),
+			).toHaveLength(0);
+			expect(
+				page.getByRole('radio', { name: 'Household Rotation' }).elements(),
+			).toHaveLength(0);
+		});
+
+		it('sends rotation membership to the Rotation Builder', async () => {
+			const onsubmit = edit(saved({ kind: 'rotation', assigneeId: null }));
+			await expect
+				.element(page.getByRole('link', { name: 'Open Rotations' }))
+				.toHaveAttribute('href', '/rotations');
+			expect(page.getByTestId('rotation-preview').elements()).toHaveLength(0);
+			await page.getByRole('button', { name: 'Save Changes' }).click();
+			await vi.waitFor(() => expect(onsubmit).toHaveBeenCalledOnce());
+			expect(onsubmit.mock.calls[0][0]).toMatchObject({ kind: 'rotation' });
+		});
+
+		it('submits the edits with the stage ids intact', async () => {
+			const onsubmit = edit(saved());
+			await page.getByLabelText('Chore Title').fill('Load Dishwasher');
+			await page.getByRole('button', { name: 'Move stage 2 up' }).click();
+			await page.getByRole('button', { name: 'Remove stage 3' }).click();
+			await page.getByRole('button', { name: 'Save Changes' }).click();
+			await vi.waitFor(() => expect(onsubmit).toHaveBeenCalledOnce());
+			const sent = onsubmit.mock.calls[0][0] as ChoreDraft;
+			expect(sent.title).toBe('Load Dishwasher');
+			expect(sent.stages.map((s) => s.id)).toEqual(['s2', 's1']);
+		});
+
+		it('shows the server message when the chore is stale', async () => {
+			const onsubmit = vi
+				.fn()
+				.mockRejectedValue(
+					new Error(
+						'This chore was changed by someone else. Reload to see their changes.',
+					),
+				);
+			edit(saved(), onsubmit);
+			await page.getByRole('button', { name: 'Save Changes' }).click();
+			await expect
+				.element(
+					page.getByText('This chore was changed by someone else.', {
+						exact: false,
+					}),
+				)
+				.toBeVisible();
+		});
+	});
 });

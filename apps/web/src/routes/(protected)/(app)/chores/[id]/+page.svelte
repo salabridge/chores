@@ -4,6 +4,7 @@
 	import PersonalChoreDetail from '#lib/components/chores/PersonalChoreDetail.svelte';
 	import RotationChoreDetail from '#lib/components/rotations/RotationChoreDetail.svelte';
 	import PageHeader from '#lib/components/shell/PageHeader.svelte';
+	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import { completeStage, completeTurn } from '#lib/rotation-detail.remote.js';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
@@ -45,12 +46,16 @@
 	}
 </script>
 
+{#snippet editAction()}
+	<SecondaryButton href="/chores/{id}/edit">Edit</SecondaryButton>
+{/snippet}
+
 <svelte:head><title>{(data.rotation ?? data.personal)?.title ?? 'Chore'} · ChoreLoop</title></svelte:head>
 
 {#if data.rotation}
-	<PageHeader label="Rotation Loop" />
+	<PageHeader label="Rotation Loop" actions={data.canEdit ? editAction : undefined} />
 	<RotationChoreDetail detail={data.rotation} {oncomplete} {oncompletestage} />
 {:else if data.personal}
-	<PageHeader label="Personal Chore" />
+	<PageHeader label="Personal Chore" actions={data.canEdit ? editAction : undefined} />
 	<PersonalChoreDetail detail={data.personal} onstagedone={() => invalidateAll()} />
 {/if}

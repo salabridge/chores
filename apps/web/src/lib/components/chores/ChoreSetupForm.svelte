@@ -44,6 +44,11 @@
 		cancelHref: string;
 		/** Saving or continuing is in flight from outside (e.g. the header button). */
 		pending?: boolean;
+		/**
+		 * `edit` changes a saved chore (SB-63): the type is shown read-only and a
+		 * rotation's members stay in the Rotation Builder.
+		 */
+		mode?: 'create' | 'edit';
 	}
 
 	let {
@@ -52,6 +57,7 @@
 		onsubmit,
 		cancelHref,
 		pending = false,
+		mode = 'create',
 	}: Props = $props();
 
 	let showErrors = $state(false);
@@ -63,6 +69,10 @@
 	const shown = $derived(showErrors ? errors : { stage: {} });
 	const busy = $derived(submitting || pending);
 	const isRotation = $derived(draft.kind === 'rotation');
+	const editing = $derived(mode === 'edit');
+	const submitLabel = $derived(
+		editing ? 'Save Changes' : isRotation ? 'Continue to Eligibility' : 'Create Chore',
+	);
 	const rotationNames = $derived(members.map((m) => m.name));
 
 	const issue = (message: string | undefined) =>
@@ -188,16 +198,28 @@
 				{isRotation ? 'Household rotation selected' : 'Personal chore selected'}
 			</Badge>
 		</div>
-		<OptionCardGroup label="Chore type" bind:value={() => draft.kind, setKind}>
-			<OptionCard value="personal" label="Personal Chore" icon={userIcon} />
-			<OptionCard value="rotation" label="Household Rotation" icon={loopIcon} />
-		</OptionCardGroup>
-		<Callout tone="info">
-			<span class="text-text-blue">
-				Personal chores belong to one child. Household rotations share the work across eligible
-				family members in a repeating loop.
-			</span>
-		</Callout>
+		{#if editing}
+			<p class="text-[14px] font-semibold text-text-primary" data-testid="chore-kind">
+				{isRotation ? 'Household Rotation' : 'Personal Chore'}
+			</p>
+			<Callout tone="info">
+				<span class="text-text-blue">
+					A chore's type can't be changed. To switch between a personal chore and a household
+					rotation, duplicate it as the other type.
+				</span>
+			</Callout>
+		{:else}
+			<OptionCardGroup label="Chore type" bind:value={() => draft.kind, setKind}>
+				<OptionCard value="personal" label="Personal Chore" icon={userIcon} />
+				<OptionCard value="rotation" label="Household Rotation" icon={loopIcon} />
+			</OptionCardGroup>
+			<Callout tone="info">
+				<span class="text-text-blue">
+					Personal chores belong to one child. Household rotations share the work across eligible
+					family members in a repeating loop.
+				</span>
+			</Callout>
+		{/if}
 	</section>
 
 	{@render divider()}
@@ -271,12 +293,19 @@
 			</h3>
 			<Badge tone="reachable">{isRotation ? 'Rotation chosen' : 'Individual chosen'}</Badge>
 		</div>
-		<OptionCardGroup label="Assignee type" accent="blue" bind:value={() => draft.kind, setKind}>
-			<OptionCard value="personal" label="Assign Individual" icon={userIcon} />
-			<OptionCard value="rotation" label="Household Rotation" icon={loopIcon} />
-		</OptionCardGroup>
+		{#if !editing}
+			<OptionCardGroup label="Assignee type" accent="blue" bind:value={() => draft.kind, setKind}>
+				<OptionCard value="personal" label="Assign Individual" icon={userIcon} />
+				<OptionCard value="rotation" label="Household Rotation" icon={loopIcon} />
+			</OptionCardGroup>
+		{/if}
 
-		{#if isRotation}
+		{#if isRotation && editing}
+			<p class="text-[13px] text-text-secondary" data-testid="rotation-members-note">
+				Members, exclusions and the turn order are managed in the Rotation Builder.
+				<a href="/rotations" class="font-semibold text-text-orange underline">Open Rotations</a>
+			</p>
+		{:else if isRotation}
 			<div class="flex flex-col gap-12 rounded-[12px] bg-surface-accent-base p-16" data-testid="rotation-preview">
 				<div class="flex items-center justify-between gap-12">
 					<h4 class="font-display text-[14px] font-semibold text-text-primary">Rotation Preview</h4>
@@ -320,13 +349,15 @@
 
 	<div class="flex flex-wrap items-center justify-between gap-16">
 		<p class="max-w-[280px] text-[13px] text-text-secondary">
-			You can still change frequency, points, and stages after the loop is created.
+			{editing
+				? 'Points apply to completions from now on. Points already earned stay as they are.'
+				: 'You can still change frequency, points, and stages after the loop is created.'}
 		</p>
 		<div class="flex items-center gap-12">
 			<SecondaryButton href={cancelHref}>Cancel</SecondaryButton>
 			<div class="w-[220px]">
 				<PrimaryButton type="submit" pending={busy}>
-					{isRotation ? 'Continue to Eligibility' : 'Create Chore'}
+					{submitLabel}
 				</PrimaryButton>
 			</div>
 		</div>
