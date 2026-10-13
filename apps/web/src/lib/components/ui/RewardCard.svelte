@@ -10,6 +10,8 @@
 		/** claimable: orange border + Claim button; claimed: Claimed pill; locked: disabled Claim. */
 		status?: 'claimable' | 'claimed' | 'locked';
 		onclaim?: () => void;
+		/** Makes Claim a link (e.g. to a confirmation step) instead of a button, so it works without JavaScript. */
+		claimHref?: string;
 		/** Overrides the default trailing action (Claimed pill / Claim button). */
 		action?: Snippet;
 	}
@@ -20,6 +22,7 @@
 		cost,
 		status = 'locked',
 		onclaim,
+		claimHref,
 		action,
 		class: className,
 		...rest
@@ -72,6 +75,12 @@
 		<span
 			class="shrink-0 rounded-[8px] bg-surface-accent-green-subtle px-10 py-6 text-[12px] font-semibold text-text-green"
 			>Claimed</span
+		>
+	{:else if claimHref && status === 'claimable'}
+		<a
+			href={claimHref}
+			class="shrink-0 rounded-[8px] bg-accent-orange px-10 py-6 text-[12px] font-semibold text-text-default transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-orange"
+			>Claim<span class="sr-only"> {title}</span></a
 		>
 	{:else}
 		<button
