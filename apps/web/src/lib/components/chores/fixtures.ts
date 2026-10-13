@@ -1,3 +1,4 @@
+import type { CompletionSummary } from '#lib/chore-completion.js';
 import type { MemberOption } from '#lib/chore-creator.js';
 import type { PersonalDetail } from '#lib/personal-detail.js';
 
@@ -73,4 +74,44 @@ export const roomDone: PersonalDetail = {
 	completedThisPeriod: true,
 	canComplete: false,
 	stages: roomDetail.stages.map((s) => ({ ...s, state: 'completed' as const })),
+};
+
+// Completion celebration screen (SB-42)
+
+const goal = (earned: number, target: number) => ({
+	earned,
+	goal: target,
+	remaining: Math.max(0, target - earned),
+	percent:
+		target <= 0 ? 100 : Math.min(100, Math.floor((earned / target) * 100)),
+	reached: earned >= target,
+});
+
+/** A shared rotation chore: the turn moved to Mia. */
+export const toiletCompletion: CompletionSummary = {
+	choreId: 'chore-toilet',
+	title: 'Clean Bathroom Toilet',
+	memberName: 'Leo',
+	points: 20,
+	totalPoints: 160,
+	rotation: { nextName: 'Mia', nextIsYou: false },
+	goal: goal(160, 200),
+};
+
+/** A personal chore: no rotation tags. */
+export const roomCompletion: CompletionSummary = {
+	...toiletCompletion,
+	choreId: 'chore-room',
+	title: 'Clean Your Room',
+	points: 15,
+	totalPoints: 135,
+	rotation: null,
+	goal: goal(135, 200),
+};
+
+/** The weekly goal is met. */
+export const goalReachedCompletion: CompletionSummary = {
+	...roomCompletion,
+	totalPoints: 215,
+	goal: goal(215, 200),
 };
