@@ -16,12 +16,17 @@
 	const items = [
 		{ href: '/overview', label: 'Overview', icon: 'grid' },
 		{ href: '/chores/new', label: 'Create & Assign', icon: 'plus' },
+		{ href: '/chores', label: 'Chores', icon: 'list' },
 		{ href: '/rotations', label: 'Rotation Builder', icon: 'refresh' },
 		{ href: '/rewards/manage', label: 'Rewards', icon: 'gift' },
 	] as const;
 
+	// `/chores/new` has its own item, so it must not light up Chores too.
 	const isActive = (href: string) =>
-		pathname === href || pathname.startsWith(`${href}/`);
+		href === '/chores'
+			? pathname === href ||
+				(pathname.startsWith(`${href}/`) && !pathname.startsWith('/chores/new'))
+			: pathname === href || pathname.startsWith(`${href}/`);
 
 	const label = $derived(parentLabel(parentNames));
 
@@ -107,6 +112,8 @@
 								{:else if item.icon === 'plus'}
 									<circle cx="12" cy="12" r="10" />
 									<path d="M8 12h8M12 8v8" />
+								{:else if item.icon === 'list'}
+									<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
 								{:else if item.icon === 'gift'}
 									<rect width="18" height="4" x="3" y="8" rx="1" />
 									<path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
