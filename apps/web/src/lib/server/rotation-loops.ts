@@ -5,7 +5,7 @@ import {
 	householdMembers,
 } from '@chore/db';
 import { nextEligibleMember } from '@chore/db/rotation';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import {
 	type RotationLoop,
 	type SaveLoopInput,
@@ -49,7 +49,11 @@ export async function listRotationLoops(
 			),
 		)
 		.where(
-			and(eq(chores.householdId, householdId), eq(chores.type, 'rotation')),
+			and(
+				eq(chores.householdId, householdId),
+				eq(chores.type, 'rotation'),
+				isNull(chores.archivedAt),
+			),
 		)
 		.orderBy(asc(chores.createdAt), asc(chores.id));
 

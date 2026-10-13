@@ -79,7 +79,9 @@ export async function householdStreaks(
 					createdAt: chores.createdAt,
 				})
 				.from(chores)
-				.where(eq(chores.householdId, householdId)),
+				.where(
+					and(eq(chores.householdId, householdId), isNull(chores.archivedAt)),
+				),
 			tx
 				.select({
 					id: choreInstances.id,

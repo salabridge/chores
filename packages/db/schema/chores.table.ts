@@ -85,6 +85,14 @@ export const chores = pgTable(
 		dueAt: timestamp('due_at', { withTimezone: true }),
 		/** Legacy; see `dueAt`. */
 		completedAt: timestamp('completed_at', { withTimezone: true }),
+		/**
+		 * Set when a parent archives the chore (SB-61). An archived chore is hidden
+		 * everywhere chores are done or listed for doing, and nothing about it is
+		 * deleted: completions, ledger rows and rotation state stay, so restoring
+		 * (back to null) picks up where it left off. A chore with no completions
+		 * can be hard-deleted instead.
+		 */
+		archivedAt: timestamp('archived_at', { withTimezone: true }),
 		createdAt: timestamp('created_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),

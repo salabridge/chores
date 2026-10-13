@@ -127,6 +127,13 @@
 			"when": 1791758955396,
 			"tag": "0017_landing_route",
 			"breakpoints": true
+		},
+		{
+			"idx": 18,
+			"version": "7",
+			"when": 1791909448808,
+			"tag": "0018_chores_archived_at",
+			"breakpoints": true
 		}
 	]
 }

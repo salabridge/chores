@@ -182,6 +182,17 @@ composite foreign keys, for example `(chore_id, household_id)` references
 `app.is_household_member(household_id)` check like `chores`, and stops a stage
 from one chore being checked off on another chore's instance.
 
+### Archiving and deleting (SB-61)
+
+- **Archive** is how a chore is removed: `chores.archived_at` is set and the
+  chore is hidden from Today, kid chore detail, Overview, Rotations, skips and
+  reminders (the web reads filter on `archived_at is null`). Nothing else is
+  touched, so completions, ledger rows and a rotation's `chore_rotations` row
+  stay, and **restore** (back to null) resumes the loop from the next period.
+- **Delete** is only for a chore with no `chore_completions` rows. The check is
+  in the `DELETE`'s own `where not exists (...)`, not a read beforehand.
+- Streaks ignore an archived chore, so archiving doesn't leave "missed" days.
+
 ### Recurrence
 
 **Decision: one `chore_instances` row per chore per period, created lazily.
