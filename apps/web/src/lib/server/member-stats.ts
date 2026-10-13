@@ -1,0 +1,42 @@
+import { pointsLedger } from '@chore/db';
+import { householdStreaks } from '@chore/db/household-streaks';
+import type { AuthenticatedTx } from '@chore/db/rls';
+import { SCREEN_STREAK_LOOKBACK_DAYS, type Streak } from '@chore/db/streaks';
+import { eq, sql } from 'drizzle-orm';
+import { db } from './drizzle.ts';
+
+// A member's points balance and personal streak, for any screen that shows
+// them (the Today header, the Rewards shop, the Streak tab). As in chores.ts
+// the web app is the table owner, so RLS doesn't apply: callers pass the
+// member of their own profile (`getCurrentMember()`), never an id from input.
+
+/** A member's points: the sum of their ledger rows. */
+export async function memberPointsBalance(memberId: string): Promise<number> {
+	const [row] = await db
+		.select({
+			total: sql<number>`coalesce(sum(${pointsLedger.delta}), 0)::int`,
+		})
+		.from(pointsLedger)
+		.where(eq(pointsLedger.memberId, memberId));
+	return row?.total ?? 0;
+}
+
+/**
+ * A member's current streak (SB-28), counted in the household's time zone.
+ * Reuses `householdStreaks()`, which was written for an RLS transaction; it
+ * only issues plain `select`s, which the owner client runs the same way, so
+ * the cast is safe and keeps the streak rules in one place. The walk is
+ * capped at `SCREEN_STREAK_LOOKBACK_DAYS`, so a longer streak shows as that.
+ */
+export async function memberStreak(
+	household: { id: string },
+	memberId: string,
+	now: Date = new Date(),
+): Promise<Streak> {
+	const streaks = await householdStreaks(
+		db as unknown as AuthenticatedTx,
+		household.id,
+		{ now, lookbackDays: SCREEN_STREAK_LOOKBACK_DAYS },
+	);
+	return streaks.members[memberId] ?? { days: 0, exceptions: 0 };
+}

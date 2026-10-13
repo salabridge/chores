@@ -39,6 +39,12 @@ export interface Streak {
 export const DEFAULT_STREAK_LOOKBACK_DAYS = 365;
 
 /**
+ * The shorter walk for screens that load a streak on every visit (Today, the
+ * Rewards shop). Shared so they can't show the same member different numbers.
+ */
+export const SCREEN_STREAK_LOOKBACK_DAYS = 120;
+
+/**
  * The day a chore is due for the period starting `periodStart`. Weekly
  * chores are due by Sunday; the others on their day.
  */
