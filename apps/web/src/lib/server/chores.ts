@@ -23,7 +23,7 @@ import {
 	type CreateRotationChoreInput,
 	rotationInputError,
 } from '../chore-eligibility.ts';
-import { archiveStatement } from './chore-archive.ts';
+import { archiveOrFailStatement, isArchiveMiss } from './chore-archive.ts';
 import { db } from './drizzle.ts';
 import { householdToday } from './household-today.ts';
 
@@ -55,12 +55,12 @@ export async function listHouseholdMembers(householdId: string) {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * The statement that archives the chore a "Duplicate as…" copy replaces (SB-64),
- * to go last in the create's batch so both commit or neither does. The chore
- * is checked first, because an UPDATE that matches nothing doesn't fail the
- * batch: a missing, foreign or already archived source refuses the whole save.
- * The statement is wrapped because an async function would await it, and a
- * query builder runs when awaited.
+ * The statement that archives the chore a "Duplicate as…" copy replaces (SB-64).
+ * It goes FIRST in the create's batch and fails the batch when it archives
+ * nothing, so the batch is the source of truth: if the original is archived or
+ * deleted after the read here, nothing is written. The read only gives an
+ * early, friendly error. The statement is wrapped because an async function
+ * would await it, and a query builder runs when awaited.
  */
 async function archiveOriginal(householdId: string, sourceId: string) {
 	const [source] = UUID.test(sourceId)
@@ -75,12 +75,26 @@ async function archiveOriginal(householdId: string, sourceId: string) {
 					),
 				)
 		: [];
-	if (!source) {
-		throw new ChoreError(
-			'The chore you are replacing was not found, or is already archived.',
-		);
+	if (!source) throw originalGone();
+	return { statement: archiveOrFailStatement(householdId, source.id) };
+}
+
+const originalGone = () =>
+	new ChoreError(
+		'The chore you are replacing was not found, or is already archived.',
+	);
+
+/** Runs the create's batch, turning a missed archive into the "original is gone" message. */
+async function runBatch(
+	run: () => Promise<unknown>,
+	archive: object | null,
+): Promise<void> {
+	try {
+		await run();
+	} catch (e) {
+		if (archive && isArchiveMiss(e)) throw originalGone();
+		throw e;
 	}
-	return { statement: archiveStatement(householdId, source.id) };
 }
 
 /**
@@ -139,11 +153,13 @@ export async function createPersonalChore(
 			points: 0,
 		}),
 	);
-	await db.batch([
-		insertChore,
-		...insertStages,
-		...(archive ? [archive.statement] : []),
-	]);
+	await runBatch(
+		() =>
+			archive
+				? db.batch([archive.statement, insertChore, ...insertStages])
+				: db.batch([insertChore, ...insertStages]),
+		archive,
+	);
 	return { id };
 }
 
@@ -224,13 +240,24 @@ export async function createRotationChore(
 			exclusionReason: m.eligible ? null : (m.exclusionReason?.trim() ?? null),
 		})),
 	);
-	await db.batch([
-		insertChore,
-		...insertStages,
-		insertRotation,
-		insertMembers,
-		...(archive ? [archive.statement] : []),
-	]);
+	await runBatch(
+		() =>
+			archive
+				? db.batch([
+						archive.statement,
+						insertChore,
+						...insertStages,
+						insertRotation,
+						insertMembers,
+					])
+				: db.batch([
+						insertChore,
+						...insertStages,
+						insertRotation,
+						insertMembers,
+					]),
+		archive,
+	);
 	return { id };
 }
 

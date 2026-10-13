@@ -56,6 +56,34 @@ export const archiveStatement = (householdId: string, choreId: string) =>
 		)
 		.returning({ id: chores.id });
 
+/**
+ * Archives a chore as the FIRST statement of a batch and fails the whole batch
+ * (a transaction) when it matches nothing, so whatever follows is written only
+ * if the chore was archived by this very statement. The count is zero when the
+ * chore is missing, foreign or already archived, and `1 / 0` raises
+ * division_by_zero (22012). A plain UPDATE that matches no row doesn't fail
+ * a batch, and a read beforehand can go stale before the batch commits.
+ */
+export const archiveOrFailStatement = (householdId: string, choreId: string) =>
+	db.execute(sql`
+		with archived as (
+			update chores set archived_at = now()
+			where id = ${choreId}::uuid
+				and household_id = ${householdId}::uuid
+				and archived_at is null
+			returning id
+		)
+		select 1 / (select count(*) from archived) as archived`);
+
+/** Whether a batch failed because `archiveOrFailStatement` matched no chore. */
+export const isArchiveMiss = (e: unknown): boolean => {
+	for (let err = e as { code?: unknown; cause?: unknown } | undefined; err; ) {
+		if (err.code === '22012') return true;
+		err = err.cause as typeof err;
+	}
+	return false;
+};
+
 /** Hides a chore everywhere it's done. Its history and points are untouched. */
 export async function archiveChore(
 	householdId: string,

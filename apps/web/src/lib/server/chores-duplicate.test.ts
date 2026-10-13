@@ -25,11 +25,7 @@ const mocks = vi.hoisted(() => {
 		insert: (table: unknown) => ({
 			values: () => ({ kind: 'insert', table }),
 		}),
-		update: (table: unknown) => ({
-			set: () => ({
-				where: () => ({ returning: () => ({ kind: 'archive', table }) }),
-			}),
-		}),
+		execute: () => ({ kind: 'archive' }),
 		batch: vi.fn(async (_q: unknown[]) => []),
 	};
 	return { db };
@@ -64,20 +60,19 @@ beforeEach(() => {
 });
 
 describe('createPersonalChore with an original to archive', () => {
-	it('archives it last, in the same batch as the inserts', async () => {
+	it('archives it first, in the same batch as the inserts', async () => {
 		mocks.db.queue.push([{ id: 'mia' }], [{ id: SOURCE }]);
 		await createPersonalChore(actor, personalInput(SOURCE));
 		expect(mocks.db.batch).toHaveBeenCalledTimes(1);
 		expect(sent().map((q) => q.kind)).toEqual([
-			'insert',
-			'insert',
-			'insert',
-			'insert',
 			'archive',
+			'insert',
+			'insert',
+			'insert',
+			'insert',
 		]);
-		expect(sent()[0].table).toBe(chores);
-		expect(sent()[1].table).toBe(choreStages);
-		expect(sent()[4].table).toBe(chores);
+		expect(sent()[1].table).toBe(chores);
+		expect(sent()[2].table).toBe(choreStages);
 	});
 
 	it('sends nothing, archives nothing, when the original is missing or archived', async () => {
@@ -109,6 +104,24 @@ describe('createPersonalChore with an original to archive', () => {
 		expect(mocks.db.batch).not.toHaveBeenCalled();
 	});
 
+	it('refuses with the same message when the original is archived after the check', async () => {
+		// The read finds the original, then the batch's own archive matches no row
+		// (archived or deleted in between): the database aborts the whole batch
+		// with division_by_zero, so none of the inserts were written.
+		mocks.db.queue.push([{ id: 'mia' }], [{ id: SOURCE }]);
+		mocks.db.batch.mockRejectedValueOnce(
+			Object.assign(new Error('Failed query'), {
+				cause: Object.assign(new Error('division by zero'), { code: '22012' }),
+			}),
+		);
+		await expect(
+			createPersonalChore(actor, personalInput(SOURCE)),
+		).rejects.toThrow(
+			'The chore you are replacing was not found, or is already archived.',
+		);
+		expect(sent()[0].kind).toBe('archive');
+	});
+
 	it('a failing batch propagates (the database rolls it back as a whole)', async () => {
 		mocks.db.queue.push([{ id: 'mia' }], [{ id: SOURCE }]);
 		mocks.db.batch.mockRejectedValueOnce(new Error('insert failed'));
@@ -124,12 +137,12 @@ describe('createRotationChore with an original to archive', () => {
 		archiveSourceId,
 	});
 
-	it('archives it last, in the same batch', async () => {
+	it('archives it first, in the same batch', async () => {
 		mocks.db.queue.push(household, [{ id: SOURCE }]);
 		await createRotationChore(actor, rotationInput(SOURCE));
 		expect(mocks.db.batch).toHaveBeenCalledTimes(1);
 		const kinds = sent().map((q) => q.kind);
-		expect(kinds.at(-1)).toBe('archive');
+		expect(kinds[0]).toBe('archive');
 		expect(kinds.filter((k) => k === 'archive')).toHaveLength(1);
 	});
 
