@@ -12,8 +12,8 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ params }) => {
 	const state = await requireProfile();
 	const { member } = state;
-	// A parent's own view, not a kid profile they have opened: the edit page
-	// rejects anything else, so don't offer the button.
+	// A parent's own view, not a kid profile they have opened: the edit and
+	// duplicate pages reject anything else, so don't offer either.
 	const canEdit = state.mode === 'self' && isParentRole(member.role);
 	const rotation = await loadRotationDetail(member, params.id);
 	if (rotation === undefined) error(404, 'Chore not found');

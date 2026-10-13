@@ -23,6 +23,7 @@ import {
 	type CreateRotationChoreInput,
 	rotationInputError,
 } from '../chore-eligibility.ts';
+import { archiveStatement } from './chore-archive.ts';
 import { db } from './drizzle.ts';
 import { householdToday } from './household-today.ts';
 
@@ -51,8 +52,40 @@ export async function listHouseholdMembers(householdId: string) {
 		.orderBy(asc(householdMembers.joinedAt), asc(householdMembers.id));
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Creates a personal chore and its stages in one batch (one transaction).
+ * The statement that archives the chore a "Duplicate as…" copy replaces (SB-64),
+ * to go last in the create's batch so both commit or neither does. The chore
+ * is checked first, because an UPDATE that matches nothing doesn't fail the
+ * batch: a missing, foreign or already archived source refuses the whole save.
+ * The statement is wrapped because an async function would await it, and a
+ * query builder runs when awaited.
+ */
+async function archiveOriginal(householdId: string, sourceId: string) {
+	const [source] = UUID.test(sourceId)
+		? await db
+				.select({ id: chores.id })
+				.from(chores)
+				.where(
+					and(
+						eq(chores.id, sourceId),
+						eq(chores.householdId, householdId),
+						isNull(chores.archivedAt),
+					),
+				)
+		: [];
+	if (!source) {
+		throw new ChoreError(
+			'The chore you are replacing was not found, or is already archived.',
+		);
+	}
+	return { statement: archiveStatement(householdId, source.id) };
+}
+
+/**
+ * Creates a personal chore and its stages in one batch (one transaction), plus
+ * the archive of `input.archiveSourceId` when a duplicate replaces its original.
  * Household rotations go through `createRotationChore`, which also writes the
  * rotation and its members, so they are refused here.
  */
@@ -79,6 +112,10 @@ export async function createPersonalChore(
 		);
 	if (!assignee) throw new ChoreError('Choose a member of this household.');
 
+	const archive = input.archiveSourceId
+		? await archiveOriginal(actor.householdId, input.archiveSourceId)
+		: null;
+
 	const id = crypto.randomUUID();
 	const insertChore = db.insert(chores).values({
 		id,
@@ -102,7 +139,11 @@ export async function createPersonalChore(
 			points: 0,
 		}),
 	);
-	await db.batch([insertChore, ...insertStages]);
+	await db.batch([
+		insertChore,
+		...insertStages,
+		...(archive ? [archive.statement] : []),
+	]);
 	return { id };
 }
 
@@ -114,7 +155,8 @@ export async function createPersonalChore(
  * unique positions, and the turn on an eligible member), and the rotation's
  * `current_member_id` foreign key is deferred, so the rows can go in this
  * order. The first eligible member in the order gets the first turn. The
- * scope is Whole Household unless someone is excluded.
+ * scope is Whole Household unless someone is excluded. As for a personal
+ * chore, `input.archiveSourceId` archives the original in the same batch.
  */
 export async function createRotationChore(
 	actor: { householdId: string; userId: string | null },
@@ -137,6 +179,10 @@ export async function createRotationChore(
 			'rotationInputError passed a rotation with no eligible member',
 		);
 	}
+
+	const archive = input.archiveSourceId
+		? await archiveOriginal(actor.householdId, input.archiveSourceId)
+		: null;
 
 	const id = crypto.randomUUID();
 	const insertChore = db.insert(chores).values({
@@ -178,7 +224,13 @@ export async function createRotationChore(
 			exclusionReason: m.eligible ? null : (m.exclusionReason?.trim() ?? null),
 		})),
 	);
-	await db.batch([insertChore, ...insertStages, insertRotation, insertMembers]);
+	await db.batch([
+		insertChore,
+		...insertStages,
+		insertRotation,
+		insertMembers,
+		...(archive ? [archive.statement] : []),
+	]);
 	return { id };
 }
 

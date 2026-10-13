@@ -28,7 +28,7 @@ const notFound = () => new ChoreArchiveError('That chore was not found.', 404);
 
 const hasBeenCompleted = () =>
 	new ChoreArchiveError(
-		'This chore has been completed, so it can’t be deleted. Archive it instead.',
+		'This chore has been completed, so it canâ€™t be deleted. Archive it instead.',
 		409,
 	);
 
@@ -42,12 +42,9 @@ function isForeignKeyViolation(err: unknown): boolean {
 	return false;
 }
 
-/** Hides a chore everywhere it's done. Its history and points are untouched. */
-export async function archiveChore(
-	householdId: string,
-	choreId: string,
-): Promise<void> {
-	const archived = await db
+/** The UPDATE that archives a chore, unexecuted so it can join a batch. */
+export const archiveStatement = (householdId: string, choreId: string) =>
+	db
 		.update(chores)
 		.set({ archivedAt: new Date() })
 		.where(
@@ -58,6 +55,13 @@ export async function archiveChore(
 			),
 		)
 		.returning({ id: chores.id });
+
+/** Hides a chore everywhere it's done. Its history and points are untouched. */
+export async function archiveChore(
+	householdId: string,
+	choreId: string,
+): Promise<void> {
+	const archived = await archiveStatement(householdId, choreId);
 	if (archived.length === 0) throw notFound();
 }
 
