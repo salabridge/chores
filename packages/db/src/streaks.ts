@@ -205,6 +205,12 @@ export interface StreakChore {
 	/** `chores.assigned_member_id`; used when a period has no instance row. */
 	assignedMemberId: string | null;
 	createdAt: Date;
+	/**
+	 * When a parent archived the chore (SB-61), or null/absent while it's live.
+	 * It counts for days before that, so archiving never shrinks history, and
+	 * stops creating "missed" days from then on.
+	 */
+	archivedAt?: Date | null;
 }
 
 export interface StreakInstance {
@@ -230,6 +236,8 @@ export interface StreakCompletion {
  * - Otherwise it's *missed*, including a period nobody touched (no instance
  *   row), which belongs to the chore's assignee. A rotation chore with no
  *   instance has no known turn-holder, so it's left out.
+ * - An archived chore counts for periods due before its archive date, and
+ *   on that date only if it was done; later periods are left out.
  * - Weekly chores are due on the period's Sunday, so they appear once that
  *   day arrives; weekends chores only on Saturdays and Sundays.
  */
@@ -255,12 +263,16 @@ export function resolveDueChores(input: {
 	const out: DueChore[] = [];
 	for (const chore of input.chores) {
 		const createdDate = localDate(timeZone, chore.createdAt);
+		const archivedDate = chore.archivedAt
+			? localDate(timeZone, chore.archivedAt)
+			: null;
 		for (const [start, due] of duePeriods(
 			chore.frequency,
 			createdDate,
 			from,
 			today,
 		)) {
+			if (archivedDate !== null && due > archivedDate) continue;
 			const instance = instanceByPeriod.get(`${chore.id}|${start}`);
 			const memberId = instance
 				? instance.assignedMemberId
@@ -276,6 +288,8 @@ export function resolveDueChores(input: {
 			) {
 				outcome = 'done';
 			}
+			// Archived that very day: keep what was done, drop what wasn't.
+			if (due === archivedDate && outcome !== 'done') continue;
 			out.push({ memberId, date: due, outcome });
 		}
 	}

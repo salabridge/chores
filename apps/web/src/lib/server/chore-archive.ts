@@ -26,6 +26,22 @@ export class ChoreArchiveError extends Error {
 
 const notFound = () => new ChoreArchiveError('That chore was not found.', 404);
 
+const hasBeenCompleted = () =>
+	new ChoreArchiveError(
+		'This chore has been completed, so it can’t be deleted. Archive it instead.',
+		409,
+	);
+
+/** Whether `err` (or a wrapped cause) is a foreign key violation, SQLSTATE 23503. */
+function isForeignKeyViolation(err: unknown): boolean {
+	let e: unknown = err;
+	while (e instanceof Error) {
+		if ((e as { code?: unknown }).code === '23503') return true;
+		e = e.cause;
+	}
+	return false;
+}
+
 /** Hides a chore everywhere it's done. Its history and points are untouched. */
 export async function archiveChore(
 	householdId: string,
@@ -70,25 +86,39 @@ export async function restoreChore(
 
 /**
  * Permanently deletes a chore that has never been completed (the "made a
- * mistake" escape hatch). The no-completions check is part of the DELETE
- * statement itself, not a read beforehand, so a completion recorded in
- * between can't slip past it. When nothing is deleted, a second read tells
- * "doesn't exist" from "has been completed" for the message.
+ * mistake" escape hatch). Two checks, because a statement only sees what was
+ * committed when it started:
+ *
+ * - The DELETE's own `not exists (completions)` skips a chore that already has
+ *   one, without raising.
+ * - The database enforces the rest. `chore_completions` references
+ *   `chore_instances` and `chores` with NO ACTION (migration 0019), so a
+ *   completion that commits while the DELETE runs makes it fail with 23503
+ *   instead of cascading away.
+ *
+ * Either way a completed chore is refused with the same message. When nothing
+ * is deleted, a second read tells "doesn't exist" from "has been completed".
  */
 export async function deleteChore(
 	householdId: string,
 	choreId: string,
 ): Promise<void> {
-	const deleted = await db
-		.delete(chores)
-		.where(
-			and(
-				eq(chores.id, choreId),
-				eq(chores.householdId, householdId),
-				sql`not exists (select 1 from ${choreCompletions} where ${choreCompletions.choreId} = ${chores.id})`,
-			),
-		)
-		.returning({ id: chores.id });
+	let deleted: { id: string }[];
+	try {
+		deleted = await db
+			.delete(chores)
+			.where(
+				and(
+					eq(chores.id, choreId),
+					eq(chores.householdId, householdId),
+					sql`not exists (select 1 from ${choreCompletions} where ${choreCompletions.choreId} = ${chores.id})`,
+				),
+			)
+			.returning({ id: chores.id });
+	} catch (e) {
+		if (isForeignKeyViolation(e)) throw hasBeenCompleted();
+		throw e;
+	}
 	if (deleted.length > 0) return;
 
 	const [chore] = await db
@@ -96,8 +126,5 @@ export async function deleteChore(
 		.from(chores)
 		.where(and(eq(chores.id, choreId), eq(chores.householdId, householdId)));
 	if (!chore) throw notFound();
-	throw new ChoreArchiveError(
-		'This chore has been completed, so it canâ€™t be deleted. Archive it instead.',
-		409,
-	);
+	throw hasBeenCompleted();
 }

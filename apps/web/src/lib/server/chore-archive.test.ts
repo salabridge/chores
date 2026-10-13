@@ -5,14 +5,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // off a queue (one per query, in the order the code issues them); the
 // statement kind and its where clause are recorded.
 const mocks = vi.hoisted(() => {
-	const queue: unknown[][] = [];
+	// A queued Error is thrown when the statement is awaited.
+	const queue: (unknown[] | Error)[] = [];
 	const statements: { kind: string; set?: unknown; where?: unknown }[] = [];
 	const builder = (kind: string) => {
 		const record: { kind: string; set?: unknown; where?: unknown } = { kind };
 		statements.push(record);
 		const chain: Record<string, unknown> = {
 			// biome-ignore lint/suspicious/noThenProperty: drizzle query builders are awaitable
-			then: (resolve: (v: unknown) => void) => resolve(queue.shift() ?? []),
+			then: (resolve: (v: unknown) => void, reject: (e: unknown) => void) => {
+				const next = queue.shift() ?? [];
+				if (next instanceof Error) reject(next);
+				else resolve(next);
+			},
 			set: (v: unknown) => {
 				record.set = v;
 				return chain;
@@ -138,6 +143,27 @@ describe('deleteChore', () => {
 			status: 409,
 		});
 		expect(mocks.statements.map((s) => s.kind)).toEqual(['delete', 'select']);
+	});
+
+	it('is refused when the database rejects the delete (a completion committed mid-statement)', async () => {
+		// The NOT EXISTS subquery missed an in-flight completion; the NO ACTION
+		// foreign keys catch it, and the driver may wrap the error.
+		const fk = Object.assign(new Error('violates foreign key constraint'), {
+			code: '23503',
+		});
+		mocks.queue.push(new Error('Failed query', { cause: fk }));
+		await expect(deleteChore('h1', CHORE_ID)).rejects.toMatchObject({
+			status: 409,
+			message: expect.stringMatching(/Archive it instead/),
+		});
+		expect(mocks.statements.map((s) => s.kind)).toEqual(['delete']);
+	});
+
+	it('rethrows any other database error', async () => {
+		mocks.queue.push(new Error('connection reset'));
+		await expect(deleteChore('h1', CHORE_ID)).rejects.toThrow(
+			'connection reset',
+		);
 	});
 
 	it('is a 404 for a chore that does not exist in the household', async () => {

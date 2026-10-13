@@ -189,9 +189,18 @@ from one chore being checked off on another chore's instance.
   reminders (the web reads filter on `archived_at is null`). Nothing else is
   touched, so completions, ledger rows and a rotation's `chore_rotations` row
   stay, and **restore** (back to null) resumes the loop from the next period.
-- **Delete** is only for a chore with no `chore_completions` rows. The check is
-  in the `DELETE`'s own `where not exists (...)`, not a read beforehand.
-- Streaks ignore an archived chore, so archiving doesn't leave "missed" days.
+- **Delete** is only for a chore with no `chore_completions` rows. The
+  `DELETE` has a `where not exists (...)` for the common case, and the database
+  enforces the rest: `chore_completions_instance_fk` and
+  `chore_completions_chore_fk` are NO ACTION (migration `0019`), so a completion
+  that commits while the `DELETE` runs makes it fail with `23503`, which the web
+  app reports as "archive it instead". Deleting a household still works (its own
+  cascade removes the completions first), and a never-completed chore still
+  cascades to its instances, stage progress, skips and reminders.
+- Streaks keep an archived chore for days before `archived_at` (and the archive
+  day itself if it was done), then stop counting it, so archiving never shrinks
+  history or adds "missed" days. Restoring counts it again from then on; days
+  it was archived are not excused, so they show as missed once restored.
 
 ### Recurrence
 
