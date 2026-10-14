@@ -204,6 +204,8 @@ export interface CreateChoreInput {
 	points: number;
 	assigneeId: string | null;
 	stages: { title: string; hint: string | null }[];
+	/** A chore this one replaces ("Duplicate as…", SB-64); archived in the same transaction as the create. */
+	archiveSourceId?: string | null;
 }
 
 export function toCreateInput(draft: ChoreDraft): CreateChoreInput {

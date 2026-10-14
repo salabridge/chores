@@ -172,3 +172,13 @@ describe('deleteChore', () => {
 		expect((e as { status: number; message: string }).status).toBe(404);
 	});
 });
+
+describe('isArchiveMiss', () => {
+	it('recognises division_by_zero, bare or as a cause', async () => {
+		const { isArchiveMiss } = await import('./chore-archive.ts');
+		expect(isArchiveMiss({ code: '22012' })).toBe(true);
+		expect(isArchiveMiss({ cause: { code: '22012' } })).toBe(true);
+		expect(isArchiveMiss(new Error('other'))).toBe(false);
+		expect(isArchiveMiss(undefined)).toBe(false);
+	});
+});

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { isHttpError } from '@sveltejs/kit';
 	import { completionHref } from '#lib/chore-completion.js';
+	import { duplicateHref } from '#lib/chore-duplicate.js';
 	import PersonalChoreDetail from '#lib/components/chores/PersonalChoreDetail.svelte';
 	import RotationChoreDetail from '#lib/components/rotations/RotationChoreDetail.svelte';
 	import PageHeader from '#lib/components/shell/PageHeader.svelte';
@@ -58,4 +59,14 @@
 {:else if data.personal}
 	<PageHeader label="Personal Chore" actions={data.canEdit ? editAction : undefined} />
 	<PersonalChoreDetail detail={data.personal} onstagedone={() => invalidateAll()} />
+{/if}
+
+{#if data.canEdit}
+	<nav aria-label="Duplicate this chore" class="flex flex-wrap items-center gap-12 px-24 pb-24 text-[14px] font-semibold text-text-orange">
+		<span class="text-text-secondary">Duplicate as…</span>
+		<a href={duplicateHref(id, data.rotation ? 'personal' : 'rotation')}>
+			{data.rotation ? 'Personal chore' : 'Rotation'}
+		</a>
+		<a href={duplicateHref(id)}>Same kind</a>
+	</nav>
 {/if}

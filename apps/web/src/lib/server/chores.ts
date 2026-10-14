@@ -23,6 +23,7 @@ import {
 	type CreateRotationChoreInput,
 	rotationInputError,
 } from '../chore-eligibility.ts';
+import { archiveOrFailStatement, isArchiveMiss } from './chore-archive.ts';
 import { db } from './drizzle.ts';
 import { householdToday } from './household-today.ts';
 
@@ -51,8 +52,54 @@ export async function listHouseholdMembers(householdId: string) {
 		.orderBy(asc(householdMembers.joinedAt), asc(householdMembers.id));
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Creates a personal chore and its stages in one batch (one transaction).
+ * The statement that archives the chore a "Duplicate as…" copy replaces (SB-64).
+ * It goes FIRST in the create's batch and fails the batch when it archives
+ * nothing, so the batch is the source of truth: if the original is archived or
+ * deleted after the read here, nothing is written. The read only gives an
+ * early, friendly error. The statement is wrapped because an async function
+ * would await it, and a query builder runs when awaited.
+ */
+async function archiveOriginal(householdId: string, sourceId: string) {
+	const [source] = UUID.test(sourceId)
+		? await db
+				.select({ id: chores.id })
+				.from(chores)
+				.where(
+					and(
+						eq(chores.id, sourceId),
+						eq(chores.householdId, householdId),
+						isNull(chores.archivedAt),
+					),
+				)
+		: [];
+	if (!source) throw originalGone();
+	return { statement: archiveOrFailStatement(householdId, source.id) };
+}
+
+const originalGone = () =>
+	new ChoreError(
+		'The chore you are replacing was not found, or is already archived.',
+	);
+
+/** Runs the create's batch, turning a missed archive into the "original is gone" message. */
+async function runBatch(
+	run: () => Promise<unknown>,
+	archive: object | null,
+): Promise<void> {
+	try {
+		await run();
+	} catch (e) {
+		if (archive && isArchiveMiss(e)) throw originalGone();
+		throw e;
+	}
+}
+
+/**
+ * Creates a personal chore and its stages in one batch (one transaction), plus
+ * the archive of `input.archiveSourceId` when a duplicate replaces its original.
  * Household rotations go through `createRotationChore`, which also writes the
  * rotation and its members, so they are refused here.
  */
@@ -79,6 +126,10 @@ export async function createPersonalChore(
 		);
 	if (!assignee) throw new ChoreError('Choose a member of this household.');
 
+	const archive = input.archiveSourceId
+		? await archiveOriginal(actor.householdId, input.archiveSourceId)
+		: null;
+
 	const id = crypto.randomUUID();
 	const insertChore = db.insert(chores).values({
 		id,
@@ -102,7 +153,13 @@ export async function createPersonalChore(
 			points: 0,
 		}),
 	);
-	await db.batch([insertChore, ...insertStages]);
+	await runBatch(
+		() =>
+			archive
+				? db.batch([archive.statement, insertChore, ...insertStages])
+				: db.batch([insertChore, ...insertStages]),
+		archive,
+	);
 	return { id };
 }
 
@@ -114,7 +171,8 @@ export async function createPersonalChore(
  * unique positions, and the turn on an eligible member), and the rotation's
  * `current_member_id` foreign key is deferred, so the rows can go in this
  * order. The first eligible member in the order gets the first turn. The
- * scope is Whole Household unless someone is excluded.
+ * scope is Whole Household unless someone is excluded. As for a personal
+ * chore, `input.archiveSourceId` archives the original in the same batch.
  */
 export async function createRotationChore(
 	actor: { householdId: string; userId: string | null },
@@ -137,6 +195,10 @@ export async function createRotationChore(
 			'rotationInputError passed a rotation with no eligible member',
 		);
 	}
+
+	const archive = input.archiveSourceId
+		? await archiveOriginal(actor.householdId, input.archiveSourceId)
+		: null;
 
 	const id = crypto.randomUUID();
 	const insertChore = db.insert(chores).values({
@@ -178,11 +240,26 @@ export async function createRotationChore(
 			exclusionReason: m.eligible ? null : (m.exclusionReason?.trim() ?? null),
 		})),
 	);
-	await db.batch([insertChore, ...insertStages, insertRotation, insertMembers]);
+	await runBatch(
+		() =>
+			archive
+				? db.batch([
+						archive.statement,
+						insertChore,
+						...insertStages,
+						insertRotation,
+						insertMembers,
+					])
+				: db.batch([
+						insertChore,
+						...insertStages,
+						insertRotation,
+						insertMembers,
+					]),
+		archive,
+	);
 	return { id };
 }
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const choreNotFound = () => new ChoreError('That chore was not found.', 404);
 

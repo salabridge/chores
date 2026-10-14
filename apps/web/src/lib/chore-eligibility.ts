@@ -26,6 +26,8 @@ export interface CreateRotationChoreInput {
 	chore: CreateChoreInput;
 	/** Everyone in the household, in turn order, with who is excluded and why. */
 	members: SaveLoopInput['members'];
+	/** A chore this one replaces ("Duplicate as…", SB-64); archived in the same transaction as the create. */
+	archiveSourceId?: string | null;
 }
 
 /** The default loop: every household member, eligible, in household order. */

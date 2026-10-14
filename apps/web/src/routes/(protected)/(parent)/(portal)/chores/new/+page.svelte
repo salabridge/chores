@@ -7,8 +7,10 @@
 		exampleDraft,
 		toCreateInput,
 	} from '#lib/chore-creator.js';
+	import { archiveOriginalDefault } from '#lib/chore-duplicate.js';
 	import type { CreateRotationChoreInput } from '#lib/chore-eligibility.js';
 	import { createChore, createRotation } from '#lib/chores.remote.js';
+	import ArchiveOriginalOption from '#lib/components/chores/ArchiveOriginalOption.svelte';
 	import ChoreEligibilityPanel from '#lib/components/chores/ChoreEligibilityPanel.svelte';
 	import ChoreSetupForm from '#lib/components/chores/ChoreSetupForm.svelte';
 	import WorkspaceHeader from '#lib/components/shell/WorkspaceHeader.svelte';
@@ -19,13 +21,26 @@
 
 	let { data } = $props();
 
+	// `?from=` is "Duplicate as…": the load hands over the copied chore as a draft.
+	const duplicate = $derived(data.duplicate);
 	// `?preset=household-rotation` comes from "New Rotation Loop" on the Loops Builder.
+	// svelte-ignore state_referenced_locally
 	let draft = $state<ChoreDraft>(
-		emptyDraft(
-			page.url.searchParams.get('preset') === 'household-rotation'
-				? 'rotation'
-				: 'personal',
-		),
+		data.duplicate?.draft ??
+			emptyDraft(
+				page.url.searchParams.get('preset') === 'household-rotation'
+					? 'rotation'
+					: 'personal',
+			),
+	);
+	// On when the copy is of the other kind, off for a plain duplicate.
+	// svelte-ignore state_referenced_locally
+	let archiveOriginal = $state(
+		archiveOriginalDefault(data.duplicate?.kindChanges ?? false),
+	);
+	// Sent with the create, which archives the original in the same transaction.
+	const archiveSourceId = $derived(
+		duplicate && archiveOriginal ? duplicate.sourceId : null,
 	);
 	// Becomes true once a household rotation passes the setup form; the Eligibility panel then saves it.
 	let eligibilityStep = $state(false);
@@ -47,7 +62,7 @@
 
 	async function saveRotation(input: CreateRotationChoreInput) {
 		try {
-			await createRotation(input);
+			await createRotation({ ...input, archiveSourceId });
 		} catch (e) {
 			throw failure(e);
 		}
@@ -62,7 +77,7 @@
 			return;
 		}
 		try {
-			await createChore(toCreateInput(valid));
+			await createChore({ ...toCreateInput(valid), archiveSourceId });
 		} catch (e) {
 			throw failure(e);
 		}
@@ -86,6 +101,17 @@
 		</PrimaryButton>
 	{/snippet}
 </WorkspaceHeader>
+
+{#if duplicate}
+	<div class="mb-16">
+		<ArchiveOriginalOption
+			sourceTitle={duplicate.sourceTitle}
+			sourceKind={duplicate.sourceKind}
+			kindChanges={duplicate.kindChanges}
+			bind:checked={archiveOriginal}
+		/>
+	</div>
+{/if}
 
 <div class="grid items-start gap-32 xl:grid-cols-[minmax(0,1fr)_420px]">
 	<ChoreSetupForm bind:draft members={data.members} {onsubmit} cancelHref="/overview" />
