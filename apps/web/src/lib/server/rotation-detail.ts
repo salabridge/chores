@@ -51,7 +51,13 @@ export async function loadChore(householdId: string, choreId: string) {
 	const [chore] = await db
 		.select()
 		.from(chores)
-		.where(and(eq(chores.id, choreId), eq(chores.householdId, householdId)));
+		.where(
+			and(
+				eq(chores.id, choreId),
+				eq(chores.householdId, householdId),
+				isNull(chores.archivedAt),
+			),
+		);
 	return chore ?? null;
 }
 

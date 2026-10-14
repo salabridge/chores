@@ -44,7 +44,12 @@ export async function openChoresFor(
 				assignedMemberId: chores.assignedMemberId,
 			})
 			.from(chores)
-			.where(eq(chores.householdId, member.householdId)),
+			.where(
+				and(
+					eq(chores.householdId, member.householdId),
+					isNull(chores.archivedAt),
+				),
+			),
 		// At most one open completion per instance (partial unique index), so
 		// the join can't fan out.
 		db

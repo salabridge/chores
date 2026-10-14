@@ -77,6 +77,7 @@ export async function householdStreaks(
 					frequency: chores.frequency,
 					assignedMemberId: chores.assignedMemberId,
 					createdAt: chores.createdAt,
+					archivedAt: chores.archivedAt,
 				})
 				.from(chores)
 				.where(eq(chores.householdId, householdId)),

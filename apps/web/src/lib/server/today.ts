@@ -47,7 +47,12 @@ export async function loadToday(
 		points,
 		streak,
 	] = await Promise.all([
-		db.select().from(chores).where(eq(chores.householdId, householdId)),
+		db
+			.select()
+			.from(chores)
+			.where(
+				and(eq(chores.householdId, householdId), isNull(chores.archivedAt)),
+			),
 		db
 			.select({ id: householdMembers.id, name: householdMembers.displayName })
 			.from(householdMembers)

@@ -67,12 +67,16 @@ export const choreCompletions = pgTable(
 			name: 'chore_completions_instance_fk',
 			columns: [t.instanceId, t.choreId],
 			foreignColumns: [choreInstances.id, choreInstances.choreId],
-		}).onDelete('cascade'),
+			// NO ACTION, not cascade (SB-61): deleting a chore (or its instance) that
+			// has a completion must fail, even when the completion committed
+			// concurrently. A household delete still works: its own cascade removes
+			// the completions before the end-of-statement check.
+		}).onDelete('no action'),
 		foreignKey({
 			name: 'chore_completions_chore_fk',
 			columns: [t.choreId, t.householdId],
 			foreignColumns: [chores.id, chores.householdId],
-		}).onDelete('cascade'),
+		}).onDelete('no action'),
 		// One open completion per instance: completing twice can't award twice.
 		uniqueIndex('chore_completions_instance_id_open_key')
 			.on(t.instanceId)

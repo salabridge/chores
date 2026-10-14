@@ -273,3 +273,60 @@ test('time zone names are validated', () => {
 	assert.equal(isValidTimeZone('America/Chicago'), true);
 	assert.equal(isValidTimeZone('Not/AZone'), false);
 });
+
+test('an archived chore counts before its archive date and not after', () => {
+	const due = resolveDueChores({
+		chores: [{ ...chore, archivedAt: new Date('2026-10-07T12:00:00Z') }],
+		// The 5th was done, the 6th was missed (still history), the 7th is the
+		// archive day and was missed, the 8th is after.
+		instances: [inst('2026-10-05')],
+		completions: [
+			{
+				instanceId: 'i-2026-10-05',
+				completedAt: new Date('2026-10-05T15:00:00Z'),
+			},
+		],
+		timeZone: 'UTC',
+		from: '2026-10-05',
+		today: '2026-10-09',
+	});
+	assert.deepEqual(
+		due.map((d) => [d.date, d.outcome]),
+		[
+			['2026-10-05', 'done'],
+			['2026-10-06', 'missed'],
+		],
+	);
+});
+
+test('a chore done on the day it was archived keeps that day', () => {
+	const due = resolveDueChores({
+		chores: [{ ...chore, archivedAt: new Date('2026-10-06T18:00:00Z') }],
+		instances: [inst('2026-10-06')],
+		completions: [
+			{
+				instanceId: 'i-2026-10-06',
+				completedAt: new Date('2026-10-06T09:00:00Z'),
+			},
+		],
+		timeZone: 'UTC',
+		from: '2026-10-06',
+		today: '2026-10-08',
+	});
+	assert.deepEqual(
+		due.map((d) => [d.date, d.outcome]),
+		[['2026-10-06', 'done']],
+	);
+});
+
+test('a restored chore (archivedAt null) counts again', () => {
+	const due = resolveDueChores({
+		chores: [{ ...chore, archivedAt: null }],
+		instances: [],
+		completions: [],
+		timeZone: 'UTC',
+		from: '2026-10-05',
+		today: '2026-10-06',
+	});
+	assert.equal(due.length, 2);
+});

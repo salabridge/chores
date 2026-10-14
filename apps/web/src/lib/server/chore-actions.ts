@@ -59,7 +59,13 @@ async function load(householdId: string, choreId: string): Promise<Loaded> {
 	const [chore] = await db
 		.select()
 		.from(chores)
-		.where(and(eq(chores.id, choreId), eq(chores.householdId, householdId)));
+		.where(
+			and(
+				eq(chores.id, choreId),
+				eq(chores.householdId, householdId),
+				isNull(chores.archivedAt),
+			),
+		);
 	if (!chore) throw notFound();
 
 	// The household's own day, the same one the Overview lists chores for.
