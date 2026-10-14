@@ -47,6 +47,32 @@
 <Story name="Saving" {template} args={{ draft: exampleDraft(), pending: true }} />
 
 <Story
+	name="Editing a personal chore"
+	{template}
+	args={{
+		mode: 'edit',
+		draft: {
+			...exampleDraft(),
+			kind: 'personal',
+			title: 'Run Dishwasher',
+			assigneeId: 'leo',
+		},
+	}}
+/>
+
+<Story
+	name="Editing, done this period"
+	{template}
+	args={{
+		mode: 'edit',
+		frequencyLocked: true,
+		draft: { ...exampleDraft(), kind: 'personal', title: 'Run Dishwasher', assigneeId: 'leo' },
+	}}
+/>
+
+<Story name="Editing a rotation" {template} args={{ mode: 'edit', draft: exampleDraft() }} />
+
+<Story
 	name="Visual test"
 	tags={['visual-test', '!autodocs']}
 	parameters={visualTestParameters}

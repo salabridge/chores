@@ -1,3 +1,4 @@
+import { createRawSnippet } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
@@ -19,5 +20,17 @@ describe('PageHeader.svelte', () => {
 		await expect
 			.element(page.getByRole('link', { name: /Back/ }))
 			.toHaveAttribute('href', '/streak');
+	});
+
+	it('renders an action on the right when given', async () => {
+		render(PageHeader, {
+			label: 'Personal Chore',
+			actions: createRawSnippet(() => ({
+				render: () => '<a href="/chores/c1/edit">Edit</a>',
+			})),
+		});
+		await expect
+			.element(page.getByRole('link', { name: 'Edit' }))
+			.toHaveAttribute('href', '/chores/c1/edit');
 	});
 });

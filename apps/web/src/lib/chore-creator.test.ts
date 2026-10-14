@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	addStage,
 	type ChoreDraft,
+	choreToDraft,
 	createInputError,
 	emptyDraft,
 	exampleDraft,
@@ -13,6 +14,7 @@ import {
 	removeStage,
 	stagesSummary,
 	toCreateInput,
+	toUpdateInput,
 	validateDraft,
 } from './chore-creator.ts';
 
@@ -188,5 +190,66 @@ describe('createInputError', () => {
 			createInputError({ ...input(), stages: [{ title: '', hint: null }] }),
 		).toBeTruthy();
 		expect(createInputError({ ...input(), points: -1 })).toBeTruthy();
+	});
+});
+
+describe('choreToDraft / toUpdateInput', () => {
+	const saved = {
+		title: 'Clean Your Room',
+		description: null,
+		type: 'personal' as const,
+		frequency: 'weekly' as const,
+		points: 15,
+		assignedMemberId: 'leo',
+		stages: [
+			{ id: 's1', title: 'Toys', hint: 'Bins' },
+			{ id: 's2', title: 'Dust', hint: null },
+		],
+	};
+
+	it('loads a saved chore with each stage keyed by its id', () => {
+		const draft = choreToDraft(saved);
+		expect(draft).toMatchObject({
+			title: 'Clean Your Room',
+			note: '',
+			kind: 'personal',
+			useStages: true,
+			frequency: 'weekly',
+			points: 15,
+			assigneeId: 'leo',
+		});
+		expect(draft.stages.map((s) => [s.key, s.id, s.hint])).toEqual([
+			['s1', 's1', 'Bins'],
+			['s2', 's2', ''],
+		]);
+	});
+
+	it('has no assignee for a rotation and no stages for a single step', () => {
+		const draft = choreToDraft({
+			...saved,
+			type: 'rotation',
+			assignedMemberId: 'leo',
+			stages: [],
+		});
+		expect(draft.assigneeId).toBeNull();
+		expect(draft.useStages).toBe(false);
+	});
+
+	it('sends saved stages with their ids and new ones without', () => {
+		const draft = choreToDraft(saved);
+		draft.stages = [
+			draft.stages[1],
+			{ key: 'stage-new', title: ' Vacuum ', hint: '' },
+		];
+		const input = toUpdateInput(draft, 'c1', '2026-10-13T00:00:00.000Z');
+		expect(input).toMatchObject({
+			choreId: 'c1',
+			updatedAt: '2026-10-13T00:00:00.000Z',
+		});
+		expect(input.stages).toEqual([
+			{ id: 's2', title: 'Dust', hint: null },
+			{ id: null, title: 'Vacuum', hint: null },
+		]);
+		expect(createInputError(input)).toBeNull();
 	});
 });

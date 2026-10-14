@@ -1,11 +1,16 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	let {
 		label,
 		backHref = '/today',
+		actions,
 	}: {
 		/** Centered page label, e.g. "Personal Chore". */
 		label: string;
 		backHref?: string;
+		/** Trailing action on the right, e.g. a small Edit button. */
+		actions?: Snippet;
 	} = $props();
 </script>
 
@@ -19,5 +24,9 @@
 		<span aria-hidden="true">←</span> Back
 	</a>
 	<h1 class="font-display text-[17px] font-bold text-text-primary">{label}</h1>
-	<span aria-hidden="true"></span>
+	{#if actions}
+		<div class="flex justify-end">{@render actions()}</div>
+	{:else}
+		<span aria-hidden="true"></span>
+	{/if}
 </header>

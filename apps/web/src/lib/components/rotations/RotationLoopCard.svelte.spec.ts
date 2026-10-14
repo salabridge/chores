@@ -17,7 +17,7 @@ function setup(
 	const onreset = vi.fn(handlers.onreset ?? (async () => {}));
 	render(RotationLoopCard, {
 		loop: toiletLoop,
-		editHref: '/chores/new?edit=chore-toilet',
+		editHref: '/chores/chore-toilet/edit',
 		onsave,
 		onreset,
 	});
@@ -40,7 +40,7 @@ describe('RotationLoopCard.svelte', () => {
 			.toBeVisible();
 		await expect
 			.element(page.getByRole('link', { name: 'Edit Loop' }))
-			.toHaveAttribute('href', '/chores/new?edit=chore-toilet');
+			.toHaveAttribute('href', '/chores/chore-toilet/edit');
 	});
 
 	it('has no save buttons until something changes', async () => {
