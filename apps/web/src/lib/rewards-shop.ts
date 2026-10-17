@@ -50,6 +50,16 @@ export interface MilestoneItem {
 	note: string;
 }
 
+/** The "Keep the streak warm" card, shared by the Rewards shop and the Streak tab. */
+export interface Momentum {
+	days: number;
+	goal: number;
+	loopsLeft: number;
+	percent: number;
+	message: string;
+	chores: (SuggestedChore & { href: string })[];
+}
+
 export interface RewardsShopView {
 	balance: number;
 	household: {
@@ -58,14 +68,7 @@ export interface RewardsShopView {
 		/** One line under the tiles, e.g. "2 more loops unlock the next family reward." */
 		summary: string;
 	};
-	momentum: {
-		days: number;
-		goal: number;
-		loopsLeft: number;
-		percent: number;
-		message: string;
-		chores: (SuggestedChore & { href: string })[];
-	};
+	momentum: Momentum;
 	earned: RewardItem[];
 	saving: RewardItem[];
 	milestones: MilestoneItem[];
@@ -136,6 +139,26 @@ function momentumMessage(
 		: `${plural(loopsLeft, 'more loop')} to reach a ${goal}-day personal streak.`;
 }
 
+/** The momentum card for a `days`-long streak and the chores that would extend it. */
+export function streakMomentum(
+	days: number,
+	suggested: readonly SuggestedChore[],
+): Momentum {
+	const goal = nextStreakGoal(days);
+	const loopsLeft = goal - days;
+	return {
+		days,
+		goal,
+		loopsLeft,
+		percent: Math.round((days / goal) * 100),
+		message: momentumMessage(days, goal, loopsLeft),
+		chores: suggested.slice(0, MAX_SUGGESTED_CHORES).map((c) => ({
+			...c,
+			href: `/chores/${c.id}`,
+		})),
+	};
+}
+
 const rewardItem = (r: ShopReward): RewardItem => ({
 	id: r.id,
 	title: r.title,
@@ -157,8 +180,6 @@ export function shapeRewardsShop(input: {
 	suggested: readonly SuggestedChore[];
 }): RewardsShopView {
 	const { shop, streakDays } = input;
-	const goal = nextStreakGoal(streakDays);
-	const loopsLeft = goal - streakDays;
 	const personal = shop.rewards.filter((r) => r.kind === 'personal');
 	const progress = new Map(shop.milestones.map((m) => [m.id, m]));
 
@@ -169,17 +190,7 @@ export function shapeRewardsShop(input: {
 			points: shop.week.points,
 			summary: householdSummary(shop.milestones, shop.week),
 		},
-		momentum: {
-			days: streakDays,
-			goal,
-			loopsLeft,
-			percent: Math.round((streakDays / goal) * 100),
-			message: momentumMessage(streakDays, goal, loopsLeft),
-			chores: input.suggested.slice(0, MAX_SUGGESTED_CHORES).map((c) => ({
-				...c,
-				href: `/chores/${c.id}`,
-			})),
-		},
+		momentum: streakMomentum(streakDays, input.suggested),
 		// Claimable first, then what's already claimed.
 		earned: personal
 			.filter((r) => r.status === 'earned' || r.status === 'claimed')
