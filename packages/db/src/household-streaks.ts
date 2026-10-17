@@ -10,6 +10,7 @@ import { addDays, localDate } from './recurrence.ts';
 import {
 	type DayException,
 	DEFAULT_STREAK_LOOKBACK_DAYS,
+	type DueChore,
 	familyStreak,
 	personalStreak,
 	resolveDueChores,
@@ -31,6 +32,11 @@ export interface HouseholdStreaks {
 	family: Streak;
 	/** Each member's streak, keyed by `household_members.id`. */
 	members: Record<string, Streak>;
+	/**
+	 * What was due to whom on each day of the walk, and how it ended. For
+	 * per-day views such as a week calendar; see `memberDayStatus()`.
+	 */
+	due: DueChore[];
 }
 
 export interface HouseholdStreaksOptions {
@@ -149,5 +155,6 @@ export async function householdStreaks(
 				personalStreak(due, id, today, exceptions, lookbackDays),
 			]),
 		),
+		due,
 	};
 }

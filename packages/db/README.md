@@ -440,8 +440,9 @@ Shop screen is SB-43).
 
 Streaks (SB-28) are computed on read from `chore_completions`; nothing is
 stored. `householdStreaks(tx, householdId)` loads the rows and returns the
-family streak and each member's streak; the math is pure and lives in
-`src/streaks.ts`.
+family streak, each member's streak, and the per-day due chores behind them
+(`due`, for day-by-day views such as the Streak tab's week); the math is pure
+and lives in `src/streaks.ts`.
 
 - **A member's day qualifies** when they completed every chore due to them
   that day. A streak is consecutive qualifying days ending today. Today not

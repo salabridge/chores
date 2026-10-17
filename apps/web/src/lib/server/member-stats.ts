@@ -2,7 +2,7 @@ import { pointsLedger } from '@chore/db';
 import { householdStreaks } from '@chore/db/household-streaks';
 import type { AuthenticatedTx } from '@chore/db/rls';
 import { SCREEN_STREAK_LOOKBACK_DAYS, type Streak } from '@chore/db/streaks';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from './drizzle.ts';
 
 // A member's points balance and personal streak, for any screen that shows
@@ -19,6 +19,31 @@ export async function memberPointsBalance(memberId: string): Promise<number> {
 		.from(pointsLedger)
 		.where(eq(pointsLedger.memberId, memberId));
 	return row?.total ?? 0;
+}
+
+/**
+ * Points a member earned from completions since `monday` (household-local,
+ * in `timeZone`), net of reversals. Claims and adjustments don't count, the
+ * same as the weekly goal on the completion screen (completion-summary.ts).
+ */
+export async function memberWeekPoints(
+	memberId: string,
+	timeZone: string,
+	monday: string,
+): Promise<number> {
+	const [row] = await db
+		.select({
+			total: sql<number>`coalesce(sum(${pointsLedger.delta}), 0)::int`,
+		})
+		.from(pointsLedger)
+		.where(
+			and(
+				eq(pointsLedger.memberId, memberId),
+				sql`${pointsLedger.reason} in ('completion', 'reversal')`,
+				sql`${pointsLedger.createdAt} >= (${monday}::date)::timestamp at time zone ${timeZone}`,
+			),
+		);
+	return Math.max(0, row?.total ?? 0);
 }
 
 /**
