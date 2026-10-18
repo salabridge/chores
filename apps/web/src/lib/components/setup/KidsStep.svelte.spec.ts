@@ -65,6 +65,14 @@ describe('KidsStep.svelte', () => {
 		await expect.element(page.getByText(/coming soon/)).toBeVisible();
 	});
 
+	it('only accepts a four-digit birth year', async () => {
+		render(KidsStep, { kids: [] });
+		const year = page.getByLabelText('Birth year (optional)');
+		await expect.element(year).toHaveAttribute('pattern', '[0-9]{4}');
+		await year.fill('2017');
+		await expect.element(year).toBeValid();
+	});
+
 	it('calls oncontinue', async () => {
 		const oncontinue = vi.fn();
 		render(KidsStep, { kids, oncontinue });
