@@ -34,7 +34,8 @@
 			<h1 class="font-display text-[24px] font-bold text-text-primary">
 				Rewards Shop
 			</h1>
-			<PointsPill points={shop.balance} variant="header" />
+			<!-- From lg the shell header shows the balance (SB-68). -->
+			<PointsPill class="lg:hidden" points={shop.balance} variant="header" />
 		</div>
 		<p class="text-[14px] text-text-secondary">
 			See household progress, personal momentum, earned rewards, and the next

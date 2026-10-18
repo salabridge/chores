@@ -3,6 +3,7 @@ import { householdStreaks } from '@chore/db/household-streaks';
 import type { AuthenticatedTx } from '@chore/db/rls';
 import { SCREEN_STREAK_LOOKBACK_DAYS, type Streak } from '@chore/db/streaks';
 import { and, eq, sql } from 'drizzle-orm';
+import { getRequestEvent } from '$app/server';
 import { db } from './drizzle.ts';
 
 // A member's points balance and personal streak, for any screen that shows
@@ -10,8 +11,30 @@ import { db } from './drizzle.ts';
 // the web app is the table owner, so RLS doesn't apply: callers pass the
 // member of their own profile (`getCurrentMember()`), never an id from input.
 
-/** A member's points: the sum of their ledger rows. */
-export async function memberPointsBalance(memberId: string): Promise<number> {
+const balances = new WeakMap<App.Locals, Map<string, Promise<number>>>();
+
+/**
+ * A member's points: the sum of their ledger rows. Memoized per request, so
+ * the shell header, Today, Streak and the Rewards shop share one sum. Writes
+ * that change the balance redirect, so the next read is a fresh request.
+ */
+export function memberPointsBalance(memberId: string): Promise<number> {
+	const { locals } = getRequestEvent();
+	let byMember = balances.get(locals);
+	if (!byMember) {
+		byMember = new Map();
+		balances.set(locals, byMember);
+	}
+	let total = byMember.get(memberId);
+	if (!total) {
+		total = queryPointsBalance(memberId);
+		byMember.set(memberId, total);
+	}
+	return total;
+}
+
+/** `memberPointsBalance` without the memo, for a check that must see the latest write. */
+export async function queryPointsBalance(memberId: string): Promise<number> {
 	const [row] = await db
 		.select({
 			total: sql<number>`coalesce(sum(${pointsLedger.delta}), 0)::int`,

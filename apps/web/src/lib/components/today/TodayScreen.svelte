@@ -99,7 +99,8 @@
 					<p class="text-[13px] text-text-secondary">Ready to spin the loop?</p>
 				</div>
 			</div>
-			<PointsPill points={data.points} variant="header" />
+			<!-- From lg the shell header shows the balance (SB-68). -->
+			<PointsPill class="lg:hidden" points={data.points} variant="header" />
 		</div>
 		<StreakBanner title={streakTitle(data.streak)} class="rounded-[12px]">
 			{#if note}{note}{/if}
