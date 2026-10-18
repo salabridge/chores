@@ -2005,107 +2005,10 @@ try {
 	);
 	ok("a user's default landing route is theirs alone");
 
-	console.log('Leaving and removing:');
-	await expectNoRows('Bob removing Alice (owner)', () =>
-		authed.withAuth(bob.token, (tx) =>
-			tx
-				.delete(householdMembers)
-				.where(eq(householdMembers.id, aliceMember.id))
-				.returning(),
-		),
-	);
-	const removed = await authed.withAuth(bob.token, (tx) =>
-		tx
-			.delete(householdMembers)
-			.where(eq(householdMembers.id, sam.id))
-			.returning(),
-	);
-	assert.equal(removed.length, 1);
-	ok('Bob (parent) removes a managed kid');
-	const [deviceAfter] = await admin
-		.select()
-		.from(deviceProfiles)
-		.where(eq(deviceProfiles.deviceHash, 'device-a'));
-	assert.equal(deviceAfter?.activeMemberId, null);
-	ok(
-		'removing the kid clears the device profile (falls back to the parent view)',
-	);
-	const [choreAfter] = await authed.withAuth(alice.token, async (tx) => {
-		await tx
-			.delete(householdMembers)
-			.where(
-				and(
-					eq(householdMembers.householdId, household.id),
-					eq(householdMembers.userId, carol.id),
-				),
-			);
-		return tx.select().from(chores).where(eq(chores.id, chore.id));
-	});
-	assert.equal(choreAfter.assignedMemberId, null);
-	ok("Alice removes Carol; Carol's chore is unassigned (FK set null)");
-
-	console.log('Without a session:');
-	const noClaimsPool = new Pool({
-		connectionString: DATABASE_AUTHENTICATED_URL,
-	});
-	try {
-		const { rows } = await noClaimsPool.query(
-			`select (select count(*)::int from chores) as chores,
-				(select count(*)::int from household_members) as members,
-				(select count(*)::int from household_member_pins) as pins,
-				(select count(*)::int from device_profiles) as devices,
-				(select count(*)::int from household_invites) as invites,
-				(select count(*)::int from chore_stages) as stages,
-				(select count(*)::int from chore_instances) as instances,
-				(select count(*)::int from chore_stage_progress) as progress,
-				(select count(*)::int from chore_rotations) as rotations,
-				(select count(*)::int from chore_rotation_members) as rotation_members,
-				(select count(*)::int from rewards) as rewards,
-				(select count(*)::int from reward_claims) as reward_claims`,
-		);
-		assert.deepEqual(rows[0], {
-			chores: 0,
-			members: 0,
-			pins: 0,
-			devices: 0,
-			invites: 0,
-			stages: 0,
-			instances: 0,
-			progress: 0,
-			rotations: 0,
-			rotation_members: 0,
-			rewards: 0,
-			reward_claims: 0,
-		});
-		ok('the RLS role with no JWT claims sees 0 rows in every domain table');
-	} finally {
-		await noClaimsPool.end();
-	}
-
-	console.log('Foreign keys:');
-	await expectRejected(
-		'a chore assigned to a nonexistent member (owner role, FK only)',
-		() =>
-			admin.insert(chores).values({
-				householdId: household.id,
-				title: 'Ghost chore',
-				assignedMemberId: randomUUID(),
-			}),
-		/foreign key/,
-	);
-	await expectRejected(
-		'a second member row for the same user in a household',
-		() =>
-			admin.insert(householdMembers).values({
-				householdId: household.id,
-				userId: alice.id,
-				displayName: 'Alice again',
-			}),
-		/household_members_household_id_user_id_key/,
-	);
-
-	// Reminders and skips (SB-29): parents write them, members read them, and
-	// only the assignee or a parent may dismiss a reminder (nothing else on it).
+	console.log('Reminders and skips:');
+	// Parents write them, members read them, and only the assignee or a parent
+	// may dismiss a reminder (nothing else on it). Before "Leaving and
+	// removing", which takes Carol out of the household.
 	const [reminderForCarol] = await admin
 		.insert(choreReminders)
 		.values({
@@ -2206,6 +2109,105 @@ try {
 		/chore_skips_chore_period_member_key/,
 	);
 	ok('reminders and skips: parents write, members read, assignees dismiss');
+
+	console.log('Leaving and removing:');
+	await expectNoRows('Bob removing Alice (owner)', () =>
+		authed.withAuth(bob.token, (tx) =>
+			tx
+				.delete(householdMembers)
+				.where(eq(householdMembers.id, aliceMember.id))
+				.returning(),
+		),
+	);
+	const removed = await authed.withAuth(bob.token, (tx) =>
+		tx
+			.delete(householdMembers)
+			.where(eq(householdMembers.id, sam.id))
+			.returning(),
+	);
+	assert.equal(removed.length, 1);
+	ok('Bob (parent) removes a managed kid');
+	const [deviceAfter] = await admin
+		.select()
+		.from(deviceProfiles)
+		.where(eq(deviceProfiles.deviceHash, 'device-a'));
+	assert.equal(deviceAfter?.activeMemberId, null);
+	ok(
+		'removing the kid clears the device profile (falls back to the parent view)',
+	);
+	const [choreAfter] = await authed.withAuth(alice.token, async (tx) => {
+		await tx
+			.delete(householdMembers)
+			.where(
+				and(
+					eq(householdMembers.householdId, household.id),
+					eq(householdMembers.userId, carol.id),
+				),
+			);
+		return tx.select().from(chores).where(eq(chores.id, chore.id));
+	});
+	assert.equal(choreAfter.assignedMemberId, null);
+	ok("Alice removes Carol; Carol's chore is unassigned (FK set null)");
+
+	console.log('Without a session:');
+	const noClaimsPool = new Pool({
+		connectionString: DATABASE_AUTHENTICATED_URL,
+	});
+	try {
+		const { rows } = await noClaimsPool.query(
+			`select (select count(*)::int from chores) as chores,
+				(select count(*)::int from household_members) as members,
+				(select count(*)::int from household_member_pins) as pins,
+				(select count(*)::int from device_profiles) as devices,
+				(select count(*)::int from household_invites) as invites,
+				(select count(*)::int from chore_stages) as stages,
+				(select count(*)::int from chore_instances) as instances,
+				(select count(*)::int from chore_stage_progress) as progress,
+				(select count(*)::int from chore_rotations) as rotations,
+				(select count(*)::int from chore_rotation_members) as rotation_members,
+				(select count(*)::int from rewards) as rewards,
+				(select count(*)::int from reward_claims) as reward_claims`,
+		);
+		assert.deepEqual(rows[0], {
+			chores: 0,
+			members: 0,
+			pins: 0,
+			devices: 0,
+			invites: 0,
+			stages: 0,
+			instances: 0,
+			progress: 0,
+			rotations: 0,
+			rotation_members: 0,
+			rewards: 0,
+			reward_claims: 0,
+		});
+		ok('the RLS role with no JWT claims sees 0 rows in every domain table');
+	} finally {
+		await noClaimsPool.end();
+	}
+
+	console.log('Foreign keys:');
+	await expectRejected(
+		'a chore assigned to a nonexistent member (owner role, FK only)',
+		() =>
+			admin.insert(chores).values({
+				householdId: household.id,
+				title: 'Ghost chore',
+				assignedMemberId: randomUUID(),
+			}),
+		/foreign key/,
+	);
+	await expectRejected(
+		'a second member row for the same user in a household',
+		() =>
+			admin.insert(householdMembers).values({
+				householdId: household.id,
+				userId: alice.id,
+				displayName: 'Alice again',
+			}),
+		/household_members_household_id_user_id_key/,
+	);
 
 	console.log('\nAll RLS smoke checks passed.');
 } finally {
