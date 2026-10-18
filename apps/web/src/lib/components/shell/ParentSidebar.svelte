@@ -19,6 +19,7 @@
 		{ href: '/chores', label: 'Chores', icon: 'list' },
 		{ href: '/rotations', label: 'Rotation Builder', icon: 'refresh' },
 		{ href: '/rewards/manage', label: 'Rewards', icon: 'gift' },
+		{ href: '/members', label: 'Members', icon: 'users' },
 	] as const;
 
 	// `/chores/new` has its own item, so it must not light up Chores too.
@@ -118,6 +119,10 @@
 									<rect width="18" height="4" x="3" y="8" rx="1" />
 									<path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
 									<path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
+								{:else if item.icon === 'users'}
+									<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+									<circle cx="9" cy="7" r="4" />
+									<path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
 								{:else}
 									<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
 									<path d="M21 3v5h-5" />
