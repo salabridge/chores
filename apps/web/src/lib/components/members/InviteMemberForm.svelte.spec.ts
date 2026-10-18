@@ -33,6 +33,14 @@ describe('InviteMemberForm.svelte', () => {
 			.toBeVisible();
 	});
 
+	it('only accepts a four-digit birth year', async () => {
+		render(InviteMemberForm, { canInviteParent: false });
+		const year = page.getByLabelText('Birth year');
+		await expect.element(year).toHaveAttribute('pattern', '[0-9]{4}');
+		await year.fill('2010');
+		await expect.element(year).toBeValid();
+	});
+
 	it('drops the birth year for a parent', async () => {
 		render(InviteMemberForm, { canInviteParent: true });
 		await page.getByRole('radio', { name: 'A parent' }).click();

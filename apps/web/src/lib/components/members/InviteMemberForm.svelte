@@ -5,7 +5,7 @@
 	import TextInput from '#lib/components/ui/TextInput.svelte';
 	import { latestInviteBirthYear } from '#lib/invites.js';
 	import { inviteMember } from '#lib/members.remote.js';
-	import { MAX_DISPLAY_NAME } from '#lib/setup.js';
+	import { BIRTH_YEAR_PATTERN, MAX_DISPLAY_NAME } from '#lib/setup.js';
 	import InviteLinkNotice from './InviteLinkNotice.svelte';
 
 	let {
@@ -71,7 +71,7 @@
 				{...inviteMember.fields.birthYear.as('text')}
 				label="Birth year"
 				inputmode="numeric"
-				pattern="[0-9]{4}"
+				pattern={BIRTH_YEAR_PATTERN}
 				maxlength={4}
 				placeholder={String(latestInviteBirthYear(currentYear))}
 				autocomplete="off"
