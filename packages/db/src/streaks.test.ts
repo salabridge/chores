@@ -330,3 +330,28 @@ test('a restored chore (archivedAt null) counts again', () => {
 	});
 	assert.equal(due.length, 2);
 });
+
+test('a weekly chore with a due day still counts for its whole week (SB-71)', () => {
+	// Due Thursday 2026-10-08, done on Friday: late for the day, but the
+	// period is the ISO week, so the streak treats it like any weekly chore.
+	const weeklyThursday = {
+		...chore,
+		id: 'c-weekly',
+		frequency: 'weekly' as const,
+		dueWeekday: 4,
+	};
+	const due = resolveDueChores({
+		chores: [weeklyThursday],
+		instances: [{ ...inst('2026-10-05'), id: 'i-weekly', choreId: 'c-weekly' }],
+		completions: [
+			{ instanceId: 'i-weekly', completedAt: new Date('2026-10-09T15:00:00Z') },
+		],
+		timeZone: 'UTC',
+		from: '2026-10-05',
+		today: '2026-10-11',
+	});
+	assert.deepEqual(
+		due.map((d) => [d.date, d.outcome]),
+		[['2026-10-11', 'done']],
+	);
+});

@@ -148,6 +148,13 @@
 			"when": 1792315868170,
 			"tag": "0020_invite_birth_year",
 			"breakpoints": true
+		},
+		{
+			"idx": 21,
+			"version": "7",
+			"when": 1792366790816,
+			"tag": "0021_weekly_due_weekday",
+			"breakpoints": true
 		}
 	]
 }

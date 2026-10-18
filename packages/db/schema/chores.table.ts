@@ -5,6 +5,7 @@ import {
 	integer,
 	pgPolicy,
 	pgTable,
+	smallint,
 	text,
 	time,
 	timestamp,
@@ -66,6 +67,15 @@ export const chores = pgTable(
 		 */
 		dueLabel: text('due_label'),
 		/**
+		 * Optional day of the week a `weekly` chore is due (SB-71), ISO numbering:
+		 * 1 = Monday ... 7 = Sunday. The period is still the whole ISO week, so
+		 * instances, rotation turns and streaks don't change; this only says which
+		 * day of it the chore belongs to (with `due_time`, "Thursday by 7:00 PM").
+		 * NULL means any day that week, and is the only value allowed for other
+		 * frequencies. See `choreDueDate()` in ../src/recurrence.ts.
+		 */
+		dueWeekday: smallint('due_weekday'),
+		/**
 		 * The household member doing the chore (a `household_members.id`, not an
 		 * auth user id, so managed kids without a login can be assigned).
 		 */
@@ -111,6 +121,14 @@ export const chores = pgTable(
 		check(
 			'chores_due_label_check',
 			sql`${t.dueLabel} is null or char_length(btrim(${t.dueLabel})) between 1 and 40`,
+		),
+		check(
+			'chores_due_weekday_check',
+			sql`${t.dueWeekday} is null or ${t.dueWeekday} between 1 and 7`,
+		),
+		check(
+			'chores_due_weekday_weekly_check',
+			sql`${t.dueWeekday} is null or ${t.frequency} = 'weekly'`,
 		),
 		pgPolicy('chores_select', {
 			for: 'select',
