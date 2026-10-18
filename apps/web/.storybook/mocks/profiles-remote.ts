@@ -59,6 +59,42 @@ export function mockForm(): MockForm {
 	) as MockForm;
 }
 
+type EnhanceCallback = (form: {
+	element: HTMLFormElement;
+	submit: () => Promise<boolean>;
+}) => unknown;
+
+/**
+ * For specs: `form`, except that submitting runs the `enhance` callback with
+ * `submit` (by default one that succeeds), so what a component does around a
+ * submit (confirming first, resetting after) can be checked. Items from
+ * `.for(id)` behave the same way.
+ */
+export function submittable(
+	form: MockForm,
+	submit: () => Promise<boolean> = async () => true,
+): MockForm {
+	return Object.defineProperties(
+		{ ...attributes },
+		{
+			enhance: {
+				value: (callback: EnhanceCallback) => ({
+					...attributes,
+					onsubmit: (event: SubmitEvent) => {
+						event.preventDefault();
+						const element = event.currentTarget as HTMLFormElement;
+						void callback({ element, submit });
+					},
+				}),
+			},
+			fields: { value: form.fields },
+			pending: { value: 0 },
+			result: { value: undefined },
+			for: { value: (id: unknown) => submittable(form.for(id), submit) },
+		},
+	) as MockForm;
+}
+
 export const selectProfile = mockForm();
 export const leaveKidProfile = mockForm();
 export const savePin = mockForm();

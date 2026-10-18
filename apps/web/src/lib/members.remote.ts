@@ -7,6 +7,7 @@ import {
 } from '#lib/server/invites.js';
 import { addManagedKid, MemberError } from '#lib/server/members.js';
 import { resetProfileCache } from '#lib/server/profiles.js';
+import { APP_ORIGIN } from '$app/env/private';
 import { form, getRequestEvent } from '$app/server';
 import { inviteLink, parseInviteInput } from './invites.ts';
 import { isUuid } from './rewards.ts';
@@ -26,8 +27,12 @@ async function write<T>(run: () => Promise<T>): Promise<T> {
 	}
 }
 
+// An invite link is a credential, so where it's configured its origin comes
+// from APP_ORIGIN, not the Host / forwarded-host headers of the request. The
+// request's origin is only a fallback where it isn't (local dev, e2e,
+// previews), and no invite email is sent there.
 const linkFor = (token: string) =>
-	inviteLink(getRequestEvent().url.origin, token);
+	inviteLink(APP_ORIGIN ?? getRequestEvent().url.origin, token);
 
 /** Adds a managed kid (no login) after setup. */
 export const addManagedKidMember = form(

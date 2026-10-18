@@ -41,7 +41,10 @@
 			if (await form.submit()) {
 				const result = inviteMember.result;
 				if (result) sent = { email: result.email, link: result.link };
+				// reset() puts the radios back to their SSR default (kid), so the
+				// chips' state has to follow, or the hidden birth year goes missing.
 				form.element.reset();
+				role = 'kid';
 				oninvited?.();
 			}
 		})}

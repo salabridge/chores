@@ -11,16 +11,22 @@
 		link: string;
 	} = $props();
 
-	let copied = $state(false);
+	let status = $state<'idle' | 'copied' | 'failed'>('idle');
+	let reset: ReturnType<typeof setTimeout> | undefined;
 
 	async function copy() {
+		clearTimeout(reset);
 		try {
 			await navigator.clipboard.writeText(link);
-			copied = true;
+			status = 'copied';
+			// Back to "Copy link", so a second copy says something too.
+			reset = setTimeout(() => {
+				status = 'idle';
+			}, 2000);
 		} catch {
-			// No clipboard access (an insecure origin, or denied): the field
-			// stays selectable for a manual copy.
-			copied = false;
+			// No clipboard access (an insecure origin, or denied). Say so, or the
+			// parent pastes whatever was on their clipboard before.
+			status = 'failed';
 		}
 	}
 </script>
@@ -42,7 +48,12 @@
 			onfocus={(e) => e.currentTarget.select()}
 		/>
 		<SecondaryButton type="button" onclick={copy}>
-			{copied ? 'Copied' : 'Copy link'}
+			{status === 'copied' ? 'Copied' : 'Copy link'}
 		</SecondaryButton>
 	</div>
+	{#if status === 'failed'}
+		<p class="text-[13px] text-text-red">
+			Couldn't copy. Select the link above and copy it yourself.
+		</p>
+	{/if}
 </div>

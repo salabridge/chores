@@ -19,7 +19,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Pool } from '@neondatabase/serverless';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import { user } from '../schema/auth-schema.ts';
 import {
@@ -387,6 +387,32 @@ try {
 		/invite expired/,
 	);
 
+	// Mia is the household's one kid so far; fill it to the 12-kid cap.
+	const fillers = await admin
+		.insert(householdMembers)
+		.values(
+			Array.from({ length: 11 }, (_, i) => ({
+				householdId: household.id,
+				role: 'kid' as const,
+				displayName: `Filler ${i + 1}`,
+			})),
+		)
+		.returning({ id: householdMembers.id });
+	await expectRejected(
+		'accepting a kid invite to a household with 12 kids',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				acceptHouseholdInvite(tx, carolInvite.token),
+			),
+		/household is full/,
+	);
+	await admin.delete(householdMembers).where(
+		inArray(
+			householdMembers.id,
+			fillers.map((f) => f.id),
+		),
+	);
+
 	const bobMemberId = await authed.withAuth(bob.token, (tx) =>
 		acceptHouseholdInvite(tx, bobInvite.token),
 	);
@@ -427,6 +453,34 @@ try {
 			),
 		/invite already accepted/,
 	);
+
+	// A second household (made as the owner, outside RLS) invites Bob, who
+	// already belongs to Alice's. One household per user.
+	const [otherHousehold] = await admin
+		.insert(households)
+		.values({
+			name: 'Smoke test other house',
+			createdBy: alice.id,
+			// Alice's own household hasn't finished setup; only one may be unfinished.
+			setupCompletedAt: new Date(),
+		})
+		.returning();
+	const otherInvite = createInviteToken();
+	await admin.insert(householdInvites).values({
+		householdId: otherHousehold.id,
+		email: bob.email,
+		role: 'parent',
+		tokenHash: otherInvite.tokenHash,
+	});
+	await expectRejected(
+		"Bob accepting a second household's invite",
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				acceptHouseholdInvite(tx, otherInvite.token),
+			),
+		/already in a household/,
+	);
+	await admin.delete(households).where(eq(households.id, otherHousehold.id));
 
 	console.log('Carol (kid) running parent-only mutations:');
 	assert.equal(

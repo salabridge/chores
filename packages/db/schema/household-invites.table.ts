@@ -66,6 +66,10 @@ export const householdInvites = pgTable(
 		createdAt: timestamp('created_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),
+		/** When the link was last made or resent, so resends can be throttled. */
+		lastSentAt: timestamp('last_sent_at', { withTimezone: true })
+			.defaultNow()
+			.notNull(),
 	},
 	(t) => [
 		uniqueIndex('household_invites_token_hash_key').on(t.tokenHash),

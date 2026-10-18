@@ -15,8 +15,8 @@
 		 * (Skip, Remind, Reopen, View Loop, Claim) coloured by `tone`.
 		 */
 		variant?: 'outline' | 'icon' | 'tinted';
-		/** Colour of the `tinted` variant. */
-		tone?: 'orange' | 'blue' | 'green' | 'amber' | 'neutral';
+		/** Colour of the `tinted` variant. `red` is for destructive actions. */
+		tone?: 'orange' | 'blue' | 'green' | 'amber' | 'red' | 'neutral';
 	};
 
 	type ButtonProps = BaseProps &
@@ -45,6 +45,7 @@
 		blue: 'bg-surface-accent-blue-subtle text-text-blue',
 		green: 'bg-surface-accent-green-subtle text-text-green',
 		amber: 'bg-surface-accent-amber-subtle text-text-amber',
+		red: 'bg-surface-accent-red-subtle text-text-red',
 		neutral: 'bg-background-base text-text-secondary',
 	} as const;
 

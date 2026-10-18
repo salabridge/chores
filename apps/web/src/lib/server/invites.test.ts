@@ -2,9 +2,10 @@ import { hashInviteToken } from '@chore/db/invites';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The statements can't run here (they need Neon), so this checks what the
-// invite functions decide and send: who may invite whom, that a create
-// replaces an expired invite and stores only the token's hash in the same
-// batch, and that revoke/resend report an invite they couldn't touch.
+// invite functions decide and send: who may invite whom, that a create locks
+// the household, replaces an expired invite and stores only the token's hash
+// in the same batch, and that revoke/resend report an invite they couldn't
+// touch, with the reason.
 const mocks = vi.hoisted(() => {
 	// Results for awaited selects and `.returning()` calls, in order.
 	const queue: unknown[][] = [];
@@ -34,6 +35,10 @@ const mocks = vi.hoisted(() => {
 		insert: () => chain({ kind: 'insert' }),
 		delete: () => chain({ kind: 'delete' }),
 		update: () => chain({ kind: 'update' }),
+		execute: (query: unknown) => {
+			recorded.push({ kind: 'execute', values: query });
+			return { kind: 'execute' };
+		},
 		batch: vi.fn(async (_q: unknown[]): Promise<unknown[]> => []),
 	};
 	return { db };
@@ -82,22 +87,28 @@ describe('createInvite', () => {
 		expect(mocks.db.batch).not.toHaveBeenCalled();
 	});
 
-	it('replaces an expired invite and stores only the hash, in one batch', async () => {
+	it('locks, replaces an expired invite and stores only the hash, in one batch', async () => {
 		mocks.db.queue.push([]);
+		mocks.db.batch.mockResolvedValue([{}, {}, { rows: [{ id: 'i1' }] }]);
 		const token = await createInvite(parent, kidInvite);
 		expect(mocks.db.batch).toHaveBeenCalledOnce();
 		const kinds = mocks.db.recorded.map((r) => r.kind);
-		expect(kinds).toEqual(['select', 'delete', 'insert']);
-		const insert = mocks.db.recorded[2]?.values as Record<string, unknown>;
-		expect(insert).toMatchObject({
-			householdId: 'h1',
-			role: 'kid',
-			email: 'ava@example.com',
-			birthYear: 2010,
-			invitedBy: 'u2',
-			tokenHash: hashInviteToken(token),
-		});
-		expect(JSON.stringify(insert)).not.toContain(token);
+		expect(kinds).toEqual(['select', 'execute', 'delete', 'execute']);
+		const insert = mocks.db.recorded[3]?.values as {
+			queryChunks: unknown[];
+		};
+		const params = JSON.stringify(insert.queryChunks);
+		expect(params).toContain(hashInviteToken(token));
+		expect(params).toContain('ava@example.com');
+		expect(params).not.toContain(token);
+	});
+
+	it('refuses when the household is at its kid or pending-invite limit', async () => {
+		mocks.db.queue.push([]);
+		mocks.db.batch.mockResolvedValue([{}, {}, { rows: [] }]);
+		await expect(createInvite(owner, kidInvite)).rejects.toThrow(
+			'Your household has reached its limit of kids or pending invites.',
+		);
 	});
 
 	it('reports a live invite for the same email', async () => {
@@ -131,12 +142,27 @@ describe('resendInvite', () => {
 		const token = await resendInvite(owner, 'i1');
 		const set = mocks.db.recorded[0]?.set as { tokenHash: string };
 		expect(set.tokenHash).toBe(hashInviteToken(token));
+		expect(set).toHaveProperty('lastSentAt');
 	});
 
-	it('reports an invite it could not update', async () => {
-		mocks.db.queue.push([]);
-		await expect(resendInvite(parent, 'i1')).rejects.toBeInstanceOf(
-			MemberError,
+	it('reports an invite it could not find', async () => {
+		mocks.db.queue.push([], []);
+		await expect(resendInvite(parent, 'i1')).rejects.toThrow(
+			'That invite was not found.',
+		);
+	});
+
+	it('asks the parent to wait right after the last link', async () => {
+		mocks.db.queue.push([], [{ tooSoon: true }]);
+		await expect(resendInvite(owner, 'i1')).rejects.toThrow(
+			'You just sent a new link. Wait a minute before sending another.',
+		);
+	});
+
+	it('refuses to renew an invite older than 30 days', async () => {
+		mocks.db.queue.push([], [{ tooSoon: false }]);
+		await expect(resendInvite(owner, 'i1')).rejects.toThrow(
+			'This invite is more than 30 days old. Revoke it and invite them again.',
 		);
 	});
 });

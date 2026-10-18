@@ -17,6 +17,7 @@
 		invites,
 		actorRole,
 		now = new Date(),
+		confirm = (message: string) => window.confirm(message),
 		onchanged,
 	}: {
 		invites: PendingInvite[];
@@ -24,6 +25,8 @@
 		actorRole: HouseholdRole;
 		/** For expiry; stories pass a fixed time. */
 		now?: Date;
+		/** Asks before a revoke or a new link; specs pass a stub. */
+		confirm?: (message: string) => boolean;
 		/** An invite was revoked or resent. */
 		onchanged?: () => void;
 	} = $props();
@@ -64,6 +67,14 @@
 						<div class="flex items-center gap-8">
 							<form
 								{...resend.enhance(async (form) => {
+									// Renewing an expired invite breaks nothing; a new link does.
+									if (
+										!expired &&
+										!confirm(
+											`Make a new link for ${invite.email}? The link you already sent will stop working.`,
+										)
+									)
+										return;
 									if (await form.submit()) onchanged?.();
 								})}
 							>
@@ -79,6 +90,12 @@
 							</form>
 							<form
 								{...revoke.enhance(async (form) => {
+									if (
+										!confirm(
+											`Revoke the invite to ${invite.email}? The link they have will stop working.`,
+										)
+									)
+										return;
 									if (await form.submit()) onchanged?.();
 								})}
 							>
@@ -86,7 +103,7 @@
 								<SecondaryButton
 									type="submit"
 									variant="tinted"
-									tone="neutral"
+									tone="red"
 									aria-label={`Revoke invite to ${invite.email}`}
 								>
 									Revoke

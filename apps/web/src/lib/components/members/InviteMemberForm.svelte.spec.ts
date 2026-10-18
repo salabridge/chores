@@ -2,8 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 
+// The Storybook mock, except that submitting succeeds, so the reset after an
+// invite can be checked.
 vi.mock('#lib/members.remote.js', async () => {
-	return await import('../../../../.storybook/mocks/members-remote.ts');
+	const { submittable } = await import(
+		'../../../../.storybook/mocks/profiles-remote.ts'
+	);
+	const remote = await import('../../../../.storybook/mocks/members-remote.ts');
+	return { ...remote, inviteMember: submittable(remote.inviteMember) };
 });
 
 import InviteMemberForm from './InviteMemberForm.svelte';
@@ -48,5 +54,19 @@ describe('InviteMemberForm.svelte', () => {
 			.element(page.getByLabelText('Birth year'))
 			.not.toBeInTheDocument();
 		await expect.element(page.getByLabelText('Email')).toBeVisible();
+	});
+
+	it('goes back to a kid invite, birth year and all, after inviting a parent', async () => {
+		render(InviteMemberForm, { canInviteParent: true, currentYear: 2026 });
+		await page.getByRole('radio', { name: 'A parent' }).click();
+		await expect
+			.element(page.getByLabelText('Birth year'))
+			.not.toBeInTheDocument();
+		await page.getByLabelText('Email').fill('sam@example.com');
+		await page.getByRole('button', { name: 'Create invite' }).click();
+		await expect
+			.element(page.getByRole('radio', { name: 'A kid 13 or older' }))
+			.toBeChecked();
+		await expect.element(page.getByLabelText('Birth year')).toBeVisible();
 	});
 });
