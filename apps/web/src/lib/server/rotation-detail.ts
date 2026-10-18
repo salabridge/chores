@@ -16,6 +16,7 @@ import {
 	type RotationDetail,
 	stageStates,
 } from '../rotation-detail.ts';
+import { scheduleLabel } from '../weekdays.ts';
 import { db } from './drizzle.ts';
 import { householdToday } from './household-today.ts';
 import type { ProfileState } from './profile-state.ts';
@@ -172,6 +173,7 @@ export async function loadRotationDetail(
 		title: chore.title,
 		description: chore.description,
 		points: chore.points,
+		schedule: scheduleLabel(chore.frequency, chore.dueWeekday),
 		scope: rotation.scope,
 		scopeLabel: rotation.scopeLabel,
 		members,

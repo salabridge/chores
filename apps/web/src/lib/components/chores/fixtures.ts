@@ -19,6 +19,7 @@ export const roomDetail: PersonalDetail = {
 	description:
 		'Break your room clean into three quick stages. Finish them all to earn your loop stars!',
 	points: 15,
+	schedule: 'Daily',
 	assigneeName: 'Leo',
 	isAssignee: true,
 	completedThisPeriod: false,

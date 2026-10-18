@@ -224,6 +224,7 @@ export async function loadHouseholdOverview(
 			dueLabel: chore.dueLabel,
 			dueTime: chore.dueTime,
 			frequency: chore.frequency,
+			dueWeekday: chore.dueWeekday,
 		});
 		const owner = isLoop
 			? (rotation?.scopeLabel ?? 'Household rotation')
@@ -310,6 +311,7 @@ export async function loadHouseholdOverview(
 						dueTime: chore.dueTime,
 						dueLabel: chore.dueLabel,
 						frequency: chore.frequency,
+						dueWeekday: chore.dueWeekday,
 					}),
 					dueToday,
 					order,

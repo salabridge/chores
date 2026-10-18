@@ -10,6 +10,8 @@ export interface PersonalDetail {
 	/** The parent note. */
 	description: string | null;
 	points: number;
+	/** How often it repeats: "Daily", "Weekly · Thu" (SB-71). */
+	schedule: string;
 	assigneeName: string | null;
 	/** The viewing member is who the chore is assigned to. */
 	isAssignee: boolean;

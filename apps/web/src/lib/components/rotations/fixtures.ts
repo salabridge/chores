@@ -89,6 +89,7 @@ export const toiletDetail: RotationDetail = {
 	title: 'Clean Bathroom Toilet',
 	description: null,
 	points: 20,
+	schedule: 'Weekly · Thu',
 	scope: 'eligible_subset',
 	scopeLabel: 'Kids Shared Bathroom',
 	members: [

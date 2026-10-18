@@ -9,6 +9,7 @@ import { chorePeriodStart } from '@chore/db/recurrence';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { effectiveAssignee, type PersonalDetail } from '../personal-detail.ts';
 import { stageStates } from '../rotation-detail.ts';
+import { scheduleLabel } from '../weekdays.ts';
 import { db } from './drizzle.ts';
 import { householdToday } from './household-today.ts';
 import type { ProfileState } from './profile-state.ts';
@@ -191,6 +192,7 @@ export async function loadPersonalDetail(
 		title: chore.title,
 		description: chore.description,
 		points: chore.points,
+		schedule: scheduleLabel(chore.frequency, chore.dueWeekday),
 		assigneeName,
 		isAssignee,
 		completedThisPeriod: completed,

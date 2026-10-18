@@ -26,6 +26,7 @@ const choreRow = (over: Record<string, unknown>) => ({
 	title: 'Chore',
 	type: 'personal',
 	frequency: 'daily',
+	dueWeekday: null,
 	points: 10,
 	assignedMemberId: null,
 	archivedAt: null,

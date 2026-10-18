@@ -31,6 +31,8 @@ export interface ChoreListItem {
 	title: string;
 	type: 'personal' | 'rotation';
 	frequency: ChoreListFrequency;
+	/** A weekly chore's due day (SB-71), 1 = Monday ... 7 = Sunday, or null. */
+	dueWeekday: number | null;
 	points: number;
 	stageCount: number;
 	/** Personal chores only. */
@@ -43,12 +45,6 @@ export interface ChoreListItem {
 	/** Whether anyone has ever completed it; a completed chore can't be deleted. */
 	completed: boolean;
 }
-
-export const frequencyLabel: Record<ChoreListFrequency, string> = {
-	daily: 'Daily',
-	weekly: 'Weekly',
-	weekends: 'Weekends',
-};
 
 export const stageLabel = (count: number) =>
 	count === 0 ? 'No stages' : count === 1 ? '1 stage' : `${count} stages`;
