@@ -20,7 +20,7 @@
 	{/snippet}
 </Story>
 
-<Story name="Two kids" args={{ kids: [{ id: 'k1', displayName: 'Mia', birthYear: 2017, weeklyGoalPoints: 200, avatarColor: 'blue' }, { id: 'k2', displayName: 'Leo', birthYear: null, weeklyGoalPoints: 150, avatarColor: 'green' }] }}>
+<Story name="Two kids" args={{ kids: [{ id: 'k1', displayName: 'Mia', birthYear: 2017, weeklyGoalPoints: 200, avatarColor: 'blue' }, { id: 'k2', displayName: 'Leo', birthYear: null, weeklyGoalPoints: 150, avatarColor: 'green' }, { id: 'k3', displayName: 'Zoe', birthYear: 2015, weeklyGoalPoints: 200, avatarColor: '#8b5cf6' }] }}>
 	{#snippet template(args)}
 		<div class="max-w-[360px]"><KidsStep {...args} /></div>
 	{/snippet}

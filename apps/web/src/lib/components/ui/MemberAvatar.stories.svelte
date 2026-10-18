@@ -5,7 +5,16 @@
 	import MemberAvatar from './MemberAvatar.svelte';
 
 	const sizes = ['sm', 'md'] as const;
-	const tones = ['orange', 'blue', 'green', 'amber'] as const;
+	const tones = [
+		'orange',
+		'blue',
+		'green',
+		'amber',
+		'red',
+		'#8b5cf6',
+		'#0d9488',
+		'#db2777',
+	] as const;
 
 	const { Story } = defineMeta({
 		title: 'UI/MemberAvatar',
@@ -20,6 +29,8 @@
 </script>
 
 <Story name="Default" />
+
+<Story name="Custom hex" args={{ tone: '#8b5cf6' }} />
 
 <Story name="Large active" args={{ size: 'lg', active: true }} />
 

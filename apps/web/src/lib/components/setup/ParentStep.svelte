@@ -1,11 +1,11 @@
 <script lang="ts">
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
-	import ChoiceChips from '#lib/components/ui/ChoiceChips.svelte';
+	import AvatarColorPicker from '#lib/components/ui/AvatarColorPicker.svelte';
 	import MemberAvatar from '#lib/components/ui/MemberAvatar.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
-	import { AVATAR_COLORS, type AvatarColor, MAX_DISPLAY_NAME } from '#lib/setup.js';
+	import { type AvatarColor, MAX_DISPLAY_NAME } from '#lib/setup.js';
 	import { saveParentStep } from '#lib/setup.remote.js';
 
 	let {
@@ -23,18 +23,9 @@
 	} = $props();
 
 	// svelte-ignore state_referenced_locally
-	let color = $state<string | number>(avatarColor);
+	let color = $state(avatarColor);
 	// svelte-ignore state_referenced_locally
 	let typedName = $state(displayName);
-	const tone = $derived(
-		(AVATAR_COLORS as readonly string[]).includes(String(color))
-			? (color as AvatarColor)
-			: 'orange',
-	);
-	const options = AVATAR_COLORS.map((value) => ({
-		value,
-		label: value.charAt(0).toUpperCase() + value.slice(1),
-	}));
 </script>
 
 <form
@@ -57,13 +48,8 @@
 	<div class="flex flex-col gap-8">
 		<span class="text-[14px] font-semibold text-text-secondary">Avatar colour</span>
 		<div class="flex items-center gap-16">
-			<MemberAvatar name={typedName || 'You'} size="lg" {tone} />
-			<ChoiceChips
-				label="Avatar colour"
-				name="avatarColor"
-				{options}
-				bind:value={color}
-			/>
+			<MemberAvatar name={typedName || 'You'} size="lg" tone={color} />
+			<AvatarColorPicker name="avatarColor" bind:value={color} />
 		</div>
 	</div>
 	<TextInput

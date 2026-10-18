@@ -146,6 +146,22 @@ describe('parseParentInput', () => {
 		).toBe(false);
 	});
 
+	it('accepts a custom hex colour and stores it lower-case', () => {
+		const ok = parseParentInput({ displayName: 'Mom', avatarColor: '#A1B2C3' });
+		expect(ok.ok && ok.value.avatarColor).toBe('#a1b2c3');
+		expect(
+			parseParentInput({ displayName: 'Mom', avatarColor: 'red' }).ok,
+		).toBe(true);
+	});
+
+	it('rejects malformed hex colours', () => {
+		for (const avatarColor of ['#abc', '#12345g', 'a1b2c3', '#a1b2c3ff']) {
+			const result = parseParentInput({ displayName: 'Mom', avatarColor });
+			expect(result.ok).toBe(false);
+			expect(!result.ok && result.message).toBe('Choose an avatar colour.');
+		}
+	});
+
 	it('limits the initial to two characters', () => {
 		const ok = parseParentInput({
 			displayName: 'Mom',

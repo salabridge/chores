@@ -38,12 +38,12 @@ export const DEFAULT_WEEKLY_GOAL = 200;
 export const MAX_WEEKLY_GOAL = 10_000;
 export const MAX_KIDS = 12;
 
-/** Avatar colours are the `MemberAvatar` tones. */
-export const AVATAR_COLORS = ['orange', 'blue', 'green', 'amber'] as const;
-export type AvatarColor = (typeof AVATAR_COLORS)[number];
+import { isAvatarColor, normalizeAvatarColor } from './avatar-color.ts';
 
-export const isAvatarColor = (value: unknown): value is AvatarColor =>
-	(AVATAR_COLORS as readonly string[]).includes(String(value));
+export { AVATAR_PRESETS as AVATAR_COLORS } from './avatar-color.ts';
+export { isAvatarColor };
+/** A preset key or a custom `#rrggbb`. */
+export type AvatarColor = string;
 
 /** What the database knows about a user's setup, boiled down to one row each. */
 export interface SetupMembership {
@@ -207,7 +207,7 @@ export function parseParentInput(data: {
 		ok: true,
 		value: {
 			displayName: name.value,
-			avatarColor: data.avatarColor,
+			avatarColor: normalizeAvatarColor(data.avatarColor),
 			avatarInitial: initial.value,
 		},
 	};

@@ -10,14 +10,12 @@
 
 <script lang="ts">
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
-	import ChoiceChips from '#lib/components/ui/ChoiceChips.svelte';
+	import AvatarColorPicker from '#lib/components/ui/AvatarColorPicker.svelte';
 	import MemberAvatar from '#lib/components/ui/MemberAvatar.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
 	import {
-		AVATAR_COLORS,
-		type AvatarColor,
 		BIRTH_YEAR_PATTERN,
 		DEFAULT_WEEKLY_GOAL,
 		MAX_DISPLAY_NAME,
@@ -38,15 +36,7 @@
 		onback?: () => void;
 	} = $props();
 
-	let color = $state<string | number>('blue');
-	const tone = (value: string | null): AvatarColor =>
-		(AVATAR_COLORS as readonly string[]).includes(String(value))
-			? (value as AvatarColor)
-			: 'orange';
-	const options = AVATAR_COLORS.map((value) => ({
-		value,
-		label: value.charAt(0).toUpperCase() + value.slice(1),
-	}));
+	let color = $state('blue');
 </script>
 
 <div class="flex flex-col gap-24">
@@ -56,7 +46,7 @@
 				<li
 					class="flex items-center gap-12 rounded-xl border border-border-subtle bg-surface-default p-12"
 				>
-					<MemberAvatar name={kid.displayName} tone={tone(kid.avatarColor)} />
+					<MemberAvatar name={kid.displayName} tone={kid.avatarColor} />
 					<div class="min-w-0 flex-1">
 						<p class="truncate font-display text-[15px] font-semibold">
 							{kid.displayName}
@@ -126,12 +116,7 @@
 				<span class="text-[14px] font-semibold text-text-secondary">
 					Avatar colour
 				</span>
-				<ChoiceChips
-					label="Avatar colour"
-					name="avatarColor"
-					{options}
-					bind:value={color}
-				/>
+				<AvatarColorPicker name="avatarColor" bind:value={color} />
 			</div>
 			<SecondaryButton type="submit" pending={addKidStep.pending > 0}>
 				{kids.length === 0 ? 'Add kid' : 'Add another kid'}
