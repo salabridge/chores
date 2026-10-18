@@ -18,6 +18,7 @@
 	import {
 		AVATAR_COLORS,
 		type AvatarColor,
+		BIRTH_YEAR_PATTERN,
 		DEFAULT_WEEKLY_GOAL,
 		MAX_DISPLAY_NAME,
 		MAX_KIDS,
@@ -108,7 +109,7 @@
 				{...addKidStep.fields.birthYear.as('text')}
 				label="Birth year (optional)"
 				inputmode="numeric"
-				pattern="[0-9]{4}"
+				pattern={BIRTH_YEAR_PATTERN}
 				maxlength={4}
 				placeholder="2017"
 				autocomplete="off"

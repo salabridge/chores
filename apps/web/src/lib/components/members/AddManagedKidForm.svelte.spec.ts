@@ -24,6 +24,14 @@ describe('AddManagedKidForm.svelte', () => {
 			.toBeVisible();
 	});
 
+	it('only accepts a four-digit birth year', async () => {
+		render(AddManagedKidForm, { kidCount: 0 });
+		const year = page.getByLabelText('Birth year (optional)');
+		await expect.element(year).toHaveAttribute('pattern', '[0-9]{4}');
+		await year.fill('2017');
+		await expect.element(year).toBeValid();
+	});
+
 	it('explains the household is full at the kid cap', async () => {
 		render(AddManagedKidForm, { kidCount: MAX_KIDS });
 		await expect

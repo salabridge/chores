@@ -6,6 +6,7 @@
 	import { addManagedKidMember } from '#lib/members.remote.js';
 	import {
 		AVATAR_COLORS,
+		BIRTH_YEAR_PATTERN,
 		DEFAULT_WEEKLY_GOAL,
 		MAX_DISPLAY_NAME,
 		MAX_KIDS,
@@ -54,7 +55,7 @@
 			{...addManagedKidMember.fields.birthYear.as('text')}
 			label="Birth year (optional)"
 			inputmode="numeric"
-			pattern="[0-9]{4}"
+			pattern={BIRTH_YEAR_PATTERN}
 			maxlength={4}
 			placeholder="2017"
 			autocomplete="off"

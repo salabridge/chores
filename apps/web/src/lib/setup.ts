@@ -28,6 +28,12 @@ export const MAX_HOUSEHOLD_NAME = 80;
 /** `household_members_display_name_check`: 1 to 50 characters after trimming. */
 export const MAX_DISPLAY_NAME = 50;
 export const MIN_BIRTH_YEAR = 1900;
+/**
+ * `pattern` for birth year inputs. Pass it as `pattern={BIRTH_YEAR_PATTERN}`:
+ * written inline in a Svelte attribute, `{4}` is an expression and the
+ * pattern renders as `[0-9]4`.
+ */
+export const BIRTH_YEAR_PATTERN = '[0-9]{4}';
 export const DEFAULT_WEEKLY_GOAL = 200;
 export const MAX_WEEKLY_GOAL = 10_000;
 export const MAX_KIDS = 12;
