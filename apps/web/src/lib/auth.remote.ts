@@ -13,6 +13,7 @@ import {
 } from '#lib/server/auth.js';
 import { requireNotKidProfile } from '#lib/server/guards.js';
 import { form, getRequestEvent, query } from '$app/server';
+import { withRedirect } from './auth-links.ts';
 
 /** Email/password sign-in. `neonAuth` re-issues Neon's session cookie on our
  * origin, so hooks see the session from the next request on. */
@@ -220,19 +221,39 @@ export const resendCode = form(async () => {
 	return { sent: true };
 });
 
+/** Emails a verification code to the signed-in user whose address isn't
+ * verified yet, then finishes on `/verify` and comes back to `redirectTo`
+ * (an invite link uses it). */
+export const sendVerificationCode = form(
+	'unchecked',
+	async (data: { redirectTo?: string }) => {
+		const user = requireUser();
+		const redirectTo = safeRedirectTarget(data.redirectTo);
+		if (user.emailVerified) redirect(303, redirectTo);
+		if (await sendCode(user.email, 'email-verification')) {
+			invalid('Could not send a code. Try again shortly.');
+		}
+		redirect(303, verifyUrl(redirectTo));
+	},
+);
+
 /** Ends the session with Neon Auth and clears our copy of its cookies. Refused
  * (403) while a managed kid profile is active: the parent has to leave it with
- * the PIN first, so a kid can't sign the parent out by posting here directly. */
-export const signOut = form(async () => {
-	await requireNotKidProfile();
-	const { locals, cookies } = getRequestEvent();
-	if (locals.user) {
-		const { error } = await neonAuth.signOut();
-		if (error) console.error('Neon Auth sign-out failed', error);
-	}
-	clearSessionCookies(cookies);
-	redirect(303, '/login');
-});
+ * the PIN first, so a kid can't sign the parent out by posting here directly.
+ * `redirectTo` is where signing back in goes (an invite link uses it). */
+export const signOut = form(
+	'unchecked',
+	async (data: { redirectTo?: string }) => {
+		await requireNotKidProfile();
+		const { locals, cookies } = getRequestEvent();
+		if (locals.user) {
+			const { error } = await neonAuth.signOut();
+			if (error) console.error('Neon Auth sign-out failed', error);
+		}
+		clearSessionCookies(cookies);
+		redirect(303, withRedirect('/login', safeRedirectTarget(data?.redirectTo)));
+	},
+);
 
 /** Changes the signed-in user's password from the account page. Other devices
  * are signed out so a stolen session doesn't survive the change. */
