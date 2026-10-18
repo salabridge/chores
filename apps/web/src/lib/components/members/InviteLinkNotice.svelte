@@ -4,12 +4,18 @@
 	let {
 		email,
 		link,
+		emailed = false,
 	}: {
 		/** Who the link is for. */
 		email: string;
 		/** The invite link. Only shown once: just its hash is stored. */
 		link: string;
+		/** Whether the link was also emailed to them. */
+		emailed?: boolean;
 	} = $props();
+
+	const NOTE =
+		"It works for 7 days, and you won't see it again after you leave this page.";
 
 	let status = $state<'idle' | 'copied' | 'failed'>('idle');
 	let reset: ReturnType<typeof setTimeout> | undefined;
@@ -36,8 +42,8 @@
 	role="status"
 >
 	<p class="text-[13px] text-text-secondary">
-		Send this link to <span class="font-semibold text-text-primary">{email}</span>.
-		It works for 7 days, and you won't see it again after you leave this page.
+		{emailed ? 'We emailed the link to' : 'Send this link to'}
+		<span class="font-semibold text-text-primary">{email}</span>. {NOTE}
 	</p>
 	<div class="flex items-center gap-8">
 		<input

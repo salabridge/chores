@@ -138,11 +138,12 @@ describe('revokeInvite', () => {
 
 describe('resendInvite', () => {
 	it('stores a new hash and returns the new token', async () => {
-		mocks.db.queue.push([{ id: 'i1' }]);
-		const token = await resendInvite(owner, 'i1');
+		mocks.db.queue.push([{ email: 'ava@example.com', role: 'kid' }]);
+		const { token, email, role } = await resendInvite(owner, 'i1');
 		const set = mocks.db.recorded[0]?.set as { tokenHash: string };
 		expect(set.tokenHash).toBe(hashInviteToken(token));
 		expect(set).toHaveProperty('lastSentAt');
+		expect({ email, role }).toEqual({ email: 'ava@example.com', role: 'kid' });
 	});
 
 	it('reports an invite it could not find', async () => {

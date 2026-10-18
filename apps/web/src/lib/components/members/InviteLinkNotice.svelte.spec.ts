@@ -47,4 +47,11 @@ describe('InviteLinkNotice.svelte', () => {
 			})
 			.toBeVisible();
 	});
+
+	it('says when the link was also emailed', async () => {
+		render(InviteLinkNotice, { email: 'sam@example.com', link, emailed: true });
+		await expect
+			.element(page.getByText(/We emailed the link to/))
+			.toBeVisible();
+	});
 });

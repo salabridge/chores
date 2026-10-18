@@ -1,7 +1,9 @@
 import { invalid } from '@sveltejs/kit';
 import { requireParentProfile } from '#lib/server/guards.js';
+import { sendInvite } from '#lib/server/invite-email.js';
 import {
 	createInvite,
+	householdName,
 	resendInvite,
 	revokeInvite,
 } from '#lib/server/invites.js';
@@ -33,6 +35,23 @@ async function write<T>(run: () => Promise<T>): Promise<T> {
 // previews), and no invite email is sent there.
 const linkFor = (token: string) =>
 	inviteLink(APP_ORIGIN ?? getRequestEvent().url.origin, token);
+
+type Actor = Awaited<ReturnType<typeof requireParentProfile>>['actor'];
+
+/** Emails the link; whether it went out is shown next to the copy-link box. */
+async function email(
+	actor: Actor,
+	invite: { email: string; role: 'parent' | 'kid'; link: string },
+) {
+	const result = await sendInvite({
+		to: invite.email,
+		role: invite.role,
+		link: invite.link,
+		inviterName: actor.displayName,
+		householdName: await householdName(actor.householdId),
+	});
+	return result.sent;
+}
 
 /** Adds a managed kid (no login) after setup. */
 export const addManagedKidMember = form(
@@ -68,7 +87,9 @@ export const inviteMember = form(
 		const parsed = parseInviteInput(data);
 		if (!parsed.ok) invalid(parsed.message);
 		const token = await write(() => createInvite(actor, parsed.value));
-		return { email: parsed.value.email, link: linkFor(token) };
+		const link = linkFor(token);
+		const emailed = await email(actor, { ...parsed.value, link });
+		return { email: parsed.value.email, link, emailed };
 	},
 );
 
@@ -89,7 +110,9 @@ export const resendMemberInvite = form(
 	async (data: { id: string }) => {
 		const { actor } = await requireParentProfile();
 		if (!isUuid(data.id)) invalid('That invite was not found.');
-		const token = await write(() => resendInvite(actor, data.id));
-		return { id: data.id, link: linkFor(token) };
+		const invite = await write(() => resendInvite(actor, data.id));
+		const link = linkFor(invite.token);
+		const emailed = await email(actor, { ...invite, link });
+		return { id: data.id, link, emailed };
 	},
 );
