@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { isHttpError } from '@sveltejs/kit';
+	import RepeatableToggle from '#lib/components/rewards/RepeatableToggle.svelte';
 	import WorkspaceHeader from '#lib/components/shell/WorkspaceHeader.svelte';
 	import Badge from '#lib/components/ui/Badge.svelte';
 	import Callout from '#lib/components/ui/Callout.svelte';
@@ -10,7 +11,6 @@
 	import SurfaceCard from '#lib/components/ui/SurfaceCard.svelte';
 	import Textarea from '#lib/components/ui/Textarea.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
-	import Toggle from '#lib/components/ui/Toggle.svelte';
 	import {
 		costLabel,
 		emptyRewardDraft,
@@ -126,7 +126,7 @@
 				{/snippet}
 				<div class="flex flex-col gap-12">
 					<p class="text-[14px] text-text-secondary">
-						{costLabel(reward)}{reward.repeatable ? ' • Repeatable' : ''}
+						{costLabel(reward)}{reward.repeatable ? ' • Unlimited claims' : ''}
 					</p>
 					{#if progress}
 						<ProgressBar
@@ -236,10 +236,7 @@
 				: undefined}
 		/>
 		{#if draft.kind === 'personal'}
-			<div class="flex items-center justify-between gap-12 text-[14px] text-text-secondary">
-				<span id="repeatable-label">Can be claimed more than once</span>
-				<Toggle bind:checked={draft.repeatable} aria-labelledby="repeatable-label" />
-			</div>
+			<RepeatableToggle bind:checked={draft.repeatable} />
 		{/if}
 		{#if submitError}
 			<Callout tone="warning">{submitError}</Callout>
