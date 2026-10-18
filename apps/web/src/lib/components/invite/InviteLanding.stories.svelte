@@ -38,6 +38,21 @@
 	{/snippet}
 </Story>
 
+<Story name="Email not verified" args={{ signedInAs: 'ava@example.com', problem: 'unverified' }}>
+	{#snippet template(args)}
+		<div class="max-w-[360px]"><InviteLanding {...args} /></div>
+	{/snippet}
+</Story>
+
+<Story
+	name="Already in a household"
+	args={{ signedInAs: 'ava@example.com', problem: 'already-in-household' }}
+>
+	{#snippet template(args)}
+		<div class="max-w-[360px]"><InviteLanding {...args} /></div>
+	{/snippet}
+</Story>
+
 <Story name="Expired" args={{ invite: { status: 'expired' } }}>
 	{#snippet template(args)}
 		<div class="max-w-[360px]"><InviteLanding {...args} /></div>

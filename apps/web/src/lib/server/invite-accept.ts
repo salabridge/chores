@@ -55,24 +55,38 @@ export async function loadInvite(
 	};
 }
 
-const PROBLEMS: [string, InviteProblem][] = [
-	['invite not found', 'not-found'],
-	['invite already accepted', 'accepted'],
-	['invite expired', 'expired'],
-	['invite is for a different email', 'wrong-email'],
-	['already a member of this household', 'already-member'],
-];
+// `app.accept_household_invite` (migration 0020) raises each refusal with a
+// stable HINT; the message text isn't a contract.
+const PROBLEMS: Partial<Record<string, InviteProblem>> = {
+	'invite-not-found': 'not-found',
+	'invite-accepted': 'accepted',
+	'invite-expired': 'expired',
+	'wrong-email': 'wrong-email',
+	'already-in-household': 'already-in-household',
+	'household-full': 'household-full',
+};
 
 /** Which of `app.accept_household_invite`'s refusals an error is, if any. */
 export function inviteProblemOf(e: unknown): InviteProblem | null {
-	const messages: string[] = [];
 	for (let err = e; err instanceof Error; err = err.cause) {
-		messages.push(err.message);
-	}
-	for (const [text, problem] of PROBLEMS) {
-		if (messages.some((m) => m.includes(text))) return problem;
+		const { hint, code } = err as { hint?: string; code?: string };
+		const problem = hint ? PROBLEMS[hint] : undefined;
+		if (problem) return problem;
+		// Two tabs accepting at once: the second insert hits the unique
+		// (household, user) index.
+		if (code === '23505') return 'already-member';
 	}
 	return null;
+}
+
+/** Whether the user already belongs to any household. */
+export async function hasAnyMembership(userId: string): Promise<boolean> {
+	const [row] = await db
+		.select({ id: householdMembers.id })
+		.from(householdMembers)
+		.where(eq(householdMembers.userId, userId))
+		.limit(1);
+	return row !== undefined;
 }
 
 /**

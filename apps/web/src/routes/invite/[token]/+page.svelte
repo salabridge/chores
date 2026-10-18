@@ -1,7 +1,9 @@
 <script lang="ts">
-	import { signOut } from '#lib/auth.remote.js';
+	import { sendVerificationCode, signOut } from '#lib/auth.remote.js';
 	import AuthShell from '#lib/components/auth/AuthShell.svelte';
+	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import InviteLanding from '#lib/components/invite/InviteLanding.svelte';
+	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import { page } from '$app/state';
 
@@ -24,6 +26,17 @@
 		signUpHref={data.signUpHref}
 		signInHref={data.signInHref}
 	>
+		{#snippet verifyEmail()}
+			<form {...sendVerificationCode} class="flex flex-col gap-16">
+				<FormAlert issues={sendVerificationCode.fields.issues()} />
+				<input
+					{...sendVerificationCode.fields.redirectTo.as('hidden', page.url.pathname)}
+				/>
+				<PrimaryButton type="submit" pending={sendVerificationCode.pending > 0}>
+					Send a code to {data.signedInAs}
+				</PrimaryButton>
+			</form>
+		{/snippet}
 		{#snippet switchAccount()}
 			<form {...signOut}>
 				<input {...signOut.fields.redirectTo.as('hidden', page.url.pathname)} />

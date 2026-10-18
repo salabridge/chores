@@ -73,17 +73,36 @@ describe('loadInvite', () => {
 	});
 });
 
+const refusal = (hint: string, code = 'P0001') =>
+	Object.assign(new Error('refused'), { hint, code });
+
 describe('inviteProblemOf', () => {
-	it('reads the refusal from the error or its cause', () => {
-		expect(inviteProblemOf(new Error('invite expired'))).toBe('expired');
+	it("reads the refusal from the error's hint or its cause's", () => {
+		expect(inviteProblemOf(refusal('invite-expired', '22023'))).toBe('expired');
+		expect(
+			inviteProblemOf(
+				new Error('Failed query', { cause: refusal('wrong-email', '42501') }),
+			),
+		).toBe('wrong-email');
+		expect(inviteProblemOf(refusal('already-in-household'))).toBe(
+			'already-in-household',
+		);
+		expect(inviteProblemOf(refusal('household-full'))).toBe('household-full');
+	});
+
+	it('ignores the message text, which is not a contract', () => {
+		expect(inviteProblemOf(new Error('invite expired'))).toBeNull();
+		expect(inviteProblemOf(new Error('connection reset'))).toBeNull();
+	});
+
+	it('treats a unique violation as already being a member', () => {
 		expect(
 			inviteProblemOf(
 				new Error('Failed query', {
-					cause: new Error('invite is for a different email'),
+					cause: Object.assign(new Error('duplicate key'), { code: '23505' }),
 				}),
 			),
-		).toBe('wrong-email');
-		expect(inviteProblemOf(new Error('connection reset'))).toBeNull();
+		).toBe('already-member');
 	});
 });
 
@@ -97,7 +116,7 @@ describe('acceptInvite', () => {
 	});
 
 	it('turns a refusal into an InviteAcceptError', async () => {
-		mocks.db.batch.mockRejectedValue(new Error('invite already accepted'));
+		mocks.db.batch.mockRejectedValue(refusal('invite-accepted', '22023'));
 		await expect(acceptInvite('u1', token)).rejects.toMatchObject({
 			problem: 'accepted',
 		});

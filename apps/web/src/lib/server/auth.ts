@@ -259,12 +259,4 @@ export function afterSignInUrl(redirectTo: string) {
 	return redirectTo === '/' ? '/profiles' : redirectTo;
 }
 
-/** Only allow same-site, path-only redirect targets. */
-export function safeRedirectTarget(target: unknown) {
-	return typeof target === 'string' &&
-		target.startsWith('/') &&
-		!target.startsWith('//') &&
-		!target.startsWith('/\\')
-		? target
-		: '/';
-}
+export { safeRedirectTarget } from '../auth-links.ts';

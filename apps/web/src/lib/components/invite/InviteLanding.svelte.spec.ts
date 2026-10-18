@@ -1,3 +1,4 @@
+import { createRawSnippet } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
@@ -75,5 +76,41 @@ describe('InviteLanding.svelte', () => {
 			signedInAs: null,
 		});
 		await expect.element(page.getByText(/already been used/)).toBeVisible();
+	});
+
+	it('offers to send a code to an unverified user, instead of a dead end', async () => {
+		render(InviteLanding, {
+			...base,
+			invite: openKidInvite,
+			signedInAs: 'ava@example.com',
+			problem: 'unverified',
+			verifyEmail: createRawSnippet(() => ({
+				render: () => '<button type="submit">Send a code</button>',
+			})),
+		});
+		await expect
+			.element(page.getByText(/Verify your email address before you join/))
+			.toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Send a code' }))
+			.toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: /^Join/ }))
+			.not.toBeInTheDocument();
+	});
+
+	it('tells someone already in a household what to do instead of joining', async () => {
+		render(InviteLanding, {
+			...base,
+			invite: openKidInvite,
+			signedInAs: 'ava@example.com',
+			problem: 'already-in-household',
+		});
+		await expect
+			.element(page.getByText(/Ask its owner to remove you/))
+			.toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: /^Join/ }))
+			.not.toBeInTheDocument();
 	});
 });

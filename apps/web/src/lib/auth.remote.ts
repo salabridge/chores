@@ -221,6 +221,22 @@ export const resendCode = form(async () => {
 	return { sent: true };
 });
 
+/** Emails a verification code to the signed-in user whose address isn't
+ * verified yet, then finishes on `/verify` and comes back to `redirectTo`
+ * (an invite link uses it). */
+export const sendVerificationCode = form(
+	'unchecked',
+	async (data: { redirectTo?: string }) => {
+		const user = requireUser();
+		const redirectTo = safeRedirectTarget(data.redirectTo);
+		if (user.emailVerified) redirect(303, redirectTo);
+		if (await sendCode(user.email, 'email-verification')) {
+			invalid('Could not send a code. Try again shortly.');
+		}
+		redirect(303, verifyUrl(redirectTo));
+	},
+);
+
 /** Ends the session with Neon Auth and clears our copy of its cookies. Refused
  * (403) while a managed kid profile is active: the parent has to leave it with
  * the PIN first, so a kid can't sign the parent out by posting here directly.

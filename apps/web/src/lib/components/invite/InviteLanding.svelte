@@ -19,6 +19,7 @@
 		signUpHref,
 		signInHref,
 		switchAccount,
+		verifyEmail,
 	}: {
 		invite: InviteView;
 		/** The token from the link, posted back to accept it. */
@@ -31,6 +32,8 @@
 		signInHref: string;
 		/** A way to sign out and use another account (the sign-out form). */
 		switchAccount?: Snippet;
+		/** Sends the signed-in user a code to verify their email (a form). */
+		verifyEmail?: Snippet;
 	} = $props();
 
 	const invitedText = (open: Extract<InviteView, { status: 'open' }>) =>
@@ -59,6 +62,12 @@
 			</div>
 			<p class="text-[13px] text-text-secondary">
 				Use {invite.email}, so the invite can find you.
+			</p>
+		{:else if problem === 'unverified'}
+			<FormAlert issues={[{ message: PROBLEM_MESSAGES.unverified }]} />
+			{@render verifyEmail?.()}
+			<p class="text-[14px] text-text-secondary">
+				You're signed in as {signedInAs}.
 			</p>
 		{:else if problem}
 			<FormAlert issues={[{ message: PROBLEM_MESSAGES[problem] }]} />

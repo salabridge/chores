@@ -10,7 +10,9 @@ export type InviteProblem =
 	| 'expired'
 	| 'wrong-email'
 	| 'unverified'
-	| 'already-member';
+	| 'already-member'
+	| 'already-in-household'
+	| 'household-full';
 
 export type InviteView =
 	| {
@@ -32,8 +34,13 @@ export const PROBLEM_MESSAGES: Record<InviteProblem, string> = {
 		'This invite has expired. Ask the parent who sent it for a new link.',
 	'wrong-email':
 		'This invite is for a different email address. Sign in with the address it was sent to, or ask for an invite to this one.',
-	unverified: 'Verify your email address first, then open the link again.',
+	unverified:
+		'Verify your email address before you join. We will email you a code.',
 	'already-member': "You're already in this household.",
+	'already-in-household':
+		"You're already in a household. Ask its owner to remove you before joining another one.",
+	'household-full':
+		'This household already has as many kids as it can. Ask the parent who invited you.',
 };
 
 /**
