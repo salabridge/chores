@@ -32,4 +32,18 @@ describe('SummaryTile.svelte', () => {
 			container.querySelector('[data-tone]')?.getAttribute('data-tone'),
 		).toBe('blue');
 	});
+
+	it('has a large size for Today', async () => {
+		const { container } = render(SummaryTile, {
+			label: 'Personal',
+			value: '2 chores',
+			size: 'large',
+		});
+		expect(
+			container.querySelector('[data-size]')?.getAttribute('data-size'),
+		).toBe('large');
+		expect(page.getByText('2 chores').element().className).toContain(
+			'text-[22px]',
+		);
+	});
 });

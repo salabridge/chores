@@ -15,6 +15,26 @@ describe('PriorityCallout.svelte', () => {
 		await expect.element(page.getByText('Complete these first.')).toBeVisible();
 	});
 
+	it('becomes one link with a call to action when given href', async () => {
+		render(PriorityCallout, {
+			title: 'Priority loop first',
+			href: '/chores/toilet',
+		});
+		const link = page.getByRole('link');
+		await expect.element(link).toHaveAttribute('href', '/chores/toilet');
+		await expect.element(link).toHaveTextContent('Priority loop first');
+		await expect.element(page.getByRole('note')).not.toBeInTheDocument();
+		expect(
+			link.element().querySelector('[data-slot="action"]')?.textContent,
+		).toContain('Open loop');
+	});
+
+	it('has no call to action without href', async () => {
+		const { container } = render(PriorityCallout, { title: 'T' });
+		expect(container.querySelector('a')).toBeNull();
+		expect(container.querySelector('[data-slot="action"]')).toBeNull();
+	});
+
 	it('renders an icon override in the tile', async () => {
 		const icon = createRawSnippet(() => ({
 			render: () => '<span data-testid="custom">x</span>',

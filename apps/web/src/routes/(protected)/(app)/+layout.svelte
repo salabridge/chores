@@ -10,13 +10,16 @@
 	// returning `{ hideNav: true }` from its `load`. Without the nav there's
 	// no desktop header either.
 	const showNav = $derived(!page.data.hideNav);
+	// A route with a desktop design returns `{ wide: true }` to leave the
+	// phone column from lg; its content then caps at the mock's 1312px.
+	const wide = $derived(page.data.wide === true);
 </script>
 
 <!--
 	Member-facing shell. Protected via the (protected) group; see hooks.server.ts.
 	Below lg it's the phone column with the bottom tab bar. From lg (SB-68) the
 	header and kid-mode bar span the window and the tabs move into the header;
-	pages stay in the phone column until they get desktop designs.
+	pages stay in the phone column until they get desktop designs (`wide`).
 -->
 <div
 	class={[
@@ -36,7 +39,12 @@
 			member={data.shellMember}
 		/>
 	{/if}
-	<main class="mx-auto flex w-full max-w-[402px] flex-1 flex-col">
+	<main
+		class={[
+			'mx-auto flex w-full max-w-[402px] flex-1 flex-col',
+			wide && 'lg:max-w-[1440px] lg:px-[64px] lg:pt-40 lg:pb-[56px]',
+		]}
+	>
 		{@render children()}
 	</main>
 	{#if showNav}

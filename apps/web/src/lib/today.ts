@@ -3,6 +3,7 @@
 // into the client.
 
 import { formatTime, plural } from './overview.ts';
+import type { StreakWeek } from './streak.ts';
 
 export type TodayStatus = 'in-progress' | 'todo' | 'my-turn' | 'completed';
 
@@ -54,6 +55,8 @@ export interface TodayData {
 	priority: TodayPriority | null;
 	personal: TodayItem[];
 	rotations: TodayItem[];
+	/** The Weekly Progress card (SB-68): the same week the Streak tab shows. */
+	week: StreakWeek;
 }
 
 type Frequency = 'daily' | 'weekly' | 'weekends';
@@ -237,6 +240,7 @@ export function buildToday(input: {
 	member: { id: string; name: string };
 	points: number;
 	streak: TodayStreak;
+	week: StreakWeek;
 	personal: readonly PersonalFacts[];
 	rotations: readonly RotationFacts[];
 }): TodayData {
@@ -252,6 +256,7 @@ export function buildToday(input: {
 		priority: pickPriority(rotations),
 		personal,
 		rotations,
+		week: input.week,
 	};
 }
 

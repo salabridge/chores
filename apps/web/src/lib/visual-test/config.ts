@@ -9,6 +9,22 @@
  */
 export const VISUAL_TEST_TAG = 'visual-test';
 
+/**
+ * For components that change layout at lg (SB-68): the same snapshot at the
+ * phone frame's width and the desktop frame's, in light and dark.
+ */
+export const responsiveVisualTestParameters = {
+	chromatic: {
+		disableSnapshot: false,
+		modes: {
+			'light mobile': { theme: 'light', viewport: 402 },
+			'dark mobile': { theme: 'dark', viewport: 402 },
+			'light desktop': { theme: 'light', viewport: 1440 },
+			'dark desktop': { theme: 'dark', viewport: 1440 },
+		},
+	},
+};
+
 /** Opts the visual-test story back in to Chromatic, in light and dark. */
 export const visualTestParameters = {
 	chromatic: {
