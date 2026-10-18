@@ -18,6 +18,7 @@ import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { streakWeek } from '../streak.ts';
 import {
 	buildToday,
+	dueDayFor,
 	type PersonalFacts,
 	type RotationFacts,
 	type TodayData,
@@ -206,6 +207,7 @@ export async function loadToday(
 				frequency: chore.frequency,
 				dueTime: chore.dueTime,
 				dueLabel: chore.dueLabel,
+				due: dueDayFor(chore, periodStart, clock.today),
 				stages: stagesFor(chore.id, instance?.id),
 				completed,
 			});
@@ -233,6 +235,7 @@ export async function loadToday(
 			stages: stagesFor(chore.id, instance?.id),
 			completed,
 			completedByName: completerId ? (names.get(completerId) ?? null) : null,
+			due: dueDayFor(chore, periodStart, clock.today),
 		});
 	}
 

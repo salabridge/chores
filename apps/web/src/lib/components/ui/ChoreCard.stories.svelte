@@ -18,7 +18,7 @@
 			},
 			status: {
 				control: 'select',
-				options: ['in-progress', 'todo', 'my-turn', 'completed', 'active-turn'],
+				options: ['in-progress', 'todo', 'my-turn', 'completed', 'overdue', 'active-turn'],
 			},
 		},
 		args: {
@@ -74,6 +74,16 @@
 />
 
 <Story name="Title only" args={{ subtitle: undefined, points: undefined, status: undefined }} />
+
+<Story
+	name="Weekly, due later this week"
+	args={{ title: 'Take the bins out', subtitle: 'Due Thu by 7:00 PM', status: 'todo' }}
+/>
+
+<Story
+	name="Weekly, overdue"
+	args={{ title: 'Take the bins out', subtitle: 'Was due Thu by 7:00 PM', status: 'overdue' }}
+/>
 
 <Story name="All variants" asChild>
 	<div class="flex max-w-[360px] flex-col gap-12">
