@@ -1,6 +1,9 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
-	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+	import {
+		responsiveVisualTestParameters,
+		VisualTestGrid,
+	} from '#lib/visual-test/index.js';
 	import * as thisFile from './SummaryTile.stories.svelte';
 	import SummaryTile from './SummaryTile.svelte';
 
@@ -10,6 +13,7 @@
 		tags: ['autodocs'],
 		argTypes: {
 			tone: { control: 'inline-radio', options: ['orange', 'blue'] },
+			size: { control: 'inline-radio', options: ['default', 'large'] },
 		},
 		args: {
 			label: 'Personal',
@@ -32,6 +36,11 @@
 	}}
 />
 
+<Story
+	name="Large"
+	args={{ size: 'large', value: '2 chores', caption: '25 pts total' }}
+/>
+
 <Story name="Side by side" asChild>
 	<div class="grid grid-cols-2 gap-12">
 		<SummaryTile label="Personal" value="2 chores" caption="1 due today" />
@@ -47,7 +56,7 @@
 <Story
 	name="Visual test"
 	tags={['visual-test', '!autodocs']}
-	parameters={visualTestParameters}
+	parameters={responsiveVisualTestParameters}
 >
 	{#snippet template(_args, context)}
 		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />

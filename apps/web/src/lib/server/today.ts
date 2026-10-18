@@ -9,10 +9,13 @@ import {
 	chores,
 	householdMembers,
 } from '@chore/db';
+import { householdStreaks } from '@chore/db/household-streaks';
 import { addDays, chorePeriodStart, localDate } from '@chore/db/recurrence';
+import type { AuthenticatedTx } from '@chore/db/rls';
 import { rotationTurns } from '@chore/db/rotation';
-import { skipKey } from '@chore/db/streaks';
+import { SCREEN_STREAK_LOOKBACK_DAYS, skipKey } from '@chore/db/streaks';
 import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { streakWeek } from '../streak.ts';
 import {
 	buildToday,
 	type PersonalFacts,
@@ -21,7 +24,7 @@ import {
 } from '../today.ts';
 import { db } from './drizzle.ts';
 import { householdClock } from './household-today.ts';
-import { memberPointsBalance, memberStreak } from './member-stats.ts';
+import { memberPointsBalance, memberWeekPoints } from './member-stats.ts';
 
 // Reads for the Today screen (SB-39). As in overview.ts, every query is scoped
 // by the household of the caller's own profile; `member` must come from
@@ -43,9 +46,10 @@ export async function loadToday(
 		loopMembers,
 		stages,
 		clock,
+		weekPoints,
 		skips,
 		points,
-		streak,
+		streaks,
 	] = await Promise.all([
 		db
 			.select()
@@ -75,6 +79,7 @@ export async function loadToday(
 			.from(choreStages)
 			.where(eq(choreStages.householdId, householdId)),
 		householdClock(householdId, now),
+		memberWeekPoints(member.id, householdId, now),
 		// A parent's Skip takes a personal chore off the list for its period;
 		// see overview.ts for why the bound is UTC today minus 8.
 		db
@@ -90,7 +95,12 @@ export async function loadToday(
 				),
 			),
 		memberPointsBalance(member.id),
-		memberStreak({ id: householdId }, member.id, now),
+		// See member-stats.ts for why the owner client can run this. The whole
+		// result, not just this member's streak, because Weekly Progress needs `due`.
+		householdStreaks(db as unknown as AuthenticatedTx, householdId, {
+			now,
+			lookbackDays: SCREEN_STREAK_LOOKBACK_DAYS,
+		}),
 	]);
 
 	const names = new Map(memberRows.map((m) => [m.id, m.name]));
@@ -229,7 +239,15 @@ export async function loadToday(
 	return buildToday({
 		member: { id: member.id, name: member.displayName },
 		points,
-		streak,
+		streak: streaks.members[member.id] ?? { days: 0, exceptions: 0 },
+		// "X of Y completed" counts what was due through today, the same as the
+		// Streak tab: streakWeek() is the one place that counts it.
+		week: streakWeek({
+			memberId: member.id,
+			today: streaks.today,
+			due: streaks.due,
+			points: weekPoints,
+		}),
 		personal,
 		rotations,
 	});

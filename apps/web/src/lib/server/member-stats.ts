@@ -1,12 +1,9 @@
 import { pointsLedger } from '@chore/db';
-import { householdStreaks } from '@chore/db/household-streaks';
-import type { AuthenticatedTx } from '@chore/db/rls';
-import { SCREEN_STREAK_LOOKBACK_DAYS, type Streak } from '@chore/db/streaks';
 import { and, eq, sql } from 'drizzle-orm';
 import { getRequestEvent } from '$app/server';
 import { db } from './drizzle.ts';
 
-// A member's points balance and personal streak, for any screen that shows
+// A member's points balance and weekly points, for any screen that shows
 // them (the Today header, the Rewards shop, the Streak tab). As in chores.ts
 // the web app is the table owner, so RLS doesn't apply: callers pass the
 // member of their own profile (`getCurrentMember()`), never an id from input.
@@ -45,46 +42,30 @@ export async function queryPointsBalance(memberId: string): Promise<number> {
 }
 
 /**
- * Points a member earned from completions since `monday` (household-local,
- * in `timeZone`), net of reversals. Claims and adjustments don't count, the
- * same as the weekly goal on the completion screen (completion-summary.ts).
+ * Points a member earned from completions since this Monday (in the
+ * household's time zone), net of reversals. Claims and adjustments don't
+ * count, the same as the weekly goal on the completion screen
+ * (completion-summary.ts). The time zone is read in the same query, so this
+ * needs no prior round trip. `date_trunc('week')` starts on Monday, matching
+ * `chorePeriodStart('weekly')`.
  */
 export async function memberWeekPoints(
 	memberId: string,
-	timeZone: string,
-	monday: string,
+	householdId: string,
+	now: Date = new Date(),
 ): Promise<number> {
-	const [row] = await db
-		.select({
-			total: sql<number>`coalesce(sum(${pointsLedger.delta}), 0)::int`,
-		})
-		.from(pointsLedger)
-		.where(
-			and(
-				eq(pointsLedger.memberId, memberId),
-				sql`${pointsLedger.reason} in ('completion', 'reversal')`,
-				sql`${pointsLedger.createdAt} >= (${monday}::date)::timestamp at time zone ${timeZone}`,
-			),
-		);
-	return Math.max(0, row?.total ?? 0);
+	const { rows } = await db.execute<{ total: number }>(sql`
+		select coalesce(sum(l.delta), 0)::int as total
+		from points_ledger l
+		join households h on h.id = ${householdId}
+		where l.member_id = ${memberId}
+			and l.reason in ('completion', 'reversal')
+			and l.created_at >= date_trunc('week', ${now.toISOString()}::timestamptz at time zone h.timezone) at time zone h.timezone`);
+	return Math.max(0, rows[0]?.total ?? 0);
 }
 
-/**
- * A member's current streak (SB-28), counted in the household's time zone.
- * Reuses `householdStreaks()`, which was written for an RLS transaction; it
- * only issues plain `select`s, which the owner client runs the same way, so
- * the cast is safe and keeps the streak rules in one place. The walk is
- * capped at `SCREEN_STREAK_LOOKBACK_DAYS`, so a longer streak shows as that.
- */
-export async function memberStreak(
-	household: { id: string },
-	memberId: string,
-	now: Date = new Date(),
-): Promise<Streak> {
-	const streaks = await householdStreaks(
-		db as unknown as AuthenticatedTx,
-		household.id,
-		{ now, lookbackDays: SCREEN_STREAK_LOOKBACK_DAYS },
-	);
-	return streaks.members[memberId] ?? { days: 0, exceptions: 0 };
-}
+// Streaks (SB-28) come from `householdStreaks()`, which was written for an
+// RLS transaction. It only issues plain `select`s, which the owner client runs
+// the same way, so callers cast `db` to `AuthenticatedTx`; that keeps the
+// streak rules in one place. Screens cap the walk at
+// `SCREEN_STREAK_LOOKBACK_DAYS`, so a longer streak shows as that.

@@ -35,6 +35,10 @@ current date or random data, makes its file's snapshot change on every build. Pa
 values through `args` instead. Animations are frozen and modal dialogs open in place in the
 grid, so a story that relies on either still renders, just statically.
 
+Components whose layout changes at the `lg` breakpoint (the Today screen and its cards)
+pass `responsiveVisualTestParameters` instead of `visualTestParameters`. That snapshots
+the grid at 402px and 1440px, in light and dark.
+
 Config is in [.storybook/](.storybook/): `preview.ts` imports `src/routes/layout.css`
 (Tailwind, tokens, fonts) and adds a **Theme** toolbar that sets `data-theme` on `<html>`,
 so check stories in both light and dark.

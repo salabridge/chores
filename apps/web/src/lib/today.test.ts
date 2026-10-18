@@ -41,6 +41,14 @@ const build = (input: {
 		member: { id: 'leo', name: 'Leo' },
 		points: 40,
 		streak: { days: 2, exceptions: 0 },
+		week: {
+			label: 'Oct 5–11',
+			number: 41,
+			days: [],
+			done: 3,
+			due: 4,
+			points: 25,
+		},
 		personal: input.personal ?? [],
 		rotations: input.rotations ?? [],
 	});

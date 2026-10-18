@@ -29,7 +29,9 @@ describe('visual-test stories', () => {
 			expect(
 				source.match(/tags=\{\['visual-test', '!autodocs'\]\}/g),
 			).toHaveLength(1);
-			expect(source).toContain('parameters={visualTestParameters}');
+			expect(source).toMatch(
+				/parameters=\{(visualTestParameters|responsiveVisualTestParameters)\}/,
+			);
 			expect(source).toContain(
 				`import * as thisFile from './${basename(path)}';`,
 			);

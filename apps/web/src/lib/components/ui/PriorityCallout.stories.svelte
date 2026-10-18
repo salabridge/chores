@@ -1,6 +1,9 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
-	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+	import {
+		responsiveVisualTestParameters,
+		VisualTestGrid,
+	} from '#lib/visual-test/index.js';
 	import * as thisFile from './PriorityCallout.stories.svelte';
 	import PriorityCallout from './PriorityCallout.svelte';
 
@@ -22,10 +25,19 @@
 
 <Story name="Title only" />
 
+<Story name="Link" args={{ href: '#' }}>
+	{#snippet template(args)}
+		<PriorityCallout {...args}>
+			Clean Bathroom Toilet is active now and unlocks the biggest points win
+			today.
+		</PriorityCallout>
+	{/snippet}
+</Story>
+
 <Story
 	name="Visual test"
 	tags={['visual-test', '!autodocs']}
-	parameters={visualTestParameters}
+	parameters={responsiveVisualTestParameters}
 >
 	{#snippet template(_args, context)}
 		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />

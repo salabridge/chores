@@ -14,7 +14,7 @@ describe('ChoreCard.svelte', () => {
 		await expect.element(link).toHaveTextContent('Clean Your Room');
 	});
 
-	it('renders subtitle, points pill and status badge', async () => {
+	it('renders subtitle, points and status badge', async () => {
 		render(ChoreCard, {
 			...base,
 			subtitle: 'Stage 2 of 3 • Continue where you left off',
@@ -70,13 +70,29 @@ describe('ChoreCard.svelte', () => {
 		expect(arrow?.className).toContain('bg-accent-blue');
 	});
 
-	it('completed variant is dimmed with a green tile', async () => {
+	it('separates points from the badge with a dot', async () => {
+		const { container } = render(ChoreCard, {
+			...base,
+			points: 10,
+			status: 'todo',
+		});
+		expect(container.querySelector('.bg-border-muted')).not.toBeNull();
+		expect(container.querySelector('[data-variant="inline"]')).toBeNull();
+	});
+
+	it('completed variant keeps readable text, with a green tile and a check', async () => {
 		const { container } = render(ChoreCard, {
 			...base,
 			variant: 'completed',
 			status: 'completed',
 		});
-		expect(container.querySelector('a')?.className).toContain('opacity-60');
+		// text-muted fails AA at this size; the tile and check say "done".
+		expect(page.getByText('Clean Your Room').element().className).toContain(
+			'text-text-secondary',
+		);
+		expect(
+			container.querySelector('[data-slot="arrow"] path')?.getAttribute('d'),
+		).toBe('M20 6 9 17l-5-5');
 		expect(
 			container.querySelector('[data-slot="icon-tile"]')?.className,
 		).toContain('bg-surface-accent-green-subtle');

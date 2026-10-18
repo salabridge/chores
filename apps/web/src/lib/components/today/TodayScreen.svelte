@@ -6,8 +6,10 @@
 	import PriorityCallout from '#lib/components/ui/PriorityCallout.svelte';
 	import StreakBanner from '#lib/components/ui/StreakBanner.svelte';
 	import SummaryTile from '#lib/components/ui/SummaryTile.svelte';
+	import WeeklyProgressCard from '#lib/components/ui/WeeklyProgressCard.svelte';
 	import { plural } from '#lib/overview.js';
 	import {
+		choreHref,
 		streakNote,
 		streakTitle,
 		type TodayData,
@@ -55,9 +57,12 @@
 	shared: boolean,
 	empty: string,
 )}
-	<section class="flex flex-col gap-12" aria-labelledby="today-{tone}">
+	<section class="flex min-w-0 flex-col gap-12" aria-labelledby="today-{tone}">
 		<div class="flex items-center justify-between">
-			<h2 id="today-{tone}" class="font-display text-[16px] font-bold text-text-primary">
+			<h2
+				id="today-{tone}"
+				class="font-display text-[17px] font-semibold text-text-primary lg:text-[20px]"
+			>
 				{heading}
 			</h2>
 			<Badge {tone} />
@@ -87,50 +92,67 @@
 	</section>
 {/snippet}
 
-<div class="flex flex-col gap-20 pb-24">
-	<header class="flex flex-col gap-20 p-24 pb-0">
-		<div class="flex items-center justify-between gap-12">
-			<div class="flex min-w-0 items-center gap-12">
-				<MemberAvatar name={data.member.name} />
-				<div class="flex min-w-0 flex-col gap-2">
-					<h1 class="truncate font-display text-[20px] font-bold text-text-primary">
-						Hey {data.member.name}!
-					</h1>
-					<p class="text-[13px] text-text-secondary">Ready to spin the loop?</p>
-				</div>
+<!--
+	One DOM for both widths (SB-68): below lg it's the Today · Mobile frame;
+	from lg the shell header takes over the greeting and the sections spread
+	into the Today · Desktop grid, in the same reading order.
+-->
+<div class="flex flex-col gap-20 px-20 pt-20 pb-24 lg:gap-24 lg:p-0">
+	<!-- From lg the shell header shows the greeting and the balance. -->
+	<div class="flex items-center justify-between gap-12 lg:hidden">
+		<div class="flex min-w-0 items-center gap-12">
+			<MemberAvatar name={data.member.name} />
+			<div class="flex min-w-0 flex-col gap-2">
+				<p class="truncate font-display text-[20px] font-bold text-text-primary">
+					Hey {data.member.name}!
+				</p>
+				<p class="text-[12px] text-text-secondary">Ready to spin the loop?</p>
 			</div>
-			<!-- From lg the shell header shows the balance (SB-68). -->
-			<PointsPill class="lg:hidden" points={data.points} variant="header" />
 		</div>
-		<StreakBanner title={streakTitle(data.streak)} class="rounded-[12px]">
+		<PointsPill points={data.points} variant="header" />
+	</div>
+
+	<div class="flex flex-col gap-12 lg:flex-row lg:items-center lg:justify-between lg:gap-24">
+		<h1 class="font-display text-[30px] font-semibold text-text-primary lg:text-[40px]">
+			Today
+		</h1>
+		<StreakBanner title={streakTitle(data.streak)} class="rounded-[8px] lg:w-[394px]">
 			{#if note}{note}{/if}
 		</StreakBanner>
-	</header>
+	</div>
 
-	<div class="flex flex-col gap-20 px-24">
-		<div class="flex gap-12">
-			<SummaryTile
-				class="flex-1"
-				tone="orange"
-				label="Personal"
-				value={plural(data.summary.personalCount, 'chore')}
-				caption="{data.summary.personalPoints} pts total"
-			/>
-			<SummaryTile
-				class="flex-1"
-				tone="blue"
-				label="Shared"
-				value={plural(data.summary.loopCount, 'loop')}
-				caption="{data.summary.availablePoints} pts available"
-			/>
-		</div>
+	<div class="grid grid-cols-2 gap-x-12 gap-y-20 lg:grid-cols-[356fr_356fr_560fr] lg:gap-20">
+		<SummaryTile
+			size="large"
+			tone="orange"
+			label="Personal"
+			value={plural(data.summary.personalCount, 'chore')}
+			caption="{data.summary.personalPoints} pts total"
+		/>
+		<SummaryTile
+			size="large"
+			tone="blue"
+			label="Shared"
+			value={plural(data.summary.loopCount, 'loop')}
+			caption="{data.summary.availablePoints} pts available"
+		/>
+		<WeeklyProgressCard
+			class="col-span-2 lg:col-span-1 lg:p-20"
+			label={data.week.label}
+			number={data.week.number}
+			done={data.week.done}
+			due={data.week.due}
+			points={data.week.points}
+		/>
+	</div>
 
-		{#if data.priority}
-			<PriorityCallout title="Priority loop first">
-				{data.priority.title} is active now and unlocks the biggest points win today.
-			</PriorityCallout>
-		{/if}
+	{#if data.priority}
+		<PriorityCallout title="Priority loop first" href={choreHref(data.priority.choreId)}>
+			{data.priority.title} is active now and unlocks the biggest points win today.
+		</PriorityCallout>
+	{/if}
 
+	<div class="grid gap-20 lg:grid-cols-2 lg:gap-24">
 		{@render section(
 			'My Personal Chores',
 			'personal',

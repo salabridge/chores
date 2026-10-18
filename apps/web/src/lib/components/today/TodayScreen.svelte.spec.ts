@@ -7,7 +7,13 @@ import TodayScreen from './TodayScreen.svelte';
 describe('TodayScreen.svelte', () => {
 	it('shows the greeting, points and streak', async () => {
 		render(TodayScreen, { data: todayData });
+		await expect
+			.element(page.getByRole('heading', { level: 1, name: 'Today' }))
+			.toBeVisible();
 		await expect.element(page.getByText('Hey Leo!')).toBeVisible();
+		await expect
+			.element(page.getByRole('heading', { name: 'Hey Leo!' }))
+			.not.toBeInTheDocument();
 		await expect
 			.element(page.getByText('Ready to spin the loop?'))
 			.toBeVisible();
@@ -23,11 +29,22 @@ describe('TodayScreen.svelte', () => {
 		await expect.element(page.getByText('20 pts available')).toBeVisible();
 	});
 
-	it('calls out the priority loop', async () => {
+	it("shows the week's progress", async () => {
 		render(TodayScreen, { data: todayData });
-		await expect.element(page.getByText('Priority loop first')).toBeVisible();
 		await expect
-			.element(page.getByRole('note'))
+			.element(page.getByRole('region', { name: 'Weekly Progress' }))
+			.toBeVisible();
+		await expect.element(page.getByText('6 of 10 completed')).toBeVisible();
+		await expect.element(page.getByText('Week 41')).toBeVisible();
+		await expect.element(page.getByText('85 pts')).toBeVisible();
+	});
+
+	it('links the priority callout to the loop', async () => {
+		render(TodayScreen, { data: todayData });
+		const callout = page.getByRole('link', { name: /Priority loop first/ });
+		await expect.element(callout).toHaveAttribute('href', '/chores/toilet');
+		await expect
+			.element(callout)
 			.toHaveTextContent('Clean Bathroom Toilet is active now');
 	});
 
@@ -38,6 +55,8 @@ describe('TodayScreen.svelte', () => {
 			.elements()
 			.map((l) => l.getAttribute('href'));
 		expect(hrefs).toEqual([
+			// The priority callout, then the cards.
+			'/chores/toilet',
 			'/chores/room',
 			'/chores/recycling',
 			'/chores/toilet',
@@ -67,6 +86,8 @@ describe('TodayScreen.svelte', () => {
 			)
 			.toBeVisible();
 		await expect.element(page.getByText('Start a streak today!')).toBeVisible();
-		await expect.element(page.getByRole('note')).not.toBeInTheDocument();
+		await expect
+			.element(page.getByText('Priority loop first'))
+			.not.toBeInTheDocument();
 	});
 });

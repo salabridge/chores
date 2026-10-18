@@ -20,30 +20,23 @@ export async function loadStreakScreen(
 	now: Date = new Date(),
 ): Promise<StreakScreenData> {
 	const householdId = member.householdId;
-	// Only the week's points and the chips wait on the household's date.
-	const [streaks, members, balance, [weekPoints, suggested]] =
-		await Promise.all([
-			// See member-stats.ts for why the owner client can run this.
-			householdStreaks(db as unknown as AuthenticatedTx, householdId, {
-				now,
-				lookbackDays: SCREEN_STREAK_LOOKBACK_DAYS,
-			}),
-			db
-				.select({ id: householdMembers.id, name: householdMembers.displayName })
-				.from(householdMembers)
-				.where(eq(householdMembers.householdId, householdId)),
-			memberPointsBalance(member.id),
-			householdClock(householdId, now).then(({ timeZone, today }) =>
-				Promise.all([
-					memberWeekPoints(
-						member.id,
-						timeZone,
-						chorePeriodStart('weekly', today) ?? today,
-					),
-					openChoresFor(member, today),
-				]),
-			),
-		]);
+	// Only the chips wait on the household's date.
+	const [streaks, members, balance, weekPoints, suggested] = await Promise.all([
+		// See member-stats.ts for why the owner client can run this.
+		householdStreaks(db as unknown as AuthenticatedTx, householdId, {
+			now,
+			lookbackDays: SCREEN_STREAK_LOOKBACK_DAYS,
+		}),
+		db
+			.select({ id: householdMembers.id, name: householdMembers.displayName })
+			.from(householdMembers)
+			.where(eq(householdMembers.householdId, householdId)),
+		memberPointsBalance(member.id),
+		memberWeekPoints(member.id, householdId, now),
+		householdClock(householdId, now).then(({ today }) =>
+			openChoresFor(member, today),
+		),
+	]);
 	return buildStreakScreen({
 		member: { id: member.id, name: member.displayName },
 		members,

@@ -1,6 +1,9 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
-	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+	import {
+		responsiveVisualTestParameters,
+		VisualTestGrid,
+	} from '#lib/visual-test/index.js';
 	import { emptyToday, todayData } from './fixtures.js';
 	import * as thisFile from './TodayScreen.stories.svelte';
 	import TodayScreen from './TodayScreen.svelte';
@@ -30,7 +33,7 @@
 <Story
 	name="Visual test"
 	tags={['visual-test', '!autodocs']}
-	parameters={visualTestParameters}
+	parameters={responsiveVisualTestParameters}
 >
 	{#snippet template(_args, context)}
 		<VisualTestGrid stories={thisFile} theme={context.globals.theme} />
