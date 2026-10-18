@@ -114,7 +114,11 @@
 				</div>
 				<FormAlert issues={resend.fields.issues() ?? revoke.fields.issues()} />
 				{#if resend.result?.link}
-					<InviteLinkNotice email={invite.email} link={resend.result.link} />
+					<InviteLinkNotice
+						email={invite.email}
+						link={resend.result.link}
+						emailed={resend.result.emailed}
+					/>
 				{/if}
 			</li>
 		{/each}

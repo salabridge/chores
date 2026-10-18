@@ -6,7 +6,13 @@
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", ".env*"],
 			"env": ["FIGMA_API_TOKEN", "FIGMA_FILE_KEY"],
-			"passThroughEnv": ["DATABASE_URL", "NEON_AUTH_URL", "APP_ORIGIN"]
+			"passThroughEnv": [
+				"DATABASE_URL",
+				"NEON_AUTH_URL",
+				"APP_ORIGIN",
+				"RESEND_API_KEY",
+				"INVITE_EMAIL_FROM"
+			]
 		},
 		"test:ci": {
 			"cache": false,
@@ -29,6 +35,8 @@
 				"DATABASE_AUTHENTICATED_URL",
 				"NEON_AUTH_URL",
 				"APP_ORIGIN",
+				"RESEND_API_KEY",
+				"INVITE_EMAIL_FROM",
 				"FIGMA_API_TOKEN",
 				"FIGMA_FILE_KEY"
 			]

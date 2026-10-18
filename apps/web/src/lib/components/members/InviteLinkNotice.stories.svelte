@@ -21,6 +21,12 @@
 	{/snippet}
 </Story>
 
+<Story name="Emailed" args={{ emailed: true }}>
+	{#snippet template(args)}
+		<div class="max-w-[360px]"><InviteLinkNotice {...args} /></div>
+	{/snippet}
+</Story>
+
 <Story
 	name="Visual test"
 	tags={['visual-test', '!autodocs']}

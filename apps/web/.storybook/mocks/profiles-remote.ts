@@ -31,7 +31,7 @@ type MockForm = typeof attributes & {
 	enhance: (callback: unknown) => typeof attributes;
 	fields: Fields;
 	pending: number;
-	result: Record<string, string> | undefined;
+	result: Record<string, unknown> | undefined;
 	for: (id: unknown) => MockForm;
 };
 

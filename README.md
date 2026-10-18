@@ -58,6 +58,8 @@ load `packages/db/.env`.
 | `DATABASE_AUTHENTICATED_URL` | `packages/db`             | Connection string as `authenticated_backend`. RLS applies.             |
 | `NEON_AUTH_URL`              | `apps/web`, `packages/db` | Neon Auth base URL for the branch. Neon's docs call it `NEON_AUTH_BASE_URL`. |
 | `APP_ORIGIN`                 | `apps/web`                | The app's public origin, for invite links. Set it in production; unset uses the request's origin. |
+| `RESEND_API_KEY`             | `apps/web`                | Optional. Resend API key for invite emails. Unset skips sending.       |
+| `INVITE_EMAIL_FROM`          | `apps/web`                | Optional. From address for invite emails, on a domain verified in Resend. |
 | `FIGMA_API_TOKEN`            | `packages/tokens` build   | Optional. Enterprise-only Figma token; without it the build uses the committed snapshot. |
 | `FIGMA_FILE_KEY`             | `packages/tokens` build   | Optional. Defaults to the Chores Figma file.                           |
 
@@ -82,6 +84,14 @@ The Neon project is `salabridge-chores`. It has two branches: `production`
   `https://chores.salabridge.family`. Invite links act as credentials, so they
   aren't built from request headers where this is set. Leave it unset locally
   and on previews, where links use the origin the request came in on.
+- **`RESEND_API_KEY`** and **`INVITE_EMAIL_FROM`:** only needed where invite
+  emails should actually go out (production). Create the key under **API
+  Keys** in Resend, and verify the sending domain (a subdomain such as
+  `mail.<domain>`, with the SPF, DKIM and DMARC records Resend lists) first.
+  Sending also needs `APP_ORIGIN`, so emailed links never take their origin
+  from request headers. Without all three, the app skips sending: the parent
+  still gets a copy-link box on the Members screen, and the dev server also
+  logs the link.
 - **`FIGMA_API_TOKEN`:** not needed. The tokens build reads the committed
   `packages/tokens/figma-variables.json` snapshot. The token only matters on a
   Figma Enterprise plan, where it switches the build to the live REST API. See

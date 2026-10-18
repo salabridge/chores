@@ -1,9 +1,15 @@
-import { householdInvites, householdMembers, user } from '@chore/db';
+import {
+	householdInvites,
+	householdMembers,
+	households,
+	user,
+} from '@chore/db';
 import { createInviteToken } from '@chore/db/invites';
 import { and, asc, eq, isNull, lte, sql } from 'drizzle-orm';
 import {
 	canManageInvite,
 	type InviteInput,
+	type InviteRole,
 	type PendingInvite,
 } from '../invites.ts';
 import { MAX_KIDS } from '../setup.ts';
@@ -171,16 +177,16 @@ export async function revokeInvite(
 
 /**
  * Gives a pending invite a new token and a fresh 7 days, and returns the new
- * token. The old link stops working. Refused within a minute of the last
- * link, and for an invite made more than 30 days ago, so a parent can't
- * keep one alive (or keep emailing it) forever.
+ * token with who it's for. The old link stops working. Refused within a
+ * minute of the last link, and for an invite made more than 30 days ago, so
+ * a parent can't keep one alive (or keep emailing it) forever.
  */
 export async function resendInvite(
 	actor: Actor,
 	inviteId: string,
-): Promise<string> {
+): Promise<{ token: string; email: string; role: InviteRole }> {
 	const { token, tokenHash } = createInviteToken();
-	const updated = await db
+	const [updated] = await db
 		.update(householdInvites)
 		.set({
 			tokenHash,
@@ -194,9 +200,22 @@ export async function resendInvite(
 				sql`${householdInvites.createdAt} > now() - interval '30 days'`,
 			),
 		)
-		.returning({ id: householdInvites.id });
-	if (updated.length === 0) throw await resendRefusal(actor, inviteId);
-	return token;
+		.returning({ email: householdInvites.email, role: householdInvites.role });
+	if (!updated) throw await resendRefusal(actor, inviteId);
+	return {
+		token,
+		email: updated.email,
+		role: updated.role === 'parent' ? 'parent' : 'kid',
+	};
+}
+
+/** The household's name, for the invite email. */
+export async function householdName(householdId: string): Promise<string> {
+	const [row] = await db
+		.select({ name: households.name })
+		.from(households)
+		.where(eq(households.id, householdId));
+	return row?.name ?? 'your household';
 }
 
 /** Why `resendInvite` changed nothing, worded for the parent. */

@@ -23,7 +23,9 @@
 
 	let role = $state<string | number>('kid');
 	// The link from the last invite, shown until the next one.
-	let sent = $state<{ email: string; link: string } | null>(null);
+	let sent = $state<{ email: string; link: string; emailed: boolean } | null>(
+		null,
+	);
 
 	const ageHint = $derived(
 		`A kid with their own login has to be born in ${latestInviteBirthYear(currentYear)} or earlier. For younger kids, add a managed kid instead.`,
@@ -40,7 +42,13 @@
 		{...inviteMember.enhance(async (form) => {
 			if (await form.submit()) {
 				const result = inviteMember.result;
-				if (result) sent = { email: result.email, link: result.link };
+				if (result) {
+					sent = {
+						email: result.email,
+						link: result.link,
+						emailed: result.emailed,
+					};
+				}
 				// reset() puts the radios back to their SSR default (kid), so the
 				// chips' state has to follow, or the hidden birth year goes missing.
 				form.element.reset();
@@ -88,6 +96,10 @@
 	</form>
 
 	{#if sent}
-		<InviteLinkNotice email={sent.email} link={sent.link} />
+		<InviteLinkNotice
+			email={sent.email}
+			link={sent.link}
+			emailed={sent.emailed}
+		/>
 	{/if}
 </div>
