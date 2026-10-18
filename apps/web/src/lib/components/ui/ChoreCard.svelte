@@ -7,7 +7,8 @@
 	 * - `personal`: orange-tinted icon tile.
 	 * - `shared`: blue-tinted icon tile on a plain card.
 	 * - `highlighted`: shared chore that is the viewer's turn (blue border, filled arrow).
-	 * - `completed`: muted text, green icon tile, and a check instead of the arrow.
+	 * - `completed`: green icon tile and a check instead of the arrow. The text
+	 *   stays at secondary contrast; the tile and check already say "done".
 	 *
 	 * Grows from lg to the Today · Desktop mock's card (SB-68).
 	 */
@@ -67,8 +68,8 @@
 			card: 'border-border-subtle bg-surface-default',
 			tile: 'bg-surface-accent-green-subtle text-text-green',
 			action: 'bg-background-base text-text-muted',
-			points: 'text-text-muted',
-			text: 'text-text-muted',
+			points: 'text-text-secondary',
+			text: 'text-text-secondary',
 		},
 	};
 	const v = $derived(variants[variant]);
@@ -101,7 +102,7 @@
 		>
 		{#if subtitle}
 			<span
-				class={['text-[13px] leading-[1.4]', done ? 'text-text-muted' : 'text-text-secondary']}
+				class="text-[13px] leading-[1.4] text-text-secondary"
 				>{subtitle}</span
 			>
 		{/if}

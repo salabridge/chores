@@ -80,14 +80,15 @@ describe('ChoreCard.svelte', () => {
 		expect(container.querySelector('[data-variant="inline"]')).toBeNull();
 	});
 
-	it('completed variant is muted with a green tile and a check', async () => {
+	it('completed variant keeps readable text, with a green tile and a check', async () => {
 		const { container } = render(ChoreCard, {
 			...base,
 			variant: 'completed',
 			status: 'completed',
 		});
+		// text-muted fails AA at this size; the tile and check say "done".
 		expect(page.getByText('Clean Your Room').element().className).toContain(
-			'text-text-muted',
+			'text-text-secondary',
 		);
 		expect(
 			container.querySelector('[data-slot="arrow"] path')?.getAttribute('d'),

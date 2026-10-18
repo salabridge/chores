@@ -24,7 +24,11 @@
 	}: Props = $props();
 
 	const headingId = $props.id();
-	const percent = $derived(due > 0 ? Math.round((done / due) * 100) : 0);
+	// Completions that weren't counted in `due` (extra ones, a swapped turn)
+	// can push `done` past it; the card never claims more than 100%.
+	const percent = $derived(
+		due > 0 ? Math.min(100, Math.round((done / due) * 100)) : 0,
+	);
 </script>
 
 <section
@@ -47,16 +51,22 @@
 
 	<div class="flex items-end gap-20">
 		<div class="flex min-w-0 flex-1 flex-col gap-8">
-			<div class="flex justify-between gap-8 text-[11px]">
-				<p class="font-semibold text-text-orange">{done} of {due} completed</p>
-				<p class="text-text-secondary">{percent}%</p>
-			</div>
-			<ProgressBar
-				value={done}
-				max={Math.max(due, 1)}
-				variant="orange"
-				aria-label="Chores completed this week"
-			/>
+			{#if due === 0}
+				<p class="text-[11px] text-text-secondary">Nothing due yet this week.</p>
+			{:else}
+				<div class="flex justify-between gap-8 text-[11px]">
+					<p class="font-semibold text-text-orange">
+						{Math.min(done, due)} of {due} completed
+					</p>
+					<p class="text-text-secondary">{percent}%</p>
+				</div>
+				<ProgressBar
+					value={Math.min(done, due)}
+					max={due}
+					variant="orange"
+					aria-label="Chores completed this week"
+				/>
+			{/if}
 		</div>
 		<div class="flex shrink-0 flex-col items-end gap-2">
 			<p class="text-[10px] text-text-secondary">Earned this week</p>

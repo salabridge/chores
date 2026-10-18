@@ -45,7 +45,8 @@ export async function loadToday(
 		rotationRows,
 		loopMembers,
 		stages,
-		[clock, weekPoints],
+		clock,
+		weekPoints,
 		skips,
 		points,
 		streaks,
@@ -77,17 +78,8 @@ export async function loadToday(
 			.select({ choreId: choreStages.choreId })
 			.from(choreStages)
 			.where(eq(choreStages.householdId, householdId)),
-		// The week's points need the household's date and time zone.
-		householdClock(householdId, now).then((clock) =>
-			Promise.all([
-				clock,
-				memberWeekPoints(
-					member.id,
-					clock.timeZone,
-					chorePeriodStart('weekly', clock.today) ?? clock.today,
-				),
-			]),
-		),
+		householdClock(householdId, now),
+		memberWeekPoints(member.id, householdId, now),
 		// A parent's Skip takes a personal chore off the list for its period;
 		// see overview.ts for why the bound is UTC today minus 8.
 		db
@@ -248,9 +240,8 @@ export async function loadToday(
 		member: { id: member.id, name: member.displayName },
 		points,
 		streak: streaks.members[member.id] ?? { days: 0, exceptions: 0 },
-		// TODO(SB-68): whether "X of Y completed" counts the whole week or, as
-		// the Streak tab does, only what was due through today is undecided.
-		// streakWeek() is the one place that counts it.
+		// "X of Y completed" counts what was due through today, the same as the
+		// Streak tab: streakWeek() is the one place that counts it.
 		week: streakWeek({
 			memberId: member.id,
 			today: streaks.today,

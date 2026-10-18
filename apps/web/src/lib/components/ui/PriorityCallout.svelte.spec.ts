@@ -29,6 +29,17 @@ describe('PriorityCallout.svelte', () => {
 		).toContain('Open loop');
 	});
 
+	it('shows the arrow at every width, the label only from lg', async () => {
+		const { container } = render(PriorityCallout, {
+			title: 'Priority loop first',
+			href: '/chores/toilet',
+		});
+		const action = container.querySelector('[data-slot="action"]');
+		expect(action?.className).not.toContain('hidden');
+		expect(action?.querySelector('svg')).not.toBeNull();
+		expect(action?.querySelector('span')?.className).toContain('lg:inline');
+	});
+
 	it('has no call to action without href', async () => {
 		const { container } = render(PriorityCallout, { title: 'T' });
 		expect(container.querySelector('a')).toBeNull();

@@ -11,7 +11,7 @@
 		icon?: Snippet;
 		/** Makes the whole callout a link, e.g. to the priority chore. */
 		href?: string;
-		/** The link's call to action, shown from lg (SB-68). */
+		/** The link's call to action, shown from lg; the arrow shows at every width (SB-68). */
 		action?: string;
 	}
 
@@ -71,11 +71,11 @@
 	</span>
 	{#if href}
 		<span
-			class="hidden shrink-0 items-center gap-8 text-[12px] font-bold text-text-blue lg:flex"
+			class="flex shrink-0 items-center gap-8 text-[12px] font-bold text-text-blue"
 			data-slot="action"
 			aria-hidden="true"
 		>
-			{action}
+			<span class="hidden lg:inline">{action}</span>
 			<svg
 				width="18"
 				height="18"

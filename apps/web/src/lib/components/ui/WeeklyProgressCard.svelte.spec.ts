@@ -23,9 +23,18 @@ describe('WeeklyProgressCard.svelte', () => {
 			.toHaveAttribute('aria-valuenow', '6');
 	});
 
-	it('shows 0% when nothing is due yet', async () => {
+	it('says nothing is due instead of showing 0 of 0', async () => {
 		render(WeeklyProgressCard, { ...week, done: 0, due: 0 });
-		await expect.element(page.getByText('0 of 0 completed')).toBeVisible();
-		await expect.element(page.getByText('0%')).toBeVisible();
+		await expect
+			.element(page.getByText('Nothing due yet this week.'))
+			.toBeVisible();
+		await expect.element(page.getByText(/completed/)).not.toBeInTheDocument();
+		await expect.element(page.getByRole('progressbar')).not.toBeInTheDocument();
+	});
+
+	it('never shows more than 100% when extra chores were done', async () => {
+		render(WeeklyProgressCard, { ...week, done: 7, due: 5 });
+		await expect.element(page.getByText('5 of 5 completed')).toBeVisible();
+		await expect.element(page.getByText('100%')).toBeVisible();
 	});
 });
