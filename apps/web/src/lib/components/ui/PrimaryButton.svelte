@@ -9,6 +9,11 @@
 		children: Snippet;
 		/** Disables the button and marks it busy, e.g. while a form is submitting. */
 		pending?: boolean;
+		/**
+		 * `lg` is the full-width 50px form CTA. `sm` is the compact auto-width
+		 * button for page headers and toolbars, sized to sit beside SecondaryButton.
+		 */
+		size?: 'lg' | 'sm';
 	};
 
 	type ButtonProps = BaseProps &
@@ -26,12 +31,19 @@
 	let {
 		children,
 		pending = false,
+		size = 'lg',
 		class: className,
 		...rest
 	}: Props = $props();
 
+	const sizes = {
+		lg: 'flex h-[50px] w-full rounded-[14px] text-[16px] font-semibold',
+		sm: 'inline-flex h-[36px] gap-8 rounded-[10px] px-16 font-display text-[14px] font-semibold whitespace-nowrap',
+	} as const;
+
 	const classes = $derived([
-		'flex h-[50px] w-full items-center justify-center rounded-[14px] bg-accent-orange text-[16px] font-semibold text-text-default transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-orange disabled:opacity-60 aria-disabled:pointer-events-none aria-disabled:opacity-60',
+		'items-center justify-center bg-accent-orange text-text-default transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-orange disabled:opacity-60 aria-disabled:pointer-events-none aria-disabled:opacity-60',
+		sizes[size],
 		className,
 	]);
 </script>

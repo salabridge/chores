@@ -41,4 +41,16 @@ describe('PrimaryButton.svelte', () => {
 		await expect.element(link).toHaveAttribute('aria-busy', 'true');
 		await expect.element(link).toHaveAttribute('aria-disabled', 'true');
 	});
+
+	it('is full width at the default lg size', async () => {
+		render(PrimaryButton, { children });
+		await expect.element(page.getByRole('button')).toHaveClass('w-full');
+	});
+
+	it('is compact and auto width at the sm size', async () => {
+		render(PrimaryButton, { children, size: 'sm' });
+		const button = page.getByRole('button');
+		await expect.element(button).toHaveClass('h-[36px]');
+		await expect.element(button).not.toHaveClass('w-full');
+	});
 });

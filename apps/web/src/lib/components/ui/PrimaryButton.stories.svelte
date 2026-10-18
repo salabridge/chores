@@ -19,6 +19,10 @@
 
 <Story name="Disabled" args={{ disabled: true }}>Continue</Story>
 
+<Story name="Small (header)" args={{ size: 'sm' }}>+ New Chore Loop</Story>
+
+<Story name="Small pending" args={{ size: 'sm', pending: true }}>Saving</Story>
+
 <Story name="As link" args={{ href: '#' }}>Get started</Story>
 
 <Story

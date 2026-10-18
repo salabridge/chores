@@ -62,7 +62,7 @@
 >
 	{#snippet actions()}
 		<SecondaryButton href="/rotations">Rotation Builder</SecondaryButton>
-		<PrimaryButton href="/chores/new">Create & Assign</PrimaryButton>
+		<PrimaryButton size="sm" href="/chores/new">Create & Assign</PrimaryButton>
 	{/snippet}
 </WorkspaceHeader>
 
