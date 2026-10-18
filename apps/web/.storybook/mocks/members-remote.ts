@@ -4,3 +4,6 @@
 import { mockForm } from './profiles-remote.ts';
 
 export const addManagedKidMember = mockForm();
+export const inviteMember = mockForm();
+export const revokeMemberInvite = mockForm();
+export const resendMemberInvite = mockForm();

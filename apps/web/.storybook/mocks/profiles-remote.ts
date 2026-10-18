@@ -16,23 +16,34 @@ function field(name: string) {
 	};
 }
 
-export function mockForm() {
+const attributes = {
+	method: 'POST',
+	action: '#',
+	onsubmit: (event: SubmitEvent) => event.preventDefault(),
+};
+
+type Fields = { issues: () => Issue[] | undefined } & Record<
+	string,
+	ReturnType<typeof field>
+>;
+
+type MockForm = typeof attributes & {
+	enhance: (callback: unknown) => typeof attributes;
+	fields: Fields;
+	pending: number;
+	result: Record<string, string> | undefined;
+	for: (id: unknown) => MockForm;
+};
+
+export function mockForm(): MockForm {
 	const fields = new Proxy(
 		{ issues: (): Issue[] | undefined => undefined },
 		{
 			get: (target, key) =>
 				key in target ? target[key as keyof typeof target] : field(String(key)),
 		},
-	) as { issues: () => Issue[] | undefined } & Record<
-		string,
-		ReturnType<typeof field>
-	>;
+	) as Fields;
 
-	const attributes = {
-		method: 'POST',
-		action: '#',
-		onsubmit: (event: SubmitEvent) => event.preventDefault(),
-	};
 	// `<form {...form}>` spreads the form object, so only the attributes are
 	// enumerable, like the real remote form.
 	return Object.defineProperties(
@@ -41,12 +52,11 @@ export function mockForm() {
 			enhance: { value: (_callback: unknown) => ({ ...attributes }) },
 			fields: { value: fields },
 			pending: { value: 0 },
+			result: { value: undefined },
+			// One instance per list item (`form.for(id)`); all of them do nothing.
+			for: { value: (_id: unknown) => mockForm() },
 		},
-	) as typeof attributes & {
-		enhance: (callback: unknown) => typeof attributes;
-		fields: typeof fields;
-		pending: number;
-	};
+	) as MockForm;
 }
 
 export const selectProfile = mockForm();

@@ -344,6 +344,7 @@ try {
 				email: carol.email,
 				role: 'kid',
 				displayName: 'Leo',
+				birthYear: 2008,
 				tokenHash: carolInvite.tokenHash,
 			},
 			{
@@ -404,8 +405,11 @@ try {
 	assert.equal(byId.get(bobMemberId)?.displayName, 'Dad');
 	assert.equal(byId.get(carolMemberId)?.role, 'kid');
 	assert.equal(byId.get(carolMemberId)?.displayName, 'Leo');
+	assert.equal(byId.get(carolMemberId)?.birthYear, 2008);
+	assert.equal(byId.get(bobMemberId)?.birthYear, null);
 	assert.equal(members.length, 4);
 	ok('Bob joins as a parent and Carol as a kid; Carol sees all 4 members');
+	ok("Carol's member row gets the birth year from her invite");
 
 	const [acceptedInvite] = await admin
 		.select()

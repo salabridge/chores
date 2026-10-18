@@ -1,4 +1,5 @@
 import { requireParentProfile } from '#lib/server/guards.js';
+import { listPendingInvites } from '#lib/server/invites.js';
 import { listHouseholdMembers } from '#lib/server/members.js';
 import type { PageServerLoad } from './$types';
 
@@ -6,5 +7,9 @@ import type { PageServerLoad } from './$types';
 // itself and checks again, since layout and page loads run in parallel.
 export const load: PageServerLoad = async () => {
 	const { actor } = await requireParentProfile();
-	return { members: await listHouseholdMembers(actor.householdId) };
+	const [members, invites] = await Promise.all([
+		listHouseholdMembers(actor.householdId),
+		listPendingInvites(actor.householdId),
+	]);
+	return { members, invites, actorRole: actor.role };
 };
