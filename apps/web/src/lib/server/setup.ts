@@ -132,7 +132,8 @@ export async function loadSetupData(status: SetupStatus): Promise<SetupData> {
 	};
 }
 
-function isUniqueViolation(e: unknown): boolean {
+/** Whether a Postgres error (or one Drizzle wrapped) is a unique violation. */
+export function isUniqueViolation(e: unknown): boolean {
 	const code = (e as { code?: string; cause?: { code?: string } } | null)?.code;
 	const causeCode = (e as { cause?: { code?: string } } | null)?.cause?.code;
 	return code === '23505' || causeCode === '23505';

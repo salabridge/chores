@@ -57,6 +57,7 @@ load `packages/db/.env`.
 | `DATABASE_URL`               | `apps/web`, `packages/db` | Postgres connection string as `neondb_owner`. Bypasses RLS.            |
 | `DATABASE_AUTHENTICATED_URL` | `packages/db`             | Connection string as `authenticated_backend`. RLS applies.             |
 | `NEON_AUTH_URL`              | `apps/web`, `packages/db` | Neon Auth base URL for the branch. Neon's docs call it `NEON_AUTH_BASE_URL`. |
+| `APP_ORIGIN`                 | `apps/web`                | The app's public origin, for invite links. Set it in production; unset uses the request's origin. |
 | `FIGMA_API_TOKEN`            | `packages/tokens` build   | Optional. Enterprise-only Figma token; without it the build uses the committed snapshot. |
 | `FIGMA_FILE_KEY`             | `packages/tokens` build   | Optional. Defaults to the Chores Figma file.                           |
 
@@ -77,6 +78,10 @@ The Neon project is `salabridge-chores`. It has two branches: `production`
 - **`NEON_AUTH_URL`:** in the Neon console, open **Auth** for the branch and
   copy the Auth URL. It looks like
   `https://ep-….neonauth.c-4.us-west-2.aws.neon.tech/neondb/auth`.
+- **`APP_ORIGIN`:** the origin people open the app on. In production that's
+  `https://chores.salabridge.family`. Invite links act as credentials, so they
+  aren't built from request headers where this is set. Leave it unset locally
+  and on previews, where links use the origin the request came in on.
 - **`FIGMA_API_TOKEN`:** not needed. The tokens build reads the committed
   `packages/tokens/figma-variables.json` snapshot. The token only matters on a
   Figma Enterprise plan, where it switches the build to the live REST API. See

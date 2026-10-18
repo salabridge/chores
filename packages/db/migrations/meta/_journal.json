@@ -141,6 +141,13 @@
 			"when": 1791916012271,
 			"tag": "0019_chore_completions_no_cascade",
 			"breakpoints": true
+		},
+		{
+			"idx": 20,
+			"version": "7",
+			"when": 1792315868170,
+			"tag": "0020_invite_birth_year",
+			"breakpoints": true
 		}
 	]
 }

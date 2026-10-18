@@ -20,7 +20,8 @@
 		"./rotation": "./src/rotation.ts",
 		"./streaks": "./src/streaks.ts",
 		"./household-streaks": "./src/household-streaks.ts",
-		"./completions": "./src/completions.ts"
+		"./completions": "./src/completions.ts",
+		"./invites": "./src/invites.ts"
 	},
 	"dependencies": {
 		"@neondatabase/serverless": "^1.1.0",

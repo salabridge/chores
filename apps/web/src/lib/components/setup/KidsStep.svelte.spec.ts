@@ -57,12 +57,14 @@ describe('KidsStep.svelte', () => {
 			.toBeVisible();
 	});
 
-	it('defaults the weekly goal to 200 and says own logins are coming', async () => {
+	it('defaults the weekly goal to 200 and points to invites for own logins', async () => {
 		render(KidsStep, { kids: [] });
 		await expect
 			.element(page.getByLabelText('Weekly points goal'))
 			.toHaveValue('200');
-		await expect.element(page.getByText(/coming soon/)).toBeVisible();
+		await expect
+			.element(page.getByText(/invite a kid 13 or older/))
+			.toBeVisible();
 	});
 
 	it('only accepts a four-digit birth year', async () => {

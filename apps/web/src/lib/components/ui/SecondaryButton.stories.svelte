@@ -14,7 +14,7 @@
 				control: 'inline-radio',
 				options: ['outline', 'icon', 'tinted'],
 			},
-			tone: { control: 'select', options: ['orange', 'blue', 'green', 'amber', 'neutral'] },
+			tone: { control: 'select', options: ['orange', 'blue', 'green', 'amber', 'red', 'neutral'] },
 		},
 		args: { onclick: fn(), variant: 'outline' },
 	});
@@ -34,6 +34,7 @@
 		<SecondaryButton variant="tinted" tone="blue">View Loop</SecondaryButton>
 		<SecondaryButton variant="tinted" tone="green">Claim</SecondaryButton>
 		<SecondaryButton variant="tinted" tone="amber">Remind</SecondaryButton>
+		<SecondaryButton variant="tinted" tone="red">Revoke</SecondaryButton>
 		<SecondaryButton variant="tinted" tone="neutral">Reopen</SecondaryButton>
 	</div>
 </Story>

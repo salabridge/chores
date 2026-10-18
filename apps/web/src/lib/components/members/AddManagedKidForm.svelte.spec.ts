@@ -2,36 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 
-// The Storybook mock, except that submitting runs the enhance callback with a
-// submit that succeeds, so the after-add behaviour can be checked.
+// The Storybook mock, except that submitting succeeds, so the after-add
+// behaviour can be checked.
 vi.mock('#lib/members.remote.js', async () => {
-	const { mockForm } = await import(
+	const { submittable } = await import(
 		'../../../../.storybook/mocks/profiles-remote.ts'
 	);
-	const form = mockForm();
-	type Callback = (form: {
-		element: HTMLFormElement;
-		submit: () => Promise<boolean>;
-	}) => Promise<void>;
-	const addManagedKidMember = Object.defineProperties(
-		{ method: form.method, action: form.action },
-		{
-			enhance: {
-				value: (callback: Callback) => ({
-					method: form.method,
-					action: form.action,
-					onsubmit: (event: SubmitEvent) => {
-						event.preventDefault();
-						const element = event.currentTarget as HTMLFormElement;
-						void callback({ element, submit: async () => true });
-					},
-				}),
-			},
-			fields: { value: form.fields },
-			pending: { value: 0 },
-		},
-	);
-	return { addManagedKidMember };
+	const remote = await import('../../../../.storybook/mocks/members-remote.ts');
+	return {
+		...remote,
+		addManagedKidMember: submittable(remote.addManagedKidMember),
+	};
 });
 
 import { MAX_KIDS } from '#lib/setup.js';

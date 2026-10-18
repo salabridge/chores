@@ -4,6 +4,7 @@ import {
 	index,
 	pgPolicy,
 	pgTable,
+	smallint,
 	text,
 	timestamp,
 	uniqueIndex,
@@ -43,6 +44,12 @@ export const householdInvites = pgTable(
 		role: householdRole('role').notNull().default('kid'),
 		/** Display name for the new member row; NULL uses the auth user's name. */
 		displayName: text('display_name'),
+		/**
+		 * Copied to the new member row on accept. The web app requires it for kid
+		 * invites and checks the kid is at least 13 (SB-66); the database only
+		 * checks the range, like `household_members.birth_year`.
+		 */
+		birthYear: smallint('birth_year'),
 		tokenHash: text('token_hash').notNull(),
 		invitedBy: uuid('invited_by')
 			.default(sql`app.current_user_id()`)
@@ -57,6 +64,10 @@ export const householdInvites = pgTable(
 			{ onDelete: 'set null' },
 		),
 		createdAt: timestamp('created_at', { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+		/** When the link was last made or resent, so resends can be throttled. */
+		lastSentAt: timestamp('last_sent_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),
 	},
@@ -75,6 +86,10 @@ export const householdInvites = pgTable(
 		check(
 			'household_invites_token_hash_check',
 			sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`,
+		),
+		check(
+			'household_invites_birth_year_check',
+			sql`${t.birthYear} is null or ${t.birthYear} between 1900 and 2200`,
 		),
 		check(
 			'household_invites_display_name_check',

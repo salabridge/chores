@@ -140,8 +140,8 @@
 	{/if}
 
 	<p class="text-[13px] text-text-secondary">
-		These are profiles you manage on this household's devices. Inviting a kid
-		with their own login is coming soon.
+		These are profiles you manage on this household's devices. After setup,
+		you can invite a kid 13 or older with their own login from Members.
 	</p>
 
 	<div class="flex flex-col gap-8">
