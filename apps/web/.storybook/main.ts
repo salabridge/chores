@@ -32,6 +32,12 @@ const config: StorybookConfig = {
 				),
 			},
 			{
+				find: /^#lib\/invite\.remote\.js$/,
+				replacement: fileURLToPath(
+					new URL('./mocks/invite-remote.ts', import.meta.url),
+				),
+			},
+			{
 				find: /^#lib\/members\.remote\.js$/,
 				replacement: fileURLToPath(
 					new URL('./mocks/members-remote.ts', import.meta.url),

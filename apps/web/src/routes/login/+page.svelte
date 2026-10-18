@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { signIn } from '#lib/auth.remote.js';
+	import { withRedirect } from '#lib/auth-links.js';
 	import AuthHeading from '#lib/components/auth/AuthHeading.svelte';
 	import AuthShell from '#lib/components/auth/AuthShell.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
@@ -80,7 +81,10 @@
 	{#snippet footer()}
 		<p>
 			<span class="text-text-secondary">Don't have an account?</span>
-			<a href="/signup" class="font-semibold text-text-orange">Sign up</a>
+			<a
+				href={withRedirect('/signup', data.redirectTo)}
+				class="font-semibold text-text-orange">Sign up</a
+			>
 		</p>
 	{/snippet}
 </AuthShell>
