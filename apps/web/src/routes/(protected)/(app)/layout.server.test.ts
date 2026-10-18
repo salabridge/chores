@@ -22,7 +22,12 @@ const { load } = await import('./+layout.server.ts');
 
 beforeEach(() => vi.resetAllMocks());
 
-const leo = { id: 'kid1', householdId: 'h1', displayName: 'Leo' };
+const leo = {
+	id: 'kid1',
+	householdId: 'h1',
+	displayName: 'Leo',
+	avatarColor: 'green',
+};
 
 describe('member shell load', () => {
 	it("gives the header the acting member's name and balance", async () => {
@@ -30,7 +35,7 @@ describe('member shell load', () => {
 		mocks.memberPointsBalance.mockResolvedValue(140);
 		await expect(load({} as never)).resolves.toEqual({
 			activeKid: null,
-			shellMember: { name: 'Leo', points: 140 },
+			shellMember: { name: 'Leo', points: 140, tone: 'green' },
 		});
 		expect(mocks.memberPointsBalance).toHaveBeenCalledWith('kid1');
 		expect(mocks.pinGet).not.toHaveBeenCalled();
@@ -46,7 +51,7 @@ describe('member shell load', () => {
 		mocks.pinGet.mockResolvedValue({ lockedAt: new Date() });
 		await expect(load({} as never)).resolves.toEqual({
 			activeKid: { id: 'kid1', name: 'Leo', pinLocked: true },
-			shellMember: { name: 'Leo', points: 15 },
+			shellMember: { name: 'Leo', points: 15, tone: 'green' },
 		});
 		expect(mocks.pinGet).toHaveBeenCalledWith('parent1');
 	});

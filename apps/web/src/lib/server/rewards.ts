@@ -20,6 +20,7 @@ import {
 	rewardInputError,
 } from '../rewards.ts';
 import { db } from './drizzle.ts';
+import { memberPointsBalance, queryPointsBalance } from './member-stats.ts';
 
 // Reads and writes for the rewards catalog and claims (SB-27). As in
 // chores.ts, the web app is the table owner, so RLS doesn't apply: every query
@@ -193,16 +194,6 @@ export async function householdWeekProgress(
 }
 
 /** A member's points: the sum of their ledger rows. */
-async function memberBalance(memberId: string): Promise<number> {
-	const [row] = await db
-		.select({
-			total: sql<number>`coalesce(sum(${pointsLedger.delta}), 0)::int`,
-		})
-		.from(pointsLedger)
-		.where(eq(pointsLedger.memberId, memberId));
-	return row?.total ?? 0;
-}
-
 async function claimedRewardIds(memberId: string): Promise<Set<string>> {
 	const rows = await db
 		.select({ rewardId: rewardClaims.rewardId })
@@ -222,7 +213,7 @@ export async function loadRewardShop(
 ) {
 	const [catalog, balance, claimed, week] = await Promise.all([
 		listRewards(member.householdId),
-		memberBalance(member.id),
+		memberPointsBalance(member.id),
 		claimedRewardIds(member.id),
 		householdWeekProgress(member.householdId, now),
 	]);
@@ -286,7 +277,7 @@ export async function claimReward(
 			),
 		);
 	const [balance, claimed] = await Promise.all([
-		memberBalance(member.id),
+		queryPointsBalance(member.id),
 		claimedRewardIds(member.id),
 	]);
 	throw denied(

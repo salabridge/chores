@@ -1,6 +1,7 @@
 import { memberPointsBalance } from '#lib/server/member-stats.js';
 import { pinStore } from '#lib/server/pin-store.js';
 import { getProfileState } from '#lib/server/profiles.js';
+import { isAvatarColor } from '#lib/setup.js';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async () => {
@@ -24,7 +25,13 @@ export const load: LayoutServerLoad = async () => {
 		/** Who the desktop header greets, or null without a household. */
 		shellMember:
 			state && points !== null
-				? { name: state.member.displayName, points }
+				? {
+						name: state.member.displayName,
+						points,
+						tone: isAvatarColor(state.member.avatarColor)
+							? state.member.avatarColor
+							: undefined,
+					}
 				: null,
 	};
 };

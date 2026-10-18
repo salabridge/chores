@@ -15,7 +15,7 @@
 				options: ['/today', '/rewards', '/streak', '/chores/1'],
 			},
 		},
-		args: { pathname: '/today', member: { name: 'Leo', points: 140 } },
+		args: { pathname: '/today', member: { name: 'Leo', points: 140, tone: 'green' } },
 	});
 </script>
 

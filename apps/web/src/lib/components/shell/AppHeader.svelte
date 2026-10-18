@@ -2,13 +2,14 @@
 	import type { HTMLAttributes } from 'svelte/elements';
 	import MemberAvatar from '#lib/components/ui/MemberAvatar.svelte';
 	import PointsPill from '#lib/components/ui/PointsPill.svelte';
+	import type { AvatarColor } from '#lib/setup.js';
 	import TabIcon from './TabIcon.svelte';
 	import { isTabActive, tabs } from './tabs.ts';
 
 	interface Props extends HTMLAttributes<HTMLElement> {
 		pathname: string;
 		/** The acting member; without one (no household yet) only the nav shows. */
-		member?: { name: string; points: number } | null;
+		member?: { name: string; points: number; tone?: AvatarColor } | null;
 	}
 
 	let { pathname, member = null, class: className, ...rest }: Props = $props();
@@ -27,7 +28,7 @@
 >
 	<div class="flex min-w-0 items-center gap-12">
 		{#if member}
-			<MemberAvatar name={member.name} />
+			<MemberAvatar name={member.name} tone={member.tone} />
 			<div class="flex min-w-0 flex-col gap-2">
 				<p class="truncate font-display text-[18px] font-semibold text-text-primary">
 					Hey {member.name}!

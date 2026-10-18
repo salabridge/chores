@@ -15,6 +15,16 @@ describe('AppHeader.svelte', () => {
 		await expect.element(page.getByText('140 pts')).toBeVisible();
 	});
 
+	it("rings the avatar in the member's own colour", async () => {
+		render(AppHeader, {
+			pathname: '/today',
+			member: { ...member, tone: 'green' },
+		});
+		await expect
+			.element(page.getByRole('img', { name: 'Leo' }))
+			.toHaveClass('border-border-green');
+	});
+
 	it('links the three tabs and marks only the current one', async () => {
 		render(AppHeader, { pathname: '/rewards/history', member });
 		const nav = page.getByRole('navigation', { name: 'Main' });
