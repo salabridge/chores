@@ -2,8 +2,36 @@ import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 
+// The Storybook mock, except that submitting runs the enhance callback with a
+// submit that succeeds, so the after-add behaviour can be checked.
 vi.mock('#lib/members.remote.js', async () => {
-	return await import('../../../../.storybook/mocks/members-remote.ts');
+	const { mockForm } = await import(
+		'../../../../.storybook/mocks/profiles-remote.ts'
+	);
+	const form = mockForm();
+	type Callback = (form: {
+		element: HTMLFormElement;
+		submit: () => Promise<boolean>;
+	}) => Promise<void>;
+	const addManagedKidMember = Object.defineProperties(
+		{ method: form.method, action: form.action },
+		{
+			enhance: {
+				value: (callback: Callback) => ({
+					method: form.method,
+					action: form.action,
+					onsubmit: (event: SubmitEvent) => {
+						event.preventDefault();
+						const element = event.currentTarget as HTMLFormElement;
+						void callback({ element, submit: async () => true });
+					},
+				}),
+			},
+			fields: { value: form.fields },
+			pending: { value: 0 },
+		},
+	);
+	return { addManagedKidMember };
 });
 
 import { MAX_KIDS } from '#lib/setup.js';
@@ -30,6 +58,24 @@ describe('AddManagedKidForm.svelte', () => {
 		await expect.element(year).toHaveAttribute('pattern', '[0-9]{4}');
 		await year.fill('2017');
 		await expect.element(year).toBeValid();
+	});
+
+	it('confirms the add and resets the colour with the form', async () => {
+		render(AddManagedKidForm, { kidCount: 0 });
+		await page.getByLabelText("Kid's name").fill('Mia');
+		await page.getByRole('radio', { name: 'Green' }).click();
+		await page.getByRole('button', { name: 'Add kid' }).click();
+		await expect
+			.element(page.getByRole('status'))
+			.toHaveTextContent('Added Mia.');
+		await expect.element(page.getByLabelText("Kid's name")).toHaveValue('');
+		// The chips follow the reset radios, so the next kid gets what's shown.
+		await expect
+			.element(page.getByRole('radio', { name: 'Blue' }))
+			.toBeChecked();
+		await expect
+			.element(page.getByRole('radio', { name: 'Green' }))
+			.not.toBeChecked();
 	});
 
 	it('explains the household is full at the kid cap', async () => {

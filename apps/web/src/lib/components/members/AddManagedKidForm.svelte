@@ -22,7 +22,10 @@
 		onadded?: () => void;
 	} = $props();
 
-	let color = $state<string | number>('blue');
+	const DEFAULT_COLOR = 'blue';
+	let color = $state<string | number>(DEFAULT_COLOR);
+	/** The name of the kid just added, for the confirmation. */
+	let added = $state<string | null>(null);
 	const options = AVATAR_COLORS.map((value) => ({
 		value,
 		label: value.charAt(0).toUpperCase() + value.slice(1),
@@ -36,13 +39,25 @@
 {:else}
 	<form
 		{...addManagedKidMember.enhance(async (form) => {
+			const name = String(
+				new FormData(form.element).get('displayName') ?? '',
+			);
+			added = null;
+			// A successful submit already invalidates the page's data.
 			if (await form.submit()) {
+				// reset() puts the radios back to their SSR default, so the chips'
+				// state has to follow or the highlighted colour isn't the one sent.
 				form.element.reset();
+				color = DEFAULT_COLOR;
+				added = name;
 				onadded?.();
 			}
 		})}
 		class="flex flex-col gap-16"
 	>
+		{#if added}
+			<p role="status" class="text-[13px] text-text-green">Added {added}.</p>
+		{/if}
 		<FormAlert issues={addManagedKidMember.fields.issues()} />
 		<TextInput
 			{...addManagedKidMember.fields.displayName.as('text')}
@@ -65,7 +80,8 @@
 			label="Weekly points goal"
 			inputmode="numeric"
 			pattern="[0-9]*"
-			value={String(DEFAULT_WEEKLY_GOAL)}
+			value={addManagedKidMember.fields.weeklyGoalPoints.value() ||
+				String(DEFAULT_WEEKLY_GOAL)}
 			autocomplete="off"
 		/>
 		<div class="flex flex-col gap-8">

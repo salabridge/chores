@@ -11,6 +11,8 @@ function field(name: string) {
 	return {
 		as: (type: string, value?: string) => ({ name, type, value }),
 		issues: (): Issue[] | undefined => undefined,
+		/** Nothing was submitted, so no field has a value yet. */
+		value: (): string | undefined => undefined,
 	};
 }
 

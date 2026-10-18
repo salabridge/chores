@@ -3,7 +3,7 @@
 	import MemberList from '#lib/components/members/MemberList.svelte';
 	import WorkspaceHeader from '#lib/components/shell/WorkspaceHeader.svelte';
 	import SurfaceCard from '#lib/components/ui/SurfaceCard.svelte';
-	import { invalidateAll } from '$app/navigation';
+	import { plural } from '#lib/overview.js';
 
 	let { data } = $props();
 
@@ -18,10 +18,10 @@
 />
 
 <div class="grid items-start gap-24 xl:grid-cols-[minmax(0,1fr)_380px]">
-	<SurfaceCard title="Household" subtitle={`${data.members.length} members`}>
+	<SurfaceCard title="Household" subtitle={plural(data.members.length, 'member')}>
 		<MemberList members={data.members} />
 	</SurfaceCard>
 	<SurfaceCard title="Add a kid">
-		<AddManagedKidForm {kidCount} onadded={() => invalidateAll()} />
+		<AddManagedKidForm {kidCount} />
 	</SurfaceCard>
 </div>
