@@ -53,6 +53,7 @@ export async function loadDuplicateSource(
 		note: chore.description,
 		kind: chore.type,
 		frequency: chore.frequency,
+		dueWeekday: chore.dueWeekday,
 		points: chore.points,
 		stages,
 		assigneeId: chore.assignedMemberId,

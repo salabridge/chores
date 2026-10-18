@@ -2,6 +2,8 @@
 // remote function, and the tests. No server imports: this is bundled into the
 // client, and the same validation runs again on the server.
 
+import { type IsoWeekday, isIsoWeekday, scheduleLabel } from './weekdays.ts';
+
 export const FREQUENCIES = ['daily', 'weekly', 'weekends'] as const;
 export type Frequency = (typeof FREQUENCIES)[number];
 
@@ -38,6 +40,12 @@ export interface ChoreDraft {
 	useStages: boolean;
 	stages: StageDraft[];
 	frequency: Frequency;
+	/**
+	 * The day a weekly chore is due (SB-71), or null for any day that week.
+	 * Kept while the parent flips frequency in the form, but only saved for
+	 * weekly chores (`dueWeekdayFor`).
+	 */
+	dueWeekday: IsoWeekday | null;
 	points: number;
 	/** The member a personal chore belongs to. */
 	assigneeId: string | null;
@@ -64,6 +72,7 @@ export const emptyDraft = (kind: ChoreKind = 'personal'): ChoreDraft => ({
 	useStages: false,
 	stages: [],
 	frequency: 'daily',
+	dueWeekday: null,
 	points: 10,
 	assigneeId: null,
 });
@@ -92,6 +101,7 @@ export const exampleDraft = (): ChoreDraft => ({
 		},
 	],
 	frequency: 'daily',
+	dueWeekday: null,
 	points: 15,
 	assigneeId: null,
 });
@@ -99,10 +109,22 @@ export const exampleDraft = (): ChoreDraft => ({
 export const frequencyLabel = (frequency: Frequency) =>
 	({ daily: 'Daily', weekly: 'Weekly', weekends: 'Weekends' })[frequency];
 
-/** The green badge on step 4: "Daily • 15 pts". */
+/**
+ * The due day that is saved with this frequency: the chosen day for a weekly
+ * chore, otherwise null (the database only allows one on weekly chores).
+ */
+export const dueWeekdayFor = (
+	frequency: Frequency,
+	dueWeekday: number | null | undefined,
+): IsoWeekday | null =>
+	frequency === 'weekly' && isIsoWeekday(dueWeekday) ? dueWeekday : null;
+
+/** The green badge on step 4: "Daily • 15 pts", "Weekly · Thu • 15 pts". */
 export const frequencySummary = (
-	draft: Pick<ChoreDraft, 'frequency' | 'points'>,
-) => `${frequencyLabel(draft.frequency)} • ${draft.points} pts`;
+	draft: Pick<ChoreDraft, 'frequency' | 'points'> &
+		Partial<Pick<ChoreDraft, 'dueWeekday'>>,
+) =>
+	`${scheduleLabel(draft.frequency, dueWeekdayFor(draft.frequency, draft.dueWeekday))} • ${draft.points} pts`;
 
 /** The grey hint under the points chips. */
 export function pointsHint(draft: Pick<ChoreDraft, 'frequency' | 'useStages'>) {
@@ -201,6 +223,8 @@ export interface CreateChoreInput {
 	note: string | null;
 	kind: ChoreKind;
 	frequency: Frequency;
+	/** Weekly chores only (SB-71); the server stores null for other frequencies. */
+	dueWeekday: IsoWeekday | null;
 	points: number;
 	assigneeId: string | null;
 	stages: { title: string; hint: string | null }[];
@@ -214,6 +238,7 @@ export function toCreateInput(draft: ChoreDraft): CreateChoreInput {
 		note: draft.note.trim() || null,
 		kind: draft.kind,
 		frequency: draft.frequency,
+		dueWeekday: dueWeekdayFor(draft.frequency, draft.dueWeekday),
 		points: draft.points,
 		assigneeId: draft.kind === 'personal' ? draft.assigneeId : null,
 		stages: activeStages(draft).map((s) => ({
@@ -232,6 +257,8 @@ export function createInputError(input: CreateChoreInput): string | null {
 		return 'Choose Personal Chore or Household Rotation.';
 	if (!(FREQUENCIES as readonly string[]).includes(input.frequency))
 		return 'Choose Daily, Weekly, or Weekends.';
+	if (input.dueWeekday != null && !isIsoWeekday(input.dueWeekday))
+		return 'Choose a day of the week, or Any day.';
 	if (!Array.isArray(input.stages)) return 'The stages are not valid.';
 	const errors = validateDraft({
 		title: String(input.title ?? ''),
@@ -244,6 +271,7 @@ export function createInputError(input: CreateChoreInput): string | null {
 			hint: String(s?.hint ?? ''),
 		})),
 		frequency: input.frequency,
+		dueWeekday: null,
 		points: input.points,
 		assigneeId: input.assigneeId,
 	});
@@ -265,6 +293,7 @@ export interface EditableChore {
 	description: string | null;
 	type: ChoreKind;
 	frequency: Frequency;
+	dueWeekday: number | null;
 	points: number;
 	assignedMemberId: string | null;
 	/** In position order. */
@@ -284,6 +313,7 @@ export const choreToDraft = (chore: EditableChore): ChoreDraft => ({
 		hint: s.hint ?? '',
 	})),
 	frequency: chore.frequency,
+	dueWeekday: dueWeekdayFor(chore.frequency, chore.dueWeekday),
 	points: chore.points,
 	assigneeId: chore.type === 'personal' ? chore.assignedMemberId : null,
 });

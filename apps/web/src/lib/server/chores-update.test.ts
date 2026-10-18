@@ -357,3 +357,49 @@ describe('changing frequency', () => {
 		expect(error.message).toBe(FREQUENCY_LOCKED_MESSAGE);
 	});
 });
+
+describe('due weekday (SB-71)', () => {
+	it('saves the due day of a weekly chore without the frequency lock', async () => {
+		// Already weekly, so changing only the day doesn't re-key the period.
+		saved({ frequency: 'weekly', dueWeekday: null });
+		await updateChoreFromInput(actor, {
+			...input((d) => {
+				d.frequency = 'weekly';
+			}),
+			dueWeekday: 4,
+		});
+		expect(sent()[0].set).toMatchObject({ frequency: 'weekly', dueWeekday: 4 });
+	});
+
+	it('clears the due day when the chore stops being weekly, whatever was sent', async () => {
+		saved(
+			{ frequency: 'weekly', dueWeekday: 4 },
+			stageRows,
+			{ id: 'leo' },
+			false,
+		);
+		// A request that skipped the form's own clearing.
+		await updateChoreFromInput(actor, {
+			...input((d) => {
+				d.frequency = 'daily';
+			}),
+			dueWeekday: 4,
+		});
+		expect(sent()[0].set).toMatchObject({
+			frequency: 'daily',
+			dueWeekday: null,
+		});
+	});
+
+	it('rejects a day outside 1 to 7', async () => {
+		await expect(
+			updateChoreFromInput(actor, {
+				...input((d) => {
+					d.frequency = 'weekly';
+				}),
+				dueWeekday: 9 as never,
+			}),
+		).rejects.toThrow('Choose a day of the week, or Any day.');
+		expect(mocks.select).not.toHaveBeenCalled();
+	});
+});

@@ -289,6 +289,7 @@ export async function finishSetup(
 				note: null,
 				kind: 'personal',
 				frequency: chore.frequency,
+				dueWeekday: null,
 				points: chore.points,
 				assigneeId,
 				stages: [],

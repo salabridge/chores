@@ -1,6 +1,7 @@
 import {
 	type ChoreDraft,
 	type ChoreKind,
+	dueWeekdayFor,
 	type Frequency,
 	newStageKey,
 } from './chore-creator.ts';
@@ -17,6 +18,8 @@ export interface DuplicateSource {
 	note: string | null;
 	kind: ChoreKind;
 	frequency: Frequency;
+	/** The weekly chore's due day (SB-71), or null. */
+	dueWeekday: number | null;
 	points: number;
 	stages: { title: string; hint: string | null }[];
 	/** The personal chore's assignee. */
@@ -66,6 +69,7 @@ export function duplicateDraft(
 			hint: s.hint ?? '',
 		})),
 		frequency: source.frequency,
+		dueWeekday: dueWeekdayFor(source.frequency, source.dueWeekday),
 		points: source.points,
 		assigneeId,
 	};

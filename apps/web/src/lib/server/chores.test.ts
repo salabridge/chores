@@ -114,6 +114,30 @@ describe('createRotationChore', () => {
 		expect(members[1].exclusionReason).toBeNull();
 	});
 
+	it('stores the due day of a weekly rotation, and none for other frequencies', async () => {
+		const loop = defaultRotationMembers(household);
+		const weekly = toCreateRotationInput(
+			{ ...exampleDraft(), frequency: 'weekly', dueWeekday: 4 },
+			loop,
+		);
+		await createRotationChore(actor, weekly);
+		expect(sent()[0].values).toMatchObject({
+			frequency: 'weekly',
+			dueWeekday: 4,
+		});
+
+		mocks.batch.mockClear();
+		// A request that skipped the form's own clearing.
+		await createRotationChore(actor, {
+			...weekly,
+			chore: { ...weekly.chore, frequency: 'daily' },
+		});
+		expect(sent()[0].values).toMatchObject({
+			frequency: 'daily',
+			dueWeekday: null,
+		});
+	});
+
 	it('refuses with fewer than two eligible members, without touching the database', async () => {
 		let loop = defaultRotationMembers(household);
 		for (const id of ['dad', 'leo', 'mia']) {
