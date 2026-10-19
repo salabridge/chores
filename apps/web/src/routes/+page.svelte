@@ -1,12 +1,17 @@
 <script lang="ts">
-	let { data } = $props();
+	import HomePage from '#lib/components/home/HomePage.svelte';
+
+	const title = 'ChoreLoop · Everyday chores, a shared routine';
+	const description =
+		'Keep track of personal chores, take turns on household jobs, and make room for a few rewards along the way.';
 </script>
 
-<p>May the forces I fight never win against my spirit.</p>
+<svelte:head>
+	<title>{title}</title>
+	<meta name="description" content={description} />
+	<meta property="og:title" content={title} />
+	<meta property="og:description" content={description} />
+	<meta property="og:type" content="website" />
+</svelte:head>
 
-{#if data.user}
-	<p>Signed in as {data.user.email}. <a href="/account">Account</a></p>
-{:else}
-	<p><a href="/login">Sign in</a> or <a href="/signup">create an account</a></p>
-{/if}
-
+<HomePage />
