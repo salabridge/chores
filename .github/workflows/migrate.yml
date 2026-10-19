@@ -3,8 +3,16 @@ name: Migrate
 # Migrates e2e, then dev, then production. Each job waits for the one before
 # it, so a migration that fails on e2e never reaches dev or production.
 # Production also waits for a required reviewer on its environment.
+#
+# Runs when a push to main adds or changes a migration. Schema edits without a
+# generated migration change nothing in the database, so they don't trigger it.
+# To retry after a failure, re-run the failed jobs from the run's page.
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - packages/db/migrations/**
 
 permissions:
   contents: read
@@ -19,7 +27,6 @@ env:
 jobs:
   migrate-e2e:
     name: Migrate (e2e)
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: e2e
     steps:
