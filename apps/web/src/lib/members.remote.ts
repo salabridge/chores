@@ -1,4 +1,5 @@
 import { invalid } from '@sveltejs/kit';
+import { GiftError, giftPoints as saveGift } from '#lib/server/gifts.js';
 import { requireParentProfile } from '#lib/server/guards.js';
 import { sendInvite } from '#lib/server/invite-email.js';
 import {
@@ -28,7 +29,7 @@ async function write<T>(run: () => Promise<T>): Promise<T> {
 	try {
 		return await run();
 	} catch (e) {
-		if (e instanceof MemberError) invalid(e.message);
+		if (e instanceof MemberError || e instanceof GiftError) invalid(e.message);
 		throw e;
 	}
 }
@@ -135,5 +136,21 @@ export const resendMemberInvite = form(
 		const link = linkFor(invite.token);
 		const emailed = await email(actor, { ...invite, link });
 		return { id: data.id, link, emailed };
+	},
+);
+
+/**
+ * Gives a kid bonus points with a reason (SB-78). `requireParentProfile`
+ * rejects non-parents and a parent whose device is on a kid profile;
+ * `giftPoints` checks the member is a kid in the actor's household and the
+ * amount and reason again.
+ */
+export const giftPoints = form(
+	'unchecked',
+	async (data: { memberId: string; points: string; reason: string }) => {
+		const { actor } = await requireParentProfile();
+		if (!isUuid(data.memberId)) invalid('That member was not found.');
+		const gift = await write(() => saveGift(actor, data.memberId, data));
+		return { gifted: true, memberId: data.memberId, points: gift.points };
 	},
 );

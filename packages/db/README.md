@@ -411,6 +411,18 @@ done.
   (`memberPointsBalance()`); there is no stored counter. Nothing updates or
   deletes ledger rows, and `completion`/`reversal` rows are unique per
   completion.
+- **Bonus points** (SB-78): a parent gifts a kid points for something that
+  isn't a chore by appending one positive `adjustment` row, `note` the reason
+  (1-140 characters in the app; the table allows 200) and `created_by` the
+  parent. The web app's `giftPoints` (apps/web `src/lib/server/gifts.ts`)
+  checks that the actor is an owner or parent, the kid is in their household
+  and the amount is a whole number from 1 to 500, because it connects as the
+  table owner and skips RLS; the `points_ledger_insert` policy says the same
+  for anyone writing as the app role. A gift adds to the balance, so it can be
+  spent on rewards, but it does **not** count toward the weekly goal or
+  streaks: `weeklyPointsProgress` and the web app's weekly and household
+  totals only sum `completion` and `reversal` rows, and streaks are computed
+  from completions, never from the ledger. No schema change was needed.
 - **Weekly goal**: `household_members.weekly_goal_points` (default 200), set
   per member by a parent. `weeklyPointsProgress(tx, memberId, weekStart)`
   returns earned / goal / remaining / percent for the progress bar, counting

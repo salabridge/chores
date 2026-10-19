@@ -4,7 +4,11 @@ import { render } from 'vitest-browser-svelte';
 
 // The Storybook mock: the real module imports server code.
 vi.mock('#lib/members.remote.js', async () => {
-	return await import('../../../../.storybook/mocks/members-remote.ts');
+	const { submittable } = await import(
+		'../../../../.storybook/mocks/profiles-remote.ts'
+	);
+	const remote = await import('../../../../.storybook/mocks/members-remote.ts');
+	return { ...remote, giftPoints: submittable(remote.giftPoints) };
 });
 
 import { members } from './fixtures.ts';
@@ -59,6 +63,45 @@ describe('MemberList.svelte', () => {
 			.element(page.getByRole('form', { name: "Change Mia's avatar" }))
 			.toBeVisible();
 		await page.getByRole('button', { name: 'Cancel' }).click();
+		expect(page.getByRole('form').elements()).toHaveLength(0);
+	});
+
+	it('offers no bonus points without an actor', async () => {
+		render(MemberList, { members });
+		expect(
+			page.getByRole('button', { name: /Give .* bonus points/ }).elements(),
+		).toHaveLength(0);
+	});
+
+	it('shows Give bonus points on each kid row for a parent', async () => {
+		render(MemberList, { members, actor: { id: 'm2', role: 'parent' } });
+		const kids = members.filter((m) => m.role === 'kid');
+		expect(
+			page.getByRole('button', { name: /Give .* bonus points/ }).elements(),
+		).toHaveLength(kids.length);
+		await expect
+			.element(page.getByRole('button', { name: 'Give Mia bonus points' }))
+			.toBeVisible();
+	});
+
+	it('opens the gift form inline and confirms after giving', async () => {
+		const ongifted = vi.fn();
+		render(MemberList, {
+			members,
+			actor: { id: 'm1', role: 'owner' },
+			ongifted,
+		});
+		await page.getByRole('button', { name: 'Give Mia bonus points' }).click();
+		await expect
+			.element(page.getByRole('form', { name: 'Give Mia bonus points' }))
+			.toBeVisible();
+		await page.getByRole('button', { name: '+20' }).click();
+		await page.getByLabelText('Reason').fill('Report card');
+		await page.getByRole('button', { name: 'Give points' }).click();
+		await vi.waitFor(() => expect(ongifted).toHaveBeenCalledWith('m3', 20));
+		await expect
+			.element(page.getByText('Gave Mia 20 bonus points.'))
+			.toBeVisible();
 		expect(page.getByRole('form').elements()).toHaveLength(0);
 	});
 
