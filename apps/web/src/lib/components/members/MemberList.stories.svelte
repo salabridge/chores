@@ -19,6 +19,18 @@
 	{/snippet}
 </Story>
 
+<Story name="Owner can edit avatars" args={{ actor: { id: 'm1', role: 'owner' } }}>
+	{#snippet template(args)}
+		<div class="max-w-[480px]"><MemberList {...args} /></div>
+	{/snippet}
+</Story>
+
+<Story name="Parent edits self and kids" args={{ actor: { id: 'm2', role: 'parent' } }}>
+	{#snippet template(args)}
+		<div class="max-w-[480px]"><MemberList {...args} /></div>
+	{/snippet}
+</Story>
+
 <Story name="Owner only" args={{ members: members.slice(0, 1) }}>
 	{#snippet template(args)}
 		<div class="max-w-[480px]"><MemberList {...args} /></div>

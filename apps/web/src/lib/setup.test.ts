@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	currentStep,
+	parseAvatarInput,
 	parseHouseholdInput,
 	parseKidInput,
 	parseParentInput,
@@ -152,6 +153,19 @@ describe('parseParentInput', () => {
 		expect(
 			parseParentInput({ displayName: 'Mom', avatarColor: 'red' }).ok,
 		).toBe(true);
+	});
+
+	it('parseAvatarInput checks colour and initial without needing a name', () => {
+		expect(
+			parseAvatarInput({ avatarColor: '#A1B2C3', avatarInitial: ' mj ' }),
+		).toEqual({
+			ok: true,
+			value: { avatarColor: '#a1b2c3', avatarInitial: 'mj' },
+		});
+		expect(parseAvatarInput({ avatarColor: 'nope' }).ok).toBe(false);
+		expect(
+			parseAvatarInput({ avatarColor: 'red', avatarInitial: 'abc' }).ok,
+		).toBe(false);
 	});
 
 	it('rejects malformed hex colours', () => {

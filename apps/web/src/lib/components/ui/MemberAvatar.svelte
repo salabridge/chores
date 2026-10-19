@@ -7,6 +7,8 @@
 	} from '#lib/avatar-color.js';
 
 	interface Props extends Omit<HTMLAttributes<HTMLSpanElement>, 'children'> {
+		/** Letter to show instead of the name's first one (one or two characters). */
+		initial?: string | null;
 		/** Member name; the first letter is shown and used as the accessible name. */
 		name: string;
 		size?: 'sm' | 'md' | 'lg';
@@ -21,6 +23,7 @@
 
 	let {
 		name,
+		initial: initialOverride = null,
 		size = 'md',
 		tone = 'orange',
 		active = true,
@@ -28,7 +31,9 @@
 		...rest
 	}: Props = $props();
 
-	const initial = $derived(name.trim().charAt(0).toUpperCase());
+	const initial = $derived(
+		(initialOverride?.trim() || name.trim().charAt(0)).toUpperCase(),
+	);
 
 	const sizes = {
 		sm: 'size-[32px] border text-[13px]',

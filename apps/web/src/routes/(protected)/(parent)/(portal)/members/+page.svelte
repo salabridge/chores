@@ -22,7 +22,10 @@
 <div class="grid items-start gap-24 xl:grid-cols-[minmax(0,1fr)_380px]">
 	<div class="flex min-w-0 flex-col gap-24">
 		<SurfaceCard title="Household" subtitle={plural(data.members.length, 'member')}>
-			<MemberList members={data.members} />
+			<MemberList
+				members={data.members}
+				actor={{ id: data.actorId, role: data.actorRole }}
+			/>
 		</SurfaceCard>
 		<SurfaceCard title="Pending invites">
 			<PendingInvites invites={data.invites} actorRole={data.actorRole} />
