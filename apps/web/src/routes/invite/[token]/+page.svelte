@@ -23,6 +23,7 @@
 		token={data.token}
 		signedInAs={data.signedInAs}
 		problem={data.problem}
+		current={data.current}
 		signUpHref={data.signUpHref}
 		signInHref={data.signInHref}
 	>

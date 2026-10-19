@@ -4,3 +4,5 @@
 import { mockForm } from './profiles-remote.ts';
 
 export const acceptInviteLink = mockForm();
+export const mergeHouseholdLink = mockForm();
+export const leaveHouseholdLink = mockForm();

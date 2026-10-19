@@ -1,7 +1,14 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
-	import { links, openKidInvite, openParentInvite, token } from './fixtures.ts';
+	import {
+		joinedHousehold,
+		links,
+		openKidInvite,
+		openParentInvite,
+		ownedHousehold,
+		token,
+	} from './fixtures.ts';
 	import * as thisFile from './InviteLanding.stories.svelte';
 	import InviteLanding from './InviteLanding.svelte';
 
@@ -15,6 +22,7 @@
 			token,
 			signedInAs: null,
 			problem: null,
+			current: null,
 			...links,
 		},
 	});
@@ -47,6 +55,47 @@
 <Story
 	name="Already in a household"
 	args={{ signedInAs: 'ava@example.com', problem: 'already-in-household' }}
+>
+	{#snippet template(args)}
+		<div class="max-w-[360px]"><InviteLanding {...args} /></div>
+	{/snippet}
+</Story>
+
+<Story
+	name="Owner: move household in"
+	args={{
+		invite: openParentInvite,
+		signedInAs: 'sam@example.com',
+		problem: 'already-in-household',
+		current: ownedHousehold,
+	}}
+>
+	{#snippet template(args)}
+		<div class="max-w-[360px]"><InviteLanding {...args} /></div>
+	{/snippet}
+</Story>
+
+<Story
+	name="Owner: move household in (kid invite)"
+	args={{
+		signedInAs: 'ava@example.com',
+		problem: 'already-in-household',
+		current: ownedHousehold,
+	}}
+>
+	{#snippet template(args)}
+		<div class="max-w-[360px]"><InviteLanding {...args} /></div>
+	{/snippet}
+</Story>
+
+<Story
+	name="Not an owner: leave household"
+	args={{
+		invite: openParentInvite,
+		signedInAs: 'sam@example.com',
+		problem: 'already-in-household',
+		current: joinedHousehold,
+	}}
 >
 	{#snippet template(args)}
 		<div class="max-w-[360px]"><InviteLanding {...args} /></div>

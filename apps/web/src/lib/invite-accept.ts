@@ -1,4 +1,5 @@
 import type { InviteRole } from './invites.ts';
+import { joinNames, plural } from './overview.ts';
 
 // The invite link's landing page (SB-66): what it shows, shared by the page
 // load, the accept form, and the component.
@@ -12,7 +13,9 @@ export type InviteProblem =
 	| 'unverified'
 	| 'already-member'
 	| 'already-in-household'
-	| 'household-full';
+	| 'household-full'
+	| 'not-owner'
+	| 'same-household';
 
 export type InviteView =
 	| {
@@ -41,7 +44,53 @@ export const PROBLEM_MESSAGES: Record<InviteProblem, string> = {
 		"You're already in a household. Ask its owner to remove you before joining another one.",
 	'household-full':
 		'This household already has as many kids as it can. Ask the parent who invited you.',
+	// From moving a household in (SB-76).
+	'not-owner':
+		'Only an owner of your household can move it. Ask them, or leave it and join on your own.',
+	'same-household': "That's the household this invite is for.",
 };
+
+/**
+ * The household the signed-in user is already in, when that's what stops them
+ * accepting (SB-76). An owner can move it into the invite's household (`merge`
+ * says what that takes along and deletes); anyone else can leave it first.
+ */
+export interface CurrentHousehold {
+	id: string;
+	name: string;
+	role: 'owner' | 'parent' | 'kid';
+	/** Present for an owner. */
+	merge: MergeSummary | null;
+}
+
+export interface MergeSummary {
+	/** Everyone in the household, in the order they joined, with their points. */
+	members: { displayName: string; points: number; you: boolean }[];
+	/** What's deleted with the household. */
+	chores: number;
+	rewards: number;
+	completions: number;
+}
+
+/** "Mia, Leo and Sam will join Burbridge Household with you; their points come with them." */
+export function mergeMovesText(merge: MergeSummary, target: string): string {
+	const others = merge.members.filter((m) => !m.you).map((m) => m.displayName);
+	if (others.length === 0) return `You'll join ${target} on your own.`;
+	return `${joinNames(others)} will join ${target} with you; their points come with them.`;
+}
+
+/** "Its 4 chores, 2 rewards and history (12 completed chores) are deleted." */
+export function mergeDeletesText(merge: MergeSummary): string {
+	return `Its ${plural(merge.chores, 'chore')}, ${plural(merge.rewards, 'reward')} and history (${plural(merge.completions, 'completed chore')}) are deleted. Streaks start fresh.`;
+}
+
+/** Whether what was typed into the confirm box is the household's name. */
+export function confirmsHouseholdName(typed: unknown, name: string): boolean {
+	return (
+		typeof typed === 'string' &&
+		typed.trim().toLowerCase() === name.trim().toLowerCase()
+	);
+}
 
 /**
  * Why the signed-in user can't accept an open invite, or null if they can.
