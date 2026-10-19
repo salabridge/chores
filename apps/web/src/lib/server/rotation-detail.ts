@@ -12,6 +12,7 @@ import { chorePeriodStart } from '@chore/db/recurrence';
 import { rotationTurns } from '@chore/db/rotation';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import {
+	type DetailDoer,
 	type DetailMember,
 	type RotationDetail,
 	stageStates,
@@ -19,12 +20,14 @@ import {
 import { scheduleLabel } from '../weekdays.ts';
 import { db } from './drizzle.ts';
 import { householdToday } from './household-today.ts';
-import type { ProfileState } from './profile-state.ts';
+import { isParentRole, type ProfileState } from './profile-state.ts';
 
 // Reads and writes for the shared rotation chore screen (SB-41). As with the
 // other web-side modules, the web app talks to Postgres as the table owner, so
-// RLS doesn't apply: every query is scoped by the caller's household, and
-// completing a turn is allowed only for the member whose turn it is.
+// RLS doesn't apply: every query is scoped by the caller's household.
+// Completing a turn is for the member whose turn it is, or for someone else in
+// the household doing it for them (SB-74): they get the points, and the turn
+// is used up as usual.
 //
 // Completing goes through the SB-26 functions (`app.complete_chore_instance`
 // and `app.complete_chore_stage`), which write the completion, the points and
@@ -91,6 +94,68 @@ export async function loadRotation(householdId: string, choreId: string) {
 	return { rotation, members };
 }
 
+/** A household member's display name, or null if they aren't in `householdId`. */
+export async function householdMemberName(
+	householdId: string,
+	memberId: string,
+): Promise<string | null> {
+	const [member] = await db
+		.select({ name: householdMembers.displayName })
+		.from(householdMembers)
+		.where(
+			and(
+				eq(householdMembers.id, memberId),
+				eq(householdMembers.householdId, householdId),
+			),
+		);
+	return member?.name ?? null;
+}
+
+/** `{ memberId, name }` for a completion's doer, or null when there is none. */
+export async function loadDoer(
+	householdId: string,
+	doneByMemberId: string | null | undefined,
+): Promise<DetailDoer | null> {
+	if (!doneByMemberId) return null;
+	const name = await householdMemberName(householdId, doneByMemberId);
+	return name ? { memberId: doneByMemberId, name } : null;
+}
+
+/**
+ * Who did the chore, as the completion functions' `done_by` (SB-74): null when
+ * it's the assignee (or turn-holder) themselves, so the database's own rule
+ * applies unchanged.
+ *
+ * By default the doer is the acting profile (`state.member`: the signed-in
+ * member, or the kid whose profile a parent has open). A parent in their own
+ * view may instead name another member (`requested`), e.g. to record that a
+ * managed kid did a sibling's chore; it must be someone in the household. The
+ * database checks the same rules again.
+ */
+export async function resolveDoer(
+	state: ProfileState,
+	assigneeId: string,
+	requested: string | null | undefined,
+	fail: (message: string, status: 403 | 404) => Error,
+): Promise<string | null> {
+	const self = state.member.id;
+	let doer = self;
+	if (requested && requested !== self) {
+		if (state.mode !== 'self' || !isParentRole(state.member.role)) {
+			throw fail(
+				'Only a parent can record that someone else did this chore.',
+				403,
+			);
+		}
+		const name = UUID.test(requested)
+			? await householdMemberName(state.member.householdId, requested)
+			: null;
+		if (!name) throw fail('That member was not found.', 404);
+		doer = requested;
+	}
+	return doer === assigneeId ? null : doer;
+}
+
 /** This period's instance, if anyone has touched the chore yet. */
 export async function findInstance(choreId: string, periodStart: string) {
 	const [instance] = await db
@@ -146,10 +211,14 @@ export async function loadRotationDetail(
 		.orderBy(asc(choreStages.position));
 
 	let completed = false;
+	let doneBy: DetailDoer | null = null;
 	let doneStageIds = new Set<string>();
 	if (instance) {
 		const [completion] = await db
-			.select({ id: choreCompletions.id })
+			.select({
+				id: choreCompletions.id,
+				doneByMemberId: choreCompletions.doneByMemberId,
+			})
 			.from(choreCompletions)
 			.where(
 				and(
@@ -158,6 +227,7 @@ export async function loadRotationDetail(
 				),
 			);
 		completed = completion !== undefined;
+		doneBy = await loadDoer(viewer.householdId, completion?.doneByMemberId);
 		const progress = await db
 			.select({ stageId: choreStageProgress.stageId })
 			.from(choreStageProgress)
@@ -168,6 +238,7 @@ export async function loadRotationDetail(
 
 	const isMyTurn = turns.activeTurn?.memberId === viewer.id;
 	const availableToday = periodStart !== null;
+	const open = availableToday && !completed;
 	return {
 		choreId,
 		title: chore.title,
@@ -182,8 +253,10 @@ export async function loadRotationDetail(
 		nextUp: turns.nextUp,
 		isMyTurn,
 		completedThisPeriod: completed,
+		doneBy,
 		availableToday,
-		canComplete: isMyTurn && availableToday && !completed,
+		canComplete: isMyTurn && open,
+		canCompleteForTurnHolder: !isMyTurn && turns.activeTurn !== null && open,
 		stages: stageStates(stageRows, doneStageIds),
 	};
 }
@@ -232,8 +305,25 @@ export async function ensureInstance(
 	return instance;
 }
 
-/** Checks the chore is open to this viewer now and returns what the write needs. */
-async function prepare(state: ProfileState, choreId: string) {
+/**
+ * Options for completing a turn. `doneBy` lets a parent in their own view
+ * record that another household member did it (see `resolveDoer`); without
+ * it, whoever is acting did it.
+ */
+export interface TurnOptions {
+	doneBy?: string | null;
+}
+
+/**
+ * Checks the chore is open now and works out who is doing it, and returns what
+ * the write needs. The turn-holder completes their own turn; anyone else in
+ * the household completing it does it for them (SB-74).
+ */
+async function prepare(
+	state: ProfileState,
+	choreId: string,
+	options: TurnOptions,
+) {
 	const householdId = state.member.householdId;
 	const chore = await loadChore(householdId, choreId);
 	if (chore?.type !== 'rotation') {
@@ -254,9 +344,12 @@ async function prepare(state: ProfileState, choreId: string) {
 			409,
 		);
 	}
-	if (turnHolderId !== state.member.id) {
-		throw new RotationDetailError("It isn't your turn.", 403);
-	}
+	const doneBy = await resolveDoer(
+		state,
+		turnHolderId,
+		options.doneBy,
+		(message, status) => new RotationDetailError(message, status),
+	);
 	const periodStart = chorePeriodStart(
 		chore.frequency,
 		await householdToday(householdId),
@@ -274,18 +367,21 @@ async function prepare(state: ProfileState, choreId: string) {
 		periodStart,
 		turnHolderId,
 	);
-	return { instance, claims: JSON.stringify({ sub: userId }) };
+	return { instance, doneBy, claims: JSON.stringify({ sub: userId }) };
 }
 
 /**
- * Completes the member's turn on a chore with no stages: awards the points and
- * hands the rotation to the next eligible member, in one transaction.
+ * Completes the turn on a chore with no stages: awards the points and hands
+ * the rotation to the next eligible member, in one transaction. When the
+ * acting member isn't the turn-holder, they did it for them: the points are
+ * theirs and the turn-holder's turn is used up.
  */
 export async function completeRotationTurn(
 	state: ProfileState,
 	choreId: string,
+	options: TurnOptions = {},
 ): Promise<TurnResult> {
-	const { instance, claims } = await prepare(state, choreId);
+	const { instance, doneBy, claims } = await prepare(state, choreId, options);
 	try {
 		const [, completed] = await db.batch([
 			db.execute(sql`select set_config('request.jwt.claims', ${claims}, true)`),
@@ -294,7 +390,7 @@ export async function completeRotationTurn(
 				points: number;
 				already_completed: boolean;
 			}>(
-				sql`select completion_id, points, already_completed from app.complete_chore_instance(${instance.id}::uuid)`,
+				sql`select completion_id, points, already_completed from app.complete_chore_instance(${instance.id}::uuid, ${doneBy}::uuid)`,
 			),
 		]);
 		const row = completed.rows[0];
@@ -312,17 +408,19 @@ export async function completeRotationTurn(
 
 /**
  * Checks off a stage of a staged chore. The last stage completes the chore in
- * the same transaction (points and turn hand-off included).
+ * the same transaction (points and turn hand-off included). As with
+ * `completeRotationTurn`, someone other than the turn-holder does it for them.
  */
 export async function completeRotationStage(
 	state: ProfileState,
 	choreId: string,
 	stageId: string,
+	options: TurnOptions = {},
 ): Promise<TurnResult> {
 	if (!UUID.test(stageId)) {
 		throw new RotationDetailError('That stage was not found.', 404);
 	}
-	const { instance, claims } = await prepare(state, choreId);
+	const { instance, doneBy, claims } = await prepare(state, choreId, options);
 	try {
 		const [, stage] = await db.batch([
 			db.execute(sql`select set_config('request.jwt.claims', ${claims}, true)`),
@@ -332,7 +430,7 @@ export async function completeRotationStage(
 				points: number;
 				already_completed: boolean;
 			}>(
-				sql`select chore_completed, completion_id, points, already_completed from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid)`,
+				sql`select chore_completed, completion_id, points, already_completed from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid, ${doneBy}::uuid)`,
 			),
 		]);
 		const row = stage.rows[0];
@@ -362,13 +460,15 @@ function mapError(err: unknown): unknown {
 			return new RotationDetailError('Finish the earlier stages first.', 409);
 		case 'CP002':
 			return new RotationDetailError('Finish every stage first.', 409);
+		case 'CP004':
+			return new RotationDetailError('That member was not found.', 404);
 		case 'RT001':
 			return new RotationDetailError(
 				'The turn has already moved on. Reload to see whose turn it is.',
 				409,
 			);
 		case '42501':
-			return new RotationDetailError("It isn't your turn.", 403);
+			return new RotationDetailError("You can't complete this turn.", 403);
 		default:
 			return err;
 	}

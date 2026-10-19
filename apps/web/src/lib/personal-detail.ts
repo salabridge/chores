@@ -1,4 +1,4 @@
-import type { DetailStage } from './rotation-detail.ts';
+import type { DetailDoer, DetailStage } from './rotation-detail.ts';
 
 // What the personal chore screen (SB-40) shows, as plain data that the server
 // load, the component, and the tests share. No server imports here: this file
@@ -12,15 +12,28 @@ export interface PersonalDetail {
 	points: number;
 	/** How often it repeats: "Daily", "Weekly · Thu" (SB-71). */
 	schedule: string;
+	/** Who this period's chore belongs to (its member id), or null if nobody. */
+	assigneeId: string | null;
 	assigneeName: string | null;
 	/** The viewing member is who the chore is assigned to. */
 	isAssignee: boolean;
 	/** This period's chore is already done. */
 	completedThisPeriod: boolean;
+	/**
+	 * Who did this period's chore when it wasn't the assignee (SB-74, a favour);
+	 * null while it's open or when the assignee did it.
+	 */
+	doneBy: DetailDoer | null;
 	/** The chore doesn't occur today (a weekends chore on a weekday). */
 	availableToday: boolean;
 	/** The assignee is looking at a chore that is open now. */
 	canComplete: boolean;
+	/**
+	 * Someone other than the assignee is looking at a chore that is open now,
+	 * so they can do it for the assignee (SB-74). Completing it as them
+	 * credits them with the points; the chore stays the assignee's.
+	 */
+	canCompleteForAssignee: boolean;
 	/** Empty for a single-step chore. */
 	stages: DetailStage[];
 }

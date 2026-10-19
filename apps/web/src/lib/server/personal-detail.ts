@@ -16,15 +16,18 @@ import type { ProfileState } from './profile-state.ts';
 import {
 	ensureInstance,
 	loadChore,
+	loadDoer,
+	resolveDoer,
 	sqlState,
 	UUID,
 } from './rotation-detail.ts';
 
 // Reads and writes for the personal chore screen (SB-40). As with the other
 // web-side modules, the web app talks to Postgres as the table owner, so RLS
-// doesn't apply: every query is scoped by the caller's household, and only the
-// member the chore is assigned to can complete it (a parent who can act as a
-// managed kid does so through that kid's profile).
+// doesn't apply: every query is scoped by the caller's household. The member
+// the chore is assigned to completes it (a parent who can act as a managed kid
+// does so through that kid's profile); anyone else in the household who
+// completes it does it for them (SB-74), and gets the points.
 //
 // Completing goes through the SB-26 functions, which write the stage, the
 // completion and the points in one transaction and lock the chore instance, so
@@ -53,6 +56,10 @@ interface PersonalState {
 	instance: { id: string; assignedMemberId: string | null } | null;
 	/** The open completion for this period, if any. */
 	completionId: string | null;
+	/** Who did it, when that wasn't the assignee (`done_by_member_id`). */
+	completionDoneBy: string | null;
+	/** Who the open completion credited with the points. */
+	creditedMemberId: string | null;
 	doneStageIds: Set<string>;
 	stages: { id: string; title: string; hint: string | null }[];
 	/** Who this period's chore belongs to right now. */
@@ -84,6 +91,8 @@ async function loadState(
 
 	let instance: PersonalState['instance'] = null;
 	let completionId: string | null = null;
+	let completionDoneBy: string | null = null;
+	let creditedMemberId: string | null = null;
 	let doneStageIds = new Set<string>();
 	if (periodStart) {
 		const thisPeriod = and(
@@ -98,6 +107,8 @@ async function loadState(
 					id: choreInstances.id,
 					assignedMemberId: choreInstances.assignedMemberId,
 					completionId: choreCompletions.id,
+					completionMemberId: choreCompletions.memberId,
+					completionDoneBy: choreCompletions.doneByMemberId,
 				})
 				.from(choreInstances)
 				.leftJoin(
@@ -120,6 +131,14 @@ async function loadState(
 		if (row) {
 			instance = { id: row.id, assignedMemberId: row.assignedMemberId };
 			completionId = row.completionId ?? null;
+			if (completionId) {
+				completionDoneBy = row.completionDoneBy ?? null;
+				creditedMemberId =
+					completionDoneBy ??
+					row.completionMemberId ??
+					row.assignedMemberId ??
+					null;
+			}
 		}
 		doneStageIds = new Set(progress.map((p) => p.stageId));
 	}
@@ -133,6 +152,8 @@ async function loadState(
 		periodStart,
 		instance,
 		completionId,
+		completionDoneBy,
+		creditedMemberId,
 		doneStageIds,
 		stages,
 		assigneeId,
@@ -182,8 +203,10 @@ export async function loadPersonalDetail(
 		state.assigneeId === chore.assignedMemberId
 			? choreAssigneeName
 			: await memberName(viewer.householdId, state.assigneeId);
+	const doneBy = await loadDoer(viewer.householdId, state.completionDoneBy);
 	const isAssignee = state.assigneeId === viewer.id;
 	const availableToday = state.periodStart !== null;
+	const open = availableToday && !completed;
 	const doneIds = completed
 		? new Set(state.stages.map((s) => s.id))
 		: state.doneStageIds;
@@ -193,11 +216,14 @@ export async function loadPersonalDetail(
 		description: chore.description,
 		points: chore.points,
 		schedule: scheduleLabel(chore.frequency, chore.dueWeekday),
+		assigneeId: state.assigneeId,
 		assigneeName,
 		isAssignee,
 		completedThisPeriod: completed,
+		doneBy,
 		availableToday,
-		canComplete: isAssignee && availableToday && !completed,
+		canComplete: isAssignee && open,
+		canCompleteForAssignee: !isAssignee && state.assigneeId !== null && open,
 		stages: stageStates(state.stages, doneIds),
 	};
 }
@@ -210,21 +236,36 @@ export interface StepResult {
 	choreCompleted: boolean;
 }
 
+export interface StepOptions {
+	/**
+	 * A parent in their own view recording that another household member did
+	 * the chore (SB-74). Without it, the acting profile did it.
+	 */
+	doneBy?: string | null;
+	now?: Date;
+}
+
 /**
  * Checks off a stage of a staged chore (`stageId`), or completes a chore that
  * has no stages (`stageId` null). The last stage completes the chore in the
- * same transaction. Only the chore's assignee may do it.
+ * same transaction.
+ *
+ * The assignee completes their own chore. Anyone else in the household who
+ * does it does it for them (SB-74): the points go to them, the chore (and the
+ * assignee's streak) stays the assignee's. `options.doneBy` lets a parent
+ * record another member as the doer.
  *
  * Repeating a call changes nothing: checking a done stage is a no-op, and once
  * the chore is complete this returns the existing completion with 0 points, so
- * the caller can still send the member to the celebration screen.
+ * the caller can still send whoever earned it to the celebration screen.
  */
 export async function completePersonalStep(
 	state: ProfileState,
 	choreId: string,
 	stageId: string | null,
-	now: Date = new Date(),
+	options: StepOptions = {},
 ): Promise<StepResult> {
+	const now = options.now ?? new Date();
 	if (!UUID.test(choreId)) {
 		throw new PersonalDetailError('That chore was not found.', 404);
 	}
@@ -242,13 +283,17 @@ export async function completePersonalStep(
 	if (!assigneeId) {
 		throw new PersonalDetailError('Nobody is assigned to this chore yet.', 409);
 	}
-	if (assigneeId !== state.member.id) {
-		throw new PersonalDetailError(
-			'Only the person this chore is assigned to can complete it.',
-			403,
-		);
-	}
+	const doneBy = await resolveDoer(
+		state,
+		assigneeId,
+		options.doneBy,
+		(message, status) => new PersonalDetailError(message, status),
+	);
 	if (loaded.completionId) {
+		// Someone else already earned it: there's nothing to celebrate here.
+		if (loaded.creditedMemberId !== (doneBy ?? assigneeId)) {
+			throw new PersonalDetailError('This chore is already done for now.', 409);
+		}
 		return {
 			completionId: loaded.completionId,
 			points: 0,
@@ -290,7 +335,7 @@ export async function completePersonalStep(
 					completion_id: string | null;
 					points: number;
 				}>(
-					sql`select chore_completed, completion_id, points from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid)`,
+					sql`select chore_completed, completion_id, points from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid, ${doneBy}::uuid)`,
 				),
 			]);
 			const row = stage.rows[0];
@@ -304,7 +349,7 @@ export async function completePersonalStep(
 		const [, completed] = await db.batch([
 			db.execute(sql`select set_config('request.jwt.claims', ${claims}, true)`),
 			db.execute<{ completion_id: string; points: number }>(
-				sql`select completion_id, points from app.complete_chore_instance(${instance.id}::uuid)`,
+				sql`select completion_id, points from app.complete_chore_instance(${instance.id}::uuid, ${doneBy}::uuid)`,
 			),
 		]);
 		const row = completed.rows[0];
@@ -333,11 +378,10 @@ function mapError(err: unknown): unknown {
 				'Nobody is assigned to this chore yet.',
 				409,
 			);
+		case 'CP004':
+			return new PersonalDetailError('That member was not found.', 404);
 		case '42501':
-			return new PersonalDetailError(
-				'Only the person this chore is assigned to can complete it.',
-				403,
-			);
+			return new PersonalDetailError("You can't complete this chore.", 403);
 		default:
 			return err;
 	}

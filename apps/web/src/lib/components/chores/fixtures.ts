@@ -20,11 +20,14 @@ export const roomDetail: PersonalDetail = {
 		'Break your room clean into three quick stages. Finish them all to earn your loop stars!',
 	points: 15,
 	schedule: 'Daily',
+	assigneeId: 'leo',
 	assigneeName: 'Leo',
 	isAssignee: true,
 	completedThisPeriod: false,
+	doneBy: null,
 	availableToday: true,
 	canComplete: true,
+	canCompleteForAssignee: false,
 	stages: [
 		{
 			id: 's1',
@@ -66,6 +69,8 @@ export const roomReadOnly: PersonalDetail = {
 	...roomDetail,
 	isAssignee: false,
 	canComplete: false,
+	canCompleteForAssignee: true,
+	assigneeId: 'mia',
 	assigneeName: 'Mia',
 };
 
@@ -93,6 +98,7 @@ export const toiletCompletion: CompletionSummary = {
 	choreId: 'chore-toilet',
 	title: 'Clean Bathroom Toilet',
 	memberName: 'Leo',
+	doneFor: null,
 	points: 20,
 	totalPoints: 160,
 	rotation: { nextName: 'Mia', nextIsYou: false },

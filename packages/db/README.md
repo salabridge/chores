@@ -350,10 +350,12 @@ by `chore_stage_progress`; the completion appears when the chore as a whole is
 done.
 
 - **Completions** (`chore_completions`): one row per finished instance, with
-  the member credited (the instance's assignee, even when a parent tapped the
-  button for a managed kid) and the points copied from `chores.points`. At
-  most one *open* completion exists per instance (a partial unique index),
-  which is what makes completing twice a no-op.
+  whose chore it was (`member_id`: the instance's assignee, even when a parent
+  tapped the button for a managed kid), who did it when that was someone else
+  (`done_by_member_id`, see **Doing a chore for someone else** below) and the
+  points copied from `chores.points`. At most one *open* completion exists per
+  instance (a partial unique index), which is what makes completing twice a
+  no-op.
 - **Ledger** (`points_ledger`): append-only. Every point change is a row with
   a `delta` and a `reason`: `completion` (+), `reversal` (-, a parent reopened
   it), `reward_claim` (-, written with its `reward_claims` row) or `adjustment` (a parent's
@@ -391,6 +393,42 @@ hand-off in the caller's transaction:
 Who may complete: a parent, or someone who can act as the instance's assignee
 (themselves, or a managed kid they parent). Chores with no assignee can't be
 completed (`ChoreNotAssignedError`).
+
+#### Doing a chore for someone else (SB-74)
+
+Siblings do each other's chores as favours: if Mia takes out Leo's trash, Mia
+gets the points, but it was still Leo's chore. `completeChore(tx, instanceId,
+{ doneBy })` and `completeChoreStage(tx, instanceId, stageId, { doneBy })`
+(`app.complete_chore_instance` / `app.complete_chore_stage` with the optional
+`done_by` argument, custom migration `0022`) record who did it. Leaving
+`doneBy` out, or passing the assignee, is the old behaviour.
+
+- **Who may say who did it.** Anyone can say they did it themselves
+  (`can_act_as_member(done_by)`: their own member, or a managed kid they
+  parent, e.g. a parent on Mia's profile), and a parent can record any
+  household member. The doer must be in the chore's household
+  (`ChoreDoerNotInHouseholdError`, SQLSTATE `CP004`). Being the assignee isn't
+  enough to name someone else, so a kid can't hand their points to a sibling.
+- **Points go to the doer.** The completion's `completion` ledger row is the
+  doer's (`creditedMemberId` in the result), and a reopen reverses whoever
+  that row credited, so the points come back from Mia, not Leo. The ledger
+  checks are unchanged (still `completion`, positive).
+- **The chore stays the assignee's.** `member_id` is still Leo, and
+  `done_by_member_id` is Mia (NULL when the assignee did it; naming the
+  assignee stores NULL too). Index `(done_by_member_id, completed_at)` serves
+  "chores I did for others".
+- **Stages** done as a favour are recorded for the doer
+  (`chore_stage_progress.completed_by_member_id`). Points are awarded per
+  completion, not per stage, so the chore's points go to whoever checks the
+  last stage.
+- **Rotation:** the turn advances as usual and Leo is Done Last: the favour
+  used up his turn, so the loop doesn't hand his work to Mia twice. The
+  completion functions advance the turn themselves after their own check
+  (`app.advance_chore_rotation_turn`, internal), because Mia can't act as the
+  turn-holder.
+- **Streaks:** the period counts as done for Leo, so his streak and the family
+  streak don't break. Mia gets the points but no streak credit (it wasn't her
+  chore). `resolveDueChores()` reports her as `doneByMemberId` on that day.
 
 ### Skips and reminders
 
@@ -471,6 +509,8 @@ and lives in `src/streaks.ts`.
   `chore_instances` row is missed (attributed to `chores.assigned_member_id`;
   a rotation chore with no row has no known turn-holder and is left out).
   Periods that ended before the chore was created don't count.
+- **Favours.** A chore someone else did for its assignee (SB-74) counts as
+  done for the assignee; the doer gets the points but no streak credit.
 - **On time.** A period is done only if an open completion's local date falls
   inside it, so finishing yesterday's chore today doesn't rescue yesterday.
   Reopened completions don't count.
@@ -500,7 +540,7 @@ role. Access follows household membership and role:
 | `chore_stage_progress`  | members               | members check off stages as themselves; parents for anyone in the household; uncheck (delete) the same way |
 | `chore_rotations`       | members               | parents; the turn moves through `app.advance_chore_rotation` (members for their own turn, parents for anyone) |
 | `chore_rotation_members`| members               | parents                                                                                 |
-| `chore_completions`     | members               | nobody directly; written by `app.complete_chore_instance` / `complete_chore_stage` / `reopen_chore_completion` |
+| `chore_completions`     | members               | nobody directly; written by `app.complete_chore_instance` / `complete_chore_stage` / `reopen_chore_completion` (a doer other than the assignee: themselves, or anyone in the household for a parent) |
 | `points_ledger`         | members               | append-only; parents insert `adjustment` rows, completions and reversals come from the functions above |
 | `rewards`               | members               | parents                                                                                 |
 | `reward_claims`         | members               | nobody directly; written by `insertRewardClaim()` with its ledger row                    |
@@ -550,6 +590,10 @@ that needs it, the position unique and the current-turn FK made
 `DEFERRABLE INITIALLY DEFERRED`, and grants at the end.
 `0009_chore_rotation_turns.sql` is hand-written: `app.advance_chore_rotation`,
 the hand-off triggers, and the commit-time rotation check.
+`0022_chore_completions_done_by.sql` (SB-74) is generated for the
+`done_by_member_id` column, then hand-written: it replaces the 0011 completion
+functions (drop and create, since they gain a `done_by` argument) and moves
+the turn move out of `app.advance_chore_rotation` into an internal function.
 
 **Two connection strings** (see `.env.example`):
 
@@ -598,7 +642,11 @@ a transaction, rejecting fewer than 2 eligible members and exclusions
 without a reason, a kid completing their own turn (but not someone else's,
 and not skipping), refusing a stale double advance, skipping an excluded
 member, wrapping (Loop Reset), a parent's skip leaving Done Last alone, and
-excluding the member whose turn it is. It also checks the FKs and
+excluding the member whose turn it is. For favours (SB-74) it covers a kid
+doing a sibling's chore, rotation turn and stages (points to the kid, the
+chore and turn still the sibling's), a parent recording the doer, reopening
+taking the points back from the doer, a kid naming someone else, and a member
+of another household refused as the doer. It also checks the FKs and
 the one-row-per-user constraint. It deletes everything it created when it
 finishes.
 

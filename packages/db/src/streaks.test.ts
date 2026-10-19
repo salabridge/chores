@@ -197,6 +197,40 @@ test('a day with no instance row counts as missed', () => {
 	);
 });
 
+test("a chore done as a favour counts for the assignee's streak, not the doer's", () => {
+	const due = resolveDueChores({
+		chores: [chore],
+		instances: [inst('2026-10-06'), inst('2026-10-07')],
+		completions: [
+			// Mia (m) did Leo's (a) chore on the 6th; he did it himself on the 7th.
+			{
+				instanceId: 'i-2026-10-06',
+				completedAt: new Date('2026-10-06T15:00:00Z'),
+				doneByMemberId: 'm',
+			},
+			{
+				instanceId: 'i-2026-10-07',
+				completedAt: new Date('2026-10-07T15:00:00Z'),
+				doneByMemberId: null,
+			},
+		],
+		timeZone: 'UTC',
+		from: '2026-10-06',
+		today: '2026-10-07',
+	});
+	assert.deepEqual(due, [
+		{
+			memberId: 'a',
+			date: '2026-10-06',
+			outcome: 'done',
+			doneByMemberId: 'm',
+		},
+		{ memberId: 'a', date: '2026-10-07', outcome: 'done' },
+	]);
+	assert.equal(personalStreak(due, 'a', '2026-10-07').days, 2);
+	assert.equal(personalStreak(due, 'm', '2026-10-07').days, 0);
+});
+
 test('a late completion stays missed and a skipped period is skipped', () => {
 	const due = resolveDueChores({
 		chores: [chore],

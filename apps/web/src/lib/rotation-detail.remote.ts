@@ -9,7 +9,10 @@ import { command } from '$app/server';
 
 // Remote functions for the shared rotation chore screen (SB-41). The member
 // comes from the caller's own profile (the active kid, or themselves), never
-// from the request, and the server only lets the member whose turn it is act.
+// from the request. The member whose turn it is completes it; anyone else in
+// the household completing it does it for them and gets the points (SB-74).
+// `doneBy` is only for a parent in their own view recording that another
+// member did it; the server checks it.
 
 async function asHttpError<T>(run: () => Promise<T>): Promise<T> {
 	try {
@@ -20,13 +23,16 @@ async function asHttpError<T>(run: () => Promise<T>): Promise<T> {
 	}
 }
 
-/** Completes the current member's turn: awards the points and advances the loop. */
+const doer = (input: { doneBy?: string | null }) =>
+	input.doneBy ? { doneBy: String(input.doneBy) } : {};
+
+/** Completes the current turn: awards the points and advances the loop. */
 export const completeTurn = command(
 	'unchecked',
-	async (input: { choreId: string }) => {
+	async (input: { choreId: string; doneBy?: string | null }) => {
 		const state = await requireProfile();
 		return asHttpError(() =>
-			completeRotationTurn(state, String(input.choreId)),
+			completeRotationTurn(state, String(input.choreId), doer(input)),
 		);
 	},
 );
@@ -34,13 +40,18 @@ export const completeTurn = command(
 /** Checks off one stage of a staged rotation; the last one completes the turn. */
 export const completeStage = command(
 	'unchecked',
-	async (input: { choreId: string; stageId: string }) => {
+	async (input: {
+		choreId: string;
+		stageId: string;
+		doneBy?: string | null;
+	}) => {
 		const state = await requireProfile();
 		return asHttpError(() =>
 			completeRotationStage(
 				state,
 				String(input.choreId),
 				String(input.stageId),
+				doer(input),
 			),
 		);
 	},

@@ -159,27 +159,100 @@ describe('completePersonalStep: who and what', () => {
 		expect(mocks.batch).not.toHaveBeenCalled();
 	});
 
-	it('refuses everyone but the assignee, and writes nothing', async () => {
+	it("lets someone else do the assignee's chore for them, as themselves (SB-74)", async () => {
 		mocks.queue.push([chore()]);
 		queueState({ doneStages: [S1] });
-		const e = await failure(() => completePersonalStep(miaState, CHORE, S2));
-		expect(e).toBeInstanceOf(PersonalDetailError);
-		expect(e).toMatchObject({ status: 403 });
-		expect(mocks.batch).not.toHaveBeenCalled();
-		expect(mocks.inserts).toHaveLength(0);
+		mocks.batch.mockResolvedValue([
+			[],
+			{ rows: [{ chore_completed: false, completion_id: null, points: 0 }] },
+		]);
+		await completePersonalStep(miaState, CHORE, S2);
+		const queries = mocks.batch.mock.calls[0][0] as { sql: string }[];
+		expect(queries[0].sql).toContain('mia-user');
+		expect(queries[1].sql).toContain('complete_chore_stage');
+		// Mia is the doer: the database credits her, and the chore stays Leo's.
+		expect(queries[1].sql).toContain('"mia"');
 	});
 
-	it('refuses a parent who is not the assignee (no kid profile open)', async () => {
+	it('passes no doer when the assignee does their own chore', async () => {
+		mocks.queue.push([chore({ points: 10 })]);
+		queueState({ stageRows: [] });
+		mocks.batch.mockResolvedValue([
+			[],
+			{ rows: [{ completion_id: COMPLETION, points: 10 }] },
+		]);
+		await completePersonalStep(leoState, CHORE, null);
+		const queries = mocks.batch.mock.calls[0][0] as { sql: string }[];
+		expect(queries[1].sql).toContain('complete_chore_instance');
+		expect(queries[1].sql).toContain('null');
+		expect(queries[1].sql).not.toContain('"leo"');
+	});
+
+	it('lets a parent record another household member as the doer', async () => {
 		const parent = {
 			mode: 'self',
-			actor: { householdId: 'h1', userId: 'mom-user' },
-			member: { id: 'mom', householdId: 'h1' },
+			actor: { householdId: 'h1', userId: 'mom-user', role: 'parent' },
+			member: { id: 'mom', householdId: 'h1', role: 'parent' },
+		} as unknown as ProfileState;
+		const MIA = '55555555-5555-4555-8555-555555555555';
+		mocks.queue.push([chore({ points: 10 })]);
+		queueState({ stageRows: [] });
+		mocks.queue.push([{ name: 'Mia' }]);
+		mocks.batch.mockResolvedValue([
+			[],
+			{ rows: [{ completion_id: COMPLETION, points: 10 }] },
+		]);
+		await completePersonalStep(parent, CHORE, null, { doneBy: MIA });
+		const queries = mocks.batch.mock.calls[0][0] as { sql: string }[];
+		expect(queries[0].sql).toContain('mom-user');
+		expect(queries[1].sql).toContain(MIA);
+	});
+
+	it("404s a parent's doer who isn't in the household, and writes nothing", async () => {
+		const parent = {
+			mode: 'self',
+			actor: { householdId: 'h1', userId: 'mom-user', role: 'parent' },
+			member: { id: 'mom', householdId: 'h1', role: 'parent' },
 		} as unknown as ProfileState;
 		mocks.queue.push([chore()]);
 		queueState();
+		mocks.queue.push([]);
 		expect(
-			await failure(() => completePersonalStep(parent, CHORE, S1)),
+			await failure(() =>
+				completePersonalStep(parent, CHORE, S1, {
+					doneBy: '66666666-6666-4666-8666-666666666666',
+				}),
+			),
+		).toMatchObject({ status: 404 });
+		expect(mocks.batch).not.toHaveBeenCalled();
+	});
+
+	it('refuses a kid (or a kid profile) naming someone else as the doer', async () => {
+		mocks.queue.push([chore()]);
+		queueState();
+		expect(
+			await failure(() =>
+				completePersonalStep(miaState, CHORE, S1, {
+					doneBy: '66666666-6666-4666-8666-666666666666',
+				}),
+			),
 		).toMatchObject({ status: 403 });
+		mocks.queue.push([chore()]);
+		queueState();
+		expect(
+			await failure(() =>
+				completePersonalStep(leoState, CHORE, S1, { doneBy: 'mia' }),
+			),
+		).toMatchObject({ status: 403 });
+		expect(mocks.batch).not.toHaveBeenCalled();
+	});
+
+	it('409s a chore someone else already earned, instead of celebrating it', async () => {
+		mocks.queue.push([chore()]);
+		queueState({ completion: COMPLETION, doneStages: [S1, S2, S3] });
+		const e = await failure(() => completePersonalStep(miaState, CHORE, S3));
+		expect(e).toBeInstanceOf(PersonalDetailError);
+		expect(e).toMatchObject({ status: 409 });
 		expect(mocks.batch).not.toHaveBeenCalled();
 	});
 
@@ -372,7 +445,7 @@ describe('loadPersonalDetail', () => {
 		]);
 	});
 
-	it('reads as view only for anyone else', async () => {
+	it('offers anyone else the chore to do for the assignee (SB-74)', async () => {
 		mocks.queue.push([chore()]);
 		queueState({ name: 'Leo' });
 		const detail = await loadPersonalDetail(
@@ -382,7 +455,28 @@ describe('loadPersonalDetail', () => {
 		expect(detail).toMatchObject({
 			isAssignee: false,
 			canComplete: false,
+			canCompleteForAssignee: true,
+			assigneeId: 'leo',
 			assigneeName: 'Leo',
+			doneBy: null,
+		});
+	});
+
+	it('names who did it when someone did it for the assignee', async () => {
+		mocks.queue.push([chore()]);
+		queueState({
+			instance: { ...instance, completionDoneBy: 'mia' },
+			completion: COMPLETION,
+			doneStages: [S1, S2, S3],
+			name: 'Leo',
+		});
+		mocks.queue.push([{ name: 'Mia' }]);
+		const detail = await loadPersonalDetail(leo, CHORE);
+		expect(detail).toMatchObject({
+			completedThisPeriod: true,
+			doneBy: { memberId: 'mia', name: 'Mia' },
+			canComplete: false,
+			canCompleteForAssignee: false,
 		});
 	});
 

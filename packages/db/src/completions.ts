@@ -52,6 +52,43 @@ export class ChoreNotAssignedError extends Error {
 	}
 }
 
+/**
+ * Thrown when `doneBy` names someone who isn't a member of the chore's
+ * household (SB-74). The points can only go to a member of the same household.
+ */
+export class ChoreDoerNotInHouseholdError extends Error {
+	readonly instanceId: string;
+	readonly doneBy: string;
+
+	constructor(
+		instanceId: string,
+		doneBy: string,
+		options?: { cause?: unknown },
+	) {
+		super(
+			`Member ${doneBy} is not in the household of chore instance ${instanceId}`,
+			options,
+		);
+		this.name = 'ChoreDoerNotInHouseholdError';
+		this.instanceId = instanceId;
+		this.doneBy = doneBy;
+	}
+}
+
+export interface CompleteOptions {
+	/**
+	 * Who did the chore, when it wasn't the assignee (SB-74, doing a chore for
+	 * someone else). The points go to them; the chore (and its streak) stays the
+	 * assignee's, and a rotation turn still advances. Omit, or pass the
+	 * assignee, when the assignee did it.
+	 *
+	 * The signed-in user must be a parent or able to act as `doneBy`
+	 * (themselves, or a managed kid they parent), and `doneBy` must be in the
+	 * chore's household (`ChoreDoerNotInHouseholdError`).
+	 */
+	doneBy?: string | null;
+}
+
 export interface CompleteChoreResult {
 	completionId: string;
 	/** Points awarded by this call; 0 when the chore was already completed. */
@@ -60,6 +97,12 @@ export interface CompleteChoreResult {
 	alreadyCompleted: boolean;
 	/** Whose turn a rotation chore moved to; null for a personal chore or a repeat call. */
 	nextMemberId: string | null;
+	/**
+	 * Who the completion credited with the points: the doer, or the assignee
+	 * when they did it themselves. For a repeat call, whoever the existing
+	 * completion credited.
+	 */
+	creditedMemberId: string;
 }
 
 export type CompleteStageResult =
@@ -74,21 +117,25 @@ export type CompleteStageResult =
  * rotation chore this also moves the turn on, in the same transaction (the
  * database error RT001 if a skip already moved the turn past the assignee).
  *
- * A parent, or someone who can act as the chore's assignee, may call it.
+ * A parent, or someone who can act as the chore's assignee, may call it; with
+ * `doneBy` set to someone else, a parent or someone who can act as `doneBy`.
  * Otherwise Postgres raises insufficient_privilege.
  */
 export async function completeChore(
 	tx: AuthenticatedTx,
 	instanceId: string,
+	options: CompleteOptions = {},
 ): Promise<CompleteChoreResult> {
+	const doneBy = options.doneBy ?? null;
 	try {
 		const { rows } = await tx.execute<{
 			completion_id: string;
 			points: number;
 			already_completed: boolean;
 			next_member_id: string | null;
+			credited_member_id: string;
 		}>(
-			sql`select completion_id, points, already_completed, next_member_id from app.complete_chore_instance(${instanceId}::uuid)`,
+			sql`select completion_id, points, already_completed, next_member_id, credited_member_id from app.complete_chore_instance(${instanceId}::uuid, ${doneBy}::uuid)`,
 		);
 		const row = rows[0];
 		if (!row) throw new Error('complete_chore_instance returned no row');
@@ -97,9 +144,10 @@ export async function completeChore(
 			points: row.points,
 			alreadyCompleted: row.already_completed,
 			nextMemberId: row.next_member_id,
+			creditedMemberId: row.credited_member_id,
 		};
 	} catch (err) {
-		throw mapCompletionError(err, instanceId);
+		throw mapCompletionError(err, instanceId, undefined, doneBy);
 	}
 }
 
@@ -108,12 +156,18 @@ export async function completeChore(
  * earlier one isn't done), and checking a done stage again does nothing. When
  * it was the last stage, the chore completes in the same call and the result
  * carries the points ("Complete Chore"); otherwise `choreCompleted` is false.
+ *
+ * `doneBy` works as in `completeChore`: the stage is recorded as done by them
+ * (`completed_by_member_id`), and the chore's points go to whoever checks the
+ * last stage.
  */
 export async function completeChoreStage(
 	tx: AuthenticatedTx,
 	instanceId: string,
 	stageId: string,
+	options: CompleteOptions = {},
 ): Promise<CompleteStageResult> {
+	const doneBy = options.doneBy ?? null;
 	try {
 		const { rows } = await tx.execute<{
 			chore_completed: boolean;
@@ -121,12 +175,13 @@ export async function completeChoreStage(
 			points: number;
 			already_completed: boolean | null;
 			next_member_id: string | null;
+			credited_member_id: string | null;
 		}>(
-			sql`select chore_completed, completion_id, points, already_completed, next_member_id from app.complete_chore_stage(${instanceId}::uuid, ${stageId}::uuid)`,
+			sql`select chore_completed, completion_id, points, already_completed, next_member_id, credited_member_id from app.complete_chore_stage(${instanceId}::uuid, ${stageId}::uuid, ${doneBy}::uuid)`,
 		);
 		const row = rows[0];
 		if (!row) throw new Error('complete_chore_stage returned no row');
-		if (!row.chore_completed || !row.completion_id) {
+		if (!row.chore_completed || !row.completion_id || !row.credited_member_id) {
 			return { choreCompleted: false };
 		}
 		return {
@@ -135,15 +190,17 @@ export async function completeChoreStage(
 			points: row.points,
 			alreadyCompleted: row.already_completed === true,
 			nextMemberId: row.next_member_id,
+			creditedMemberId: row.credited_member_id,
 		};
 	} catch (err) {
-		throw mapCompletionError(err, instanceId, stageId);
+		throw mapCompletionError(err, instanceId, stageId, doneBy);
 	}
 }
 
 /**
  * Parent-only: reopens a completion, takes its points back with a reversing
- * ledger row, and unchecks the last stage of a staged chore. Returns false if
+ * ledger row (from whoever was credited: the doer, when someone did the chore
+ * for the assignee), and unchecks the last stage of a staged chore. Returns false if
  * it was already reopened. A rotation's turn is not moved back.
  */
 export async function reopenCompletion(
@@ -231,10 +288,12 @@ export async function weeklyPointsProgress(
 	return weeklyGoalProgress(row?.total ?? 0, member.goal);
 }
 
-function mapCompletionError(
+/** Maps the SB-26/SB-74 SQLSTATEs (CP001-CP004) to the errors above; anything else passes through. */
+export function mapCompletionError(
 	err: unknown,
 	instanceId: string,
 	stageId?: string,
+	doneBy?: string | null,
 ): unknown {
 	switch (sqlState(err)) {
 		case 'CP001':
@@ -243,6 +302,10 @@ function mapCompletionError(
 			return new ChoreStagesIncompleteError(instanceId, { cause: err });
 		case 'CP003':
 			return new ChoreNotAssignedError(instanceId, { cause: err });
+		case 'CP004':
+			return new ChoreDoerNotInHouseholdError(instanceId, doneBy ?? '', {
+				cause: err,
+			});
 		default:
 			return err;
 	}

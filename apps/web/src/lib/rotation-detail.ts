@@ -12,6 +12,12 @@ export interface DetailMember {
 	exclusionReason: string | null;
 }
 
+/** Who did a chore for someone else (SB-74). */
+export interface DetailDoer {
+	memberId: string;
+	name: string;
+}
+
 export interface DetailStage {
 	id: string;
 	title: string;
@@ -35,10 +41,21 @@ export interface RotationDetail {
 	nextUp: DetailMember | null;
 	/** It is the viewing member's turn and the chore can be done now. */
 	canComplete: boolean;
+	/**
+	 * Someone else holds the turn and it can be done now, so the viewing member
+	 * can do it for them (SB-74). They get the points; the turn-holder's turn
+	 * is used up and the loop moves on as usual.
+	 */
+	canCompleteForTurnHolder: boolean;
 	/** The viewing member holds the turn (even if it can't be done right now). */
 	isMyTurn: boolean;
 	/** This period's turn is already done; the next one waits for the next period. */
 	completedThisPeriod: boolean;
+	/**
+	 * Who did this period's turn when it wasn't the turn-holder (SB-74); null
+	 * while it's open or when the turn-holder did it.
+	 */
+	doneBy: DetailDoer | null;
 	/** The chore doesn't occur today (a weekends chore on a weekday). */
 	availableToday: boolean;
 	/** Empty when the rotation has no stages. */
