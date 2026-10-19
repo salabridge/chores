@@ -200,7 +200,14 @@ describe('loadRotationDetail (SB-74)', () => {
 		queueRotation();
 		mocks.queue.push([{ id: INSTANCE, assignedMemberId: 'leo' }]);
 		mocks.queue.push([]); // no stages
-		mocks.queue.push([{ id: COMPLETION, doneByMemberId: 'mia' }]);
+		mocks.queue.push([
+			{
+				id: COMPLETION,
+				doneByMemberId: 'mia',
+				status: 'approved',
+				escalatedAt: null,
+			},
+		]);
 		mocks.queue.push([{ name: 'Mia' }]);
 		mocks.queue.push([]); // stage progress
 		const detail = await loadRotationDetail(
@@ -210,6 +217,38 @@ describe('loadRotationDetail (SB-74)', () => {
 		expect(detail).toMatchObject({
 			completedThisPeriod: true,
 			doneBy: { memberId: 'mia', name: 'Mia' },
+			pendingFavour: null,
+			canComplete: false,
+			canCompleteForTurnHolder: false,
+		});
+	});
+
+	it('shows a favour waiting for an OK as neither done nor open (SB-79)', async () => {
+		queueRotation();
+		mocks.queue.push([{ id: INSTANCE, assignedMemberId: 'leo' }]);
+		mocks.queue.push([]); // no stages
+		mocks.queue.push([
+			{
+				id: COMPLETION,
+				doneByMemberId: 'mia',
+				status: 'pending',
+				escalatedAt: null,
+			},
+		]);
+		mocks.queue.push([{ name: 'Mia' }]);
+		mocks.queue.push([]); // stage progress
+		const detail = await loadRotationDetail(
+			{ id: 'leo', householdId: 'h1' },
+			CHORE,
+		);
+		expect(detail).toMatchObject({
+			completedThisPeriod: false,
+			doneBy: null,
+			pendingFavour: {
+				completionId: COMPLETION,
+				doneBy: { memberId: 'mia', name: 'Mia' },
+				escalated: false,
+			},
 			canComplete: false,
 			canCompleteForTurnHolder: false,
 		});

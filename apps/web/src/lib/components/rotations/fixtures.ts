@@ -106,6 +106,7 @@ export const toiletDetail: RotationDetail = {
 	canCompleteForTurnHolder: false,
 	completedThisPeriod: false,
 	doneBy: null,
+	pendingFavour: null,
 	availableToday: true,
 	stages: [],
 };

@@ -228,6 +228,38 @@ describe('loadCompletionSummary', () => {
 		expect(mocks.select).not.toHaveBeenCalled();
 	});
 
+	it('says a favour still waiting for its OK is pending (SB-79)', async () => {
+		queueLoad({
+			completion: {
+				memberId: 'mia',
+				doneByMemberId: 'leo',
+				points: 20,
+				reopenedAt: null,
+				approvalStatus: 'pending',
+			},
+		});
+		mocks.push('household_members', [{ name: 'Mia' }]);
+		const summary = await loadCompletionSummary(leo, CHORE, COMPLETION);
+		expect(summary).toMatchObject({
+			approvalStatus: 'pending',
+			doneFor: { memberId: 'mia', name: 'Mia' },
+			points: 20,
+		});
+	});
+
+	it('is null once the favour was declined (SB-79)', async () => {
+		queueLoad({
+			completion: {
+				memberId: 'mia',
+				doneByMemberId: 'leo',
+				points: 20,
+				reopenedAt: null,
+				approvalStatus: 'declined',
+			},
+		});
+		expect(await loadCompletionSummary(leo, CHORE, COMPLETION)).toBeNull();
+	});
+
 	it('is null once a parent has reopened the completion', async () => {
 		queueLoad({
 			completion: {

@@ -9,7 +9,7 @@ import {
 } from '@chore/db';
 import { chorePeriodStart } from '@chore/db/recurrence';
 import { nextEligibleMember } from '@chore/db/rotation';
-import { and, asc, eq, inArray, isNull, notExists, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, notExists, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import {
 	type CreateChoreInput,
@@ -349,6 +349,9 @@ export async function isDoneThisPeriod(
 				eq(choreInstances.choreId, choreId),
 				eq(choreInstances.periodStart, periodStart),
 				isNull(choreCompletions.reopenedAt),
+				// A pending favour (SB-79) may still be approved; a declined one
+				// left the chore open.
+				ne(choreCompletions.approvalStatus, 'declined'),
 			),
 		)
 		.limit(1);
@@ -467,7 +470,7 @@ export async function updateChoreFromInput(
 					// Re-checked here so a completion landing after the check above
 					// can't slip a frequency change through.
 					frequencyChanged && periodStart
-						? sql`not exists (select 1 from chore_completions c join chore_instances i on i.id = c.instance_id where i.chore_id = ${choreId} and i.period_start = ${periodStart}::date and c.reopened_at is null)`
+						? sql`not exists (select 1 from chore_completions c join chore_instances i on i.id = c.instance_id where i.chore_id = ${choreId} and i.period_start = ${periodStart}::date and c.reopened_at is null and c.approval_status <> 'declined')`
 						: undefined,
 				),
 			)
@@ -554,6 +557,7 @@ export async function updateChoreFromInput(
 										and(
 											eq(choreCompletions.instanceId, choreInstances.id),
 											isNull(choreCompletions.reopenedAt),
+											ne(choreCompletions.approvalStatus, 'declined'),
 										),
 									),
 							),

@@ -50,8 +50,9 @@ export async function openChoresFor(
 					isNull(chores.archivedAt),
 				),
 			),
-		// At most one open completion per instance (partial unique index), so
-		// the join can't fan out.
+		// At most one open approved completion per instance (partial unique
+		// index), so the join can't fan out. A favour waiting for an OK (SB-79)
+		// isn't done yet.
 		db
 			.select({
 				id: choreInstances.id,
@@ -66,6 +67,7 @@ export async function openChoresFor(
 				and(
 					eq(choreCompletions.instanceId, choreInstances.id),
 					isNull(choreCompletions.reopenedAt),
+					eq(choreCompletions.approvalStatus, 'approved'),
 				),
 			)
 			.where(

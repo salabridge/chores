@@ -5,6 +5,8 @@ import type { MemberSummary, ProfileState } from './profile-state.ts';
 const getProfileState = vi.fn();
 const listParents = vi.fn();
 vi.mock('./profiles.ts', () => ({ getProfileState, listParents }));
+const countPendingFavours = vi.fn(async (_householdId: string) => 2);
+vi.mock('./favours.ts', () => ({ countPendingFavours }));
 
 const { loadParentPortal: load } = await import('./parent-portal.ts');
 
@@ -55,8 +57,10 @@ describe('loadParentPortal', () => {
 				{ id: 'mom', name: 'Mom' },
 				{ id: 'dad', name: 'Dad' },
 			],
+			pendingFavours: 2,
 		});
 		expect(listParents).toHaveBeenCalledWith('h1');
+		expect(countPendingFavours).toHaveBeenCalledWith('h1');
 	});
 
 	it('redirects while a kid profile is active', async () => {

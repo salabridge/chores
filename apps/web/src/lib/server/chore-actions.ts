@@ -11,7 +11,7 @@ import {
 } from '@chore/db';
 import { chorePeriodStart } from '@chore/db/recurrence';
 import { rotationTurns } from '@chore/db/rotation';
-import { and, asc, desc, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, ne, sql } from 'drizzle-orm';
 import {
 	type ActionPlan,
 	type ChoreActionFacts,
@@ -122,6 +122,9 @@ async function load(householdId: string, choreId: string): Promise<Loaded> {
 					and(
 						eq(choreCompletions.instanceId, instance.id),
 						isNull(choreCompletions.reopenedAt),
+						// A declined favour (SB-79) left the chore open; a pending one
+						// is decided instead of skipped.
+						ne(choreCompletions.approvalStatus, 'declined'),
 					),
 				);
 			completed = completion !== undefined;

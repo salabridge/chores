@@ -6,7 +6,8 @@ import {
 	householdMembers,
 } from '@chore/db';
 import { chorePeriodStart } from '@chore/db/recurrence';
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, ne, sql } from 'drizzle-orm';
+import type { FavourStatus } from '../favour-approval.ts';
 import { effectiveAssignee, type PersonalDetail } from '../personal-detail.ts';
 import { stageStates } from '../rotation-detail.ts';
 import { scheduleLabel } from '../weekdays.ts';
@@ -54,8 +55,12 @@ interface PersonalState {
 	periodStart: string | null;
 	/** This period's instance, if anyone has touched the chore yet. */
 	instance: { id: string; assignedMemberId: string | null } | null;
-	/** The open completion for this period, if any. */
+	/** The open completion for this period, if any (approved, or a pending favour). */
 	completionId: string | null;
+	/** Its approval status (SB-79): `pending` while a favour waits for an OK. */
+	completionStatus: FavourStatus | null;
+	/** The doer of a pending favour asked a parent to decide it. */
+	completionEscalated: boolean;
 	/** Who did it, when that wasn't the assignee (`done_by_member_id`). */
 	completionDoneBy: string | null;
 	/** Who the open completion credited with the points. */
@@ -91,6 +96,8 @@ async function loadState(
 
 	let instance: PersonalState['instance'] = null;
 	let completionId: string | null = null;
+	let completionStatus: FavourStatus | null = null;
+	let completionEscalated = false;
 	let completionDoneBy: string | null = null;
 	let creditedMemberId: string | null = null;
 	let doneStageIds = new Set<string>();
@@ -100,8 +107,8 @@ async function loadState(
 			eq(choreInstances.periodStart, periodStart),
 		);
 		const [[row], progress] = await Promise.all([
-			// At most one open completion per instance (partial unique index), so
-			// the join can't fan out.
+			// At most one open completion per instance (partial unique index; a
+			// declined favour isn't open), so the join can't fan out.
 			db
 				.select({
 					id: choreInstances.id,
@@ -109,6 +116,8 @@ async function loadState(
 					completionId: choreCompletions.id,
 					completionMemberId: choreCompletions.memberId,
 					completionDoneBy: choreCompletions.doneByMemberId,
+					completionStatus: choreCompletions.approvalStatus,
+					completionEscalatedAt: choreCompletions.escalatedAt,
 				})
 				.from(choreInstances)
 				.leftJoin(
@@ -116,6 +125,7 @@ async function loadState(
 					and(
 						eq(choreCompletions.instanceId, choreInstances.id),
 						isNull(choreCompletions.reopenedAt),
+						ne(choreCompletions.approvalStatus, 'declined'),
 					),
 				)
 				.where(thisPeriod),
@@ -132,6 +142,8 @@ async function loadState(
 			instance = { id: row.id, assignedMemberId: row.assignedMemberId };
 			completionId = row.completionId ?? null;
 			if (completionId) {
+				completionStatus = row.completionStatus ?? null;
+				completionEscalated = row.completionEscalatedAt != null;
 				completionDoneBy = row.completionDoneBy ?? null;
 				creditedMemberId =
 					completionDoneBy ??
@@ -152,6 +164,8 @@ async function loadState(
 		periodStart,
 		instance,
 		completionId,
+		completionStatus,
+		completionEscalated,
 		completionDoneBy,
 		creditedMemberId,
 		doneStageIds,
@@ -198,16 +212,26 @@ export async function loadPersonalDetail(
 		memberName(viewer.householdId, chore.assignedMemberId),
 	]);
 
-	const completed = state.completionId !== null;
+	// A pending favour (SB-79) isn't done yet, but it isn't open either: the
+	// assignee approves or declines it.
+	const completed = state.completionStatus === 'approved';
 	const assigneeName =
 		state.assigneeId === chore.assignedMemberId
 			? choreAssigneeName
 			: await memberName(viewer.householdId, state.assigneeId);
-	const doneBy = await loadDoer(viewer.householdId, state.completionDoneBy);
+	const doer = await loadDoer(viewer.householdId, state.completionDoneBy);
+	const pendingFavour =
+		state.completionId && state.completionStatus === 'pending'
+			? {
+					completionId: state.completionId,
+					doneBy: doer,
+					escalated: state.completionEscalated,
+				}
+			: null;
 	const isAssignee = state.assigneeId === viewer.id;
 	const availableToday = state.periodStart !== null;
-	const open = availableToday && !completed;
-	const doneIds = completed
+	const open = availableToday && state.completionId === null;
+	const doneIds = state.completionId
 		? new Set(state.stages.map((s) => s.id))
 		: state.doneStageIds;
 	return {
@@ -220,7 +244,8 @@ export async function loadPersonalDetail(
 		assigneeName,
 		isAssignee,
 		completedThisPeriod: completed,
-		doneBy,
+		doneBy: completed ? doer : null,
+		pendingFavour,
 		availableToday,
 		canComplete: isAssignee && open,
 		canCompleteForAssignee: !isAssignee && state.assigneeId !== null && open,
@@ -231,9 +256,15 @@ export async function loadPersonalDetail(
 export interface StepResult {
 	/** The completion once the chore is done (this call or an earlier one); null while stages remain. */
 	completionId: string | null;
-	/** Points awarded by this call. 0 for a repeat. */
+	/** Points awarded by this call. 0 for a repeat, and for a favour waiting for approval. */
 	points: number;
 	choreCompleted: boolean;
+	/**
+	 * The completion's status once the chore is done: `pending` for a favour
+	 * by someone who isn't acting as a parent (SB-79), which gets its points
+	 * when the assignee or a parent approves it. Null while stages remain.
+	 */
+	approvalStatus: FavourStatus | null;
 }
 
 export interface StepOptions {
@@ -292,12 +323,18 @@ export async function completePersonalStep(
 	if (loaded.completionId) {
 		// Someone else already earned it: there's nothing to celebrate here.
 		if (loaded.creditedMemberId !== (doneBy ?? assigneeId)) {
-			throw new PersonalDetailError('This chore is already done for now.', 409);
+			throw new PersonalDetailError(
+				loaded.completionStatus === 'pending'
+					? 'Someone already did this chore. It is waiting for an OK.'
+					: 'This chore is already done for now.',
+				409,
+			);
 		}
 		return {
 			completionId: loaded.completionId,
 			points: 0,
 			choreCompleted: true,
+			approvalStatus: loaded.completionStatus,
 		};
 	}
 	if (!periodStart) {
@@ -323,6 +360,9 @@ export async function completePersonalStep(
 			? loaded.instance
 			: await ensureInstance(householdId, choreId, periodStart, assigneeId);
 	const claims = JSON.stringify({ sub: userId });
+	// On a kid's profile the kid is acting, not the signed-in parent, so a
+	// favour they record waits for approval like any kid's (SB-79).
+	const actingAs = state.mode === 'kid' ? state.member.id : null;
 
 	try {
 		if (staged) {
@@ -334,8 +374,9 @@ export async function completePersonalStep(
 					chore_completed: boolean;
 					completion_id: string | null;
 					points: number;
+					approval_status: FavourStatus | null;
 				}>(
-					sql`select chore_completed, completion_id, points from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid, ${doneBy}::uuid)`,
+					sql`select chore_completed, completion_id, points, approval_status from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid, ${doneBy}::uuid, ${actingAs}::uuid)`,
 				),
 			]);
 			const row = stage.rows[0];
@@ -344,12 +385,17 @@ export async function completePersonalStep(
 				completionId: row.chore_completed ? row.completion_id : null,
 				points: row.points,
 				choreCompleted: row.chore_completed,
+				approvalStatus: row.chore_completed ? row.approval_status : null,
 			};
 		}
 		const [, completed] = await db.batch([
 			db.execute(sql`select set_config('request.jwt.claims', ${claims}, true)`),
-			db.execute<{ completion_id: string; points: number }>(
-				sql`select completion_id, points from app.complete_chore_instance(${instance.id}::uuid, ${doneBy}::uuid)`,
+			db.execute<{
+				completion_id: string;
+				points: number;
+				approval_status: FavourStatus;
+			}>(
+				sql`select completion_id, points, approval_status from app.complete_chore_instance(${instance.id}::uuid, ${doneBy}::uuid, ${actingAs}::uuid)`,
 			),
 		]);
 		const row = completed.rows[0];
@@ -358,6 +404,7 @@ export async function completePersonalStep(
 			completionId: row.completion_id,
 			points: row.points,
 			choreCompleted: true,
+			approvalStatus: row.approval_status,
 		};
 	} catch (err) {
 		throw mapError(err);

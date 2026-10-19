@@ -11,7 +11,7 @@ import {
 } from '@chore/db';
 import { addDays, chorePeriodStart, localDate } from '@chore/db/recurrence';
 import { skipKey } from '@chore/db/streaks';
-import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, ne } from 'drizzle-orm';
 import {
 	buildNotes,
 	buildWorkload,
@@ -83,6 +83,8 @@ export async function loadHouseholdOverview(
 				and(
 					eq(choreCompletions.householdId, householdId),
 					isNull(choreCompletions.reopenedAt),
+					// A favour counts once it's approved (SB-79).
+					eq(choreCompletions.approvalStatus, 'approved'),
 					gte(choreCompletions.completedAt, since),
 				),
 			),
@@ -167,6 +169,8 @@ export async function loadHouseholdOverview(
 						instanceId: choreCompletions.instanceId,
 						memberId: choreCompletions.memberId,
 						doneByMemberId: choreCompletions.doneByMemberId,
+						status: choreCompletions.approvalStatus,
+						escalatedAt: choreCompletions.escalatedAt,
 					})
 					.from(choreCompletions)
 					.where(
@@ -174,6 +178,8 @@ export async function loadHouseholdOverview(
 							eq(choreCompletions.householdId, householdId),
 							inArray(choreCompletions.instanceId, instanceIds),
 							isNull(choreCompletions.reopenedAt),
+							// A declined favour isn't open (SB-79).
+							ne(choreCompletions.approvalStatus, 'declined'),
 						),
 					),
 				db
@@ -188,15 +194,23 @@ export async function loadHouseholdOverview(
 			])
 		: [[], []];
 
+	// Only approved completions make a chore done (and reopenable); a favour
+	// waiting for an OK (SB-79) is reported separately.
+	const approved = completions.filter((c) => c.status === 'approved');
+	const pendingByInstance = new Map(
+		completions.flatMap((c) =>
+			c.status === 'pending' ? [[c.instanceId, c] as const] : [],
+		),
+	);
 	const completionByInstance = new Map(
-		completions.map((c) => [c.instanceId, c.id]),
+		approved.map((c) => [c.instanceId, c.id]),
 	);
 	// Whoever did it: the doer when someone did it for the assignee (SB-74).
 	const completerByInstance = new Map(
-		completions.map((c) => [c.instanceId, c.doneByMemberId ?? c.memberId]),
+		approved.map((c) => [c.instanceId, c.doneByMemberId ?? c.memberId]),
 	);
 	const doerByInstance = new Map(
-		completions.flatMap((c) =>
+		approved.flatMap((c) =>
 			c.doneByMemberId ? [[c.instanceId, c.doneByMemberId] as const] : [],
 		),
 	);
@@ -222,6 +236,20 @@ export async function loadHouseholdOverview(
 		const doerId =
 			instance && completionId ? doerByInstance.get(instance.id) : undefined;
 		const doerName = doerId ? names.get(doerId) : undefined;
+		const pending = instance ? pendingByInstance.get(instance.id) : undefined;
+		const pendingDoerName = pending?.doneByMemberId
+			? names.get(pending.doneByMemberId)
+			: undefined;
+		const pendingFavour = pending
+			? {
+					completionId: pending.id,
+					doneBy:
+						pending.doneByMemberId && pendingDoerName
+							? { memberId: pending.doneByMemberId, name: pendingDoerName }
+							: null,
+					escalated: pending.escalatedAt !== null,
+				}
+			: null;
 
 		let status: ChoreStatus = 'todo';
 		if (completionId) status = 'completed';
@@ -253,6 +281,7 @@ export async function loadHouseholdOverview(
 					? { memberId: assigneeId, name: assigneeName }
 					: null,
 			doneBy: doerId && doerName ? { memberId: doerId, name: doerName } : null,
+			pendingFavour,
 			status,
 			points: chore.points,
 			isLoop,

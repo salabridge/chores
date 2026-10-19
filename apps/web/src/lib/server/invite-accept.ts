@@ -157,7 +157,7 @@ export async function loadCurrentHousehold(
 			.select({
 				chores: sql<number>`(select count(*) from chores c where c.household_id = ${households.id})::int`,
 				rewards: sql<number>`(select count(*) from rewards r where r.household_id = ${households.id})::int`,
-				completions: sql<number>`(select count(*) from chore_completions cc where cc.household_id = ${households.id} and cc.reopened_at is null)::int`,
+				completions: sql<number>`(select count(*) from chore_completions cc where cc.household_id = ${households.id} and cc.reopened_at is null and cc.approval_status = 'approved')::int`,
 			})
 			.from(households)
 			.where(eq(households.id, membership.id)),

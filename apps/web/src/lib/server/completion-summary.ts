@@ -25,7 +25,8 @@ import {
  * case `doneFor` names the assignee. Returns `undefined` for anything that isn't theirs (unknown
  * id, another household or member, a chore that doesn't match the URL), and
  * `null` when a parent has since reopened the completion (its points were
- * taken back, so there is nothing to celebrate).
+ * taken back, so there is nothing to celebrate) or the favour was declined
+ * (SB-79). A favour still waiting for its OK has `approvalStatus: 'pending'`.
  */
 export async function loadCompletionSummary(
 	viewer: { id: string; householdId: string; displayName: string },
@@ -46,6 +47,7 @@ export async function loadCompletionSummary(
 				doneByMemberId: choreCompletions.doneByMemberId,
 				points: choreCompletions.points,
 				reopenedAt: choreCompletions.reopenedAt,
+				approvalStatus: choreCompletions.approvalStatus,
 			})
 			.from(choreCompletions)
 			.where(
@@ -81,7 +83,9 @@ export async function loadCompletionSummary(
 	// chore for its assignee.
 	const credited = completion?.doneByMemberId ?? completion?.memberId;
 	if (!completion || credited !== viewer.id) return undefined;
-	if (completion.reopenedAt) return null;
+	if (completion.reopenedAt || completion.approvalStatus === 'declined') {
+		return null;
+	}
 	if (!chore) return undefined;
 	let doneFor: CompletionSummary['doneFor'] = null;
 	if (completion.doneByMemberId && completion.memberId) {
@@ -114,6 +118,7 @@ export async function loadCompletionSummary(
 		memberName: viewer.displayName,
 		doneFor,
 		points: completion.points,
+		approvalStatus: completion.approvalStatus,
 		totalPoints: totals?.total ?? 0,
 		rotation,
 		goal: weeklyGoalProgress(totals?.week ?? 0, member?.goal ?? 0),
