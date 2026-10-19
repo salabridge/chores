@@ -3,6 +3,7 @@
 // file is bundled into the client.
 
 import { type RotationSlot, rotationHandoffChain } from '@chore/db/rotation';
+import type { PendingFavour } from './favour-approval.ts';
 import { isIsoWeekday, weekdayShort } from './weekdays.ts';
 
 export type ChoreStatus = 'active-turn' | 'staged' | 'todo' | 'completed';
@@ -30,6 +31,12 @@ export interface ChoreStatusRow {
 	 * assignee did it.
 	 */
 	doneBy: OverviewAssignee | null;
+	/**
+	 * A favour on today's chore waiting for the assignee's or a parent's OK
+	 * (SB-79): "Pending: Mia". The chore isn't done (`completionId` is null)
+	 * until it's approved.
+	 */
+	pendingFavour?: PendingFavour | null;
 	status: ChoreStatus;
 	points: number;
 	/** Rotation chores can be opened in the Rotation Loops Builder. */

@@ -25,6 +25,7 @@ export const roomDetail: PersonalDetail = {
 	isAssignee: true,
 	completedThisPeriod: false,
 	doneBy: null,
+	pendingFavour: null,
 	availableToday: true,
 	canComplete: true,
 	canCompleteForAssignee: false,
@@ -118,6 +119,7 @@ export const toiletCompletion: CompletionSummary = {
 	memberName: 'Leo',
 	doneFor: null,
 	points: 20,
+	approvalStatus: 'approved',
 	totalPoints: 160,
 	rotation: { nextName: 'Mia', nextIsYou: false },
 	goal: goal(160, 200),
@@ -140,6 +142,13 @@ export const favourCompletion: CompletionSummary = {
 	doneFor: { memberId: 'mia', name: 'Mia' },
 	points: 10,
 	totalPoints: 130,
+};
+
+/** Leo did Mia's chore and it waits for Mia's OK: no points yet (SB-79). */
+export const favourPendingCompletion: CompletionSummary = {
+	...favourCompletion,
+	approvalStatus: 'pending',
+	totalPoints: 120,
 };
 
 /** The weekly goal is met. */

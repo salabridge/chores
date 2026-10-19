@@ -1,3 +1,4 @@
+import type { PendingFavour } from './favour-approval.ts';
 import type { DetailDoer, DetailStage } from './rotation-detail.ts';
 
 // What the personal chore screen (SB-40) shows, as plain data that the server
@@ -17,13 +18,20 @@ export interface PersonalDetail {
 	assigneeName: string | null;
 	/** The viewing member is who the chore is assigned to. */
 	isAssignee: boolean;
-	/** This period's chore is already done. */
+	/** This period's chore is already done (and approved, for a favour). */
 	completedThisPeriod: boolean;
 	/**
 	 * Who did this period's chore when it wasn't the assignee (SB-74, a favour);
-	 * null while it's open or when the assignee did it.
+	 * null while it's open, while a favour waits for approval, or when the
+	 * assignee did it.
 	 */
 	doneBy: DetailDoer | null;
+	/**
+	 * A favour on this period's chore waiting for the assignee's (or a
+	 * parent's) OK (SB-79). The chore isn't done yet, but it can't be completed
+	 * again either: the assignee approves or declines it.
+	 */
+	pendingFavour: PendingFavour | null;
 	/** The chore doesn't occur today (a weekends chore on a weekday). */
 	availableToday: boolean;
 	/** The assignee is looking at a chore that is open now. */

@@ -14,7 +14,7 @@ import { addDays, chorePeriodStart, localDate } from '@chore/db/recurrence';
 import type { AuthenticatedTx } from '@chore/db/rls';
 import { rotationTurns } from '@chore/db/rotation';
 import { SCREEN_STREAK_LOOKBACK_DAYS, skipKey } from '@chore/db/streaks';
-import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { streakWeek } from '../streak.ts';
 import {
 	buildToday,
@@ -134,8 +134,8 @@ export async function loadToday(
 
 	const [instances, progress] = choreIds.length
 		? await Promise.all([
-				// At most one open completion per instance (partial unique index),
-				// so the join can't fan out.
+				// At most one open completion per instance (partial unique index;
+				// a declined favour isn't open), so the join can't fan out.
 				db
 					.select({
 						id: choreInstances.id,
@@ -143,6 +143,7 @@ export async function loadToday(
 						periodStart: choreInstances.periodStart,
 						assignedMemberId: choreInstances.assignedMemberId,
 						completionId: choreCompletions.id,
+						completionStatus: choreCompletions.approvalStatus,
 						doneById: choreCompletions.doneByMemberId,
 						// Whoever did it: the doer when someone did it for the
 						// assignee (SB-74), otherwise the assignee.
@@ -156,6 +157,7 @@ export async function loadToday(
 						and(
 							eq(choreCompletions.instanceId, choreInstances.id),
 							isNull(choreCompletions.reopenedAt),
+							ne(choreCompletions.approvalStatus, 'declined'),
 						),
 					)
 					.where(currentInstances),
@@ -202,7 +204,11 @@ export async function loadToday(
 	const helpOut: HelpOutFacts[] = [];
 	for (const { chore, periodStart } of dueChores) {
 		const instance = instanceByChore.get(chore.id);
-		const completed = instance?.completionId != null;
+		// Done means approved. A favour waiting for an OK (SB-79) isn't done
+		// yet, but nobody else can do it either, so it isn't offered under Help
+		// out; the favour lists (favours.ts) show it.
+		const claimed = instance?.completionId != null;
+		const completed = claimed && instance?.completionStatus === 'approved';
 
 		if (chore.type === 'personal') {
 			const owner = instance?.assignedMemberId ?? chore.assignedMemberId;
@@ -212,7 +218,7 @@ export async function loadToday(
 				// unassigned and not-yet-due ones are left out.
 				const ownerName = owner ? names.get(owner) : undefined;
 				const due = dueDayFor(chore, periodStart, clock.today);
-				if (owner && ownerName && !completed && due?.state !== 'upcoming') {
+				if (owner && ownerName && !claimed && due?.state !== 'upcoming') {
 					helpOut.push({
 						kind: 'personal',
 						choreId: chore.id,
@@ -239,9 +245,10 @@ export async function loadToday(
 				due: dueDayFor(chore, periodStart, clock.today),
 				stages: stagesFor(chore.id, instance?.id),
 				completed,
-				doneByName: instance?.doneById
-					? (names.get(instance.doneById) ?? null)
-					: null,
+				doneByName:
+					completed && instance?.doneById
+						? (names.get(instance.doneById) ?? null)
+						: null,
 			});
 			continue;
 		}
@@ -259,7 +266,7 @@ export async function loadToday(
 				: null;
 			const holderName = holder ? names.get(holder.memberId) : undefined;
 			const due = dueDayFor(chore, periodStart, clock.today);
-			if (holder && holderName && !completed && due?.state !== 'upcoming') {
+			if (holder && holderName && !claimed && due?.state !== 'upcoming') {
 				helpOut.push({
 					kind: 'rotation',
 					choreId: chore.id,
@@ -285,7 +292,7 @@ export async function loadToday(
 					rotation.lastCompletedMemberId,
 				).activeTurn
 			: null;
-		const completerId = instance?.completerId;
+		const completerId = completed ? instance?.completerId : null;
 		rotations.push({
 			choreId: chore.id,
 			title: chore.title,

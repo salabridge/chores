@@ -10,7 +10,8 @@ import {
 } from '@chore/db';
 import { chorePeriodStart } from '@chore/db/recurrence';
 import { rotationTurns } from '@chore/db/rotation';
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, ne, sql } from 'drizzle-orm';
+import type { FavourStatus, PendingFavour } from '../favour-approval.ts';
 import {
 	type DetailDoer,
 	type DetailMember,
@@ -211,34 +212,49 @@ export async function loadRotationDetail(
 		.orderBy(asc(choreStages.position));
 
 	let completed = false;
+	let claimed = false;
 	let doneBy: DetailDoer | null = null;
+	let pendingFavour: PendingFavour | null = null;
 	let doneStageIds = new Set<string>();
 	if (instance) {
+		// The open completion: approved, or a favour waiting for an OK (SB-79).
 		const [completion] = await db
 			.select({
 				id: choreCompletions.id,
 				doneByMemberId: choreCompletions.doneByMemberId,
+				status: choreCompletions.approvalStatus,
+				escalatedAt: choreCompletions.escalatedAt,
 			})
 			.from(choreCompletions)
 			.where(
 				and(
 					eq(choreCompletions.instanceId, instance.id),
 					isNull(choreCompletions.reopenedAt),
+					ne(choreCompletions.approvalStatus, 'declined'),
 				),
 			);
-		completed = completion !== undefined;
-		doneBy = await loadDoer(viewer.householdId, completion?.doneByMemberId);
+		claimed = completion !== undefined;
+		completed = completion?.status === 'approved';
+		const doer = await loadDoer(viewer.householdId, completion?.doneByMemberId);
+		if (completed) doneBy = doer;
+		if (completion?.status === 'pending') {
+			pendingFavour = {
+				completionId: completion.id,
+				doneBy: doer,
+				escalated: completion.escalatedAt !== null,
+			};
+		}
 		const progress = await db
 			.select({ stageId: choreStageProgress.stageId })
 			.from(choreStageProgress)
 			.where(eq(choreStageProgress.instanceId, instance.id));
 		doneStageIds = new Set(progress.map((p) => p.stageId));
 	}
-	if (completed) doneStageIds = new Set(stageRows.map((s) => s.id));
+	if (claimed) doneStageIds = new Set(stageRows.map((s) => s.id));
 
 	const isMyTurn = turns.activeTurn?.memberId === viewer.id;
 	const availableToday = periodStart !== null;
-	const open = availableToday && !completed;
+	const open = availableToday && !claimed;
 	return {
 		choreId,
 		title: chore.title,
@@ -254,6 +270,7 @@ export async function loadRotationDetail(
 		isMyTurn,
 		completedThisPeriod: completed,
 		doneBy,
+		pendingFavour,
 		availableToday,
 		canComplete: isMyTurn && open,
 		canCompleteForTurnHolder: !isMyTurn && turns.activeTurn !== null && open,
@@ -264,10 +281,16 @@ export async function loadRotationDetail(
 export interface TurnResult {
 	/** The completion this call wrote or found; null while stages remain. */
 	completionId: string | null;
-	/** Points awarded by this call. */
+	/** Points awarded by this call (0 for a favour waiting for approval). */
 	points: number;
 	/** False when only a stage (not the last one) was checked off. */
 	choreCompleted: boolean;
+	/**
+	 * `pending` for a favour by someone who isn't acting as a parent (SB-79):
+	 * the turn moves on, and the points arrive, once it's approved. Null
+	 * while stages remain.
+	 */
+	approvalStatus: FavourStatus | null;
 }
 
 /**
@@ -367,7 +390,14 @@ async function prepare(
 		periodStart,
 		turnHolderId,
 	);
-	return { instance, doneBy, claims: JSON.stringify({ sub: userId }) };
+	return {
+		instance,
+		doneBy,
+		claims: JSON.stringify({ sub: userId }),
+		// On a kid's profile the kid is acting, not the signed-in parent, so a
+		// favour they record waits for approval like any kid's (SB-79).
+		actingAs: state.mode === 'kid' ? state.member.id : null,
+	};
 }
 
 /**
@@ -381,7 +411,11 @@ export async function completeRotationTurn(
 	choreId: string,
 	options: TurnOptions = {},
 ): Promise<TurnResult> {
-	const { instance, doneBy, claims } = await prepare(state, choreId, options);
+	const { instance, doneBy, claims, actingAs } = await prepare(
+		state,
+		choreId,
+		options,
+	);
 	try {
 		const [, completed] = await db.batch([
 			db.execute(sql`select set_config('request.jwt.claims', ${claims}, true)`),
@@ -389,17 +423,19 @@ export async function completeRotationTurn(
 				completion_id: string;
 				points: number;
 				already_completed: boolean;
+				approval_status: FavourStatus;
 			}>(
-				sql`select completion_id, points, already_completed from app.complete_chore_instance(${instance.id}::uuid, ${doneBy}::uuid)`,
+				sql`select completion_id, points, already_completed, approval_status from app.complete_chore_instance(${instance.id}::uuid, ${doneBy}::uuid, ${actingAs}::uuid)`,
 			),
 		]);
 		const row = completed.rows[0];
 		if (!row) throw new Error('complete_chore_instance returned no row');
-		if (row.already_completed) throw alreadyDone();
+		if (row.already_completed) throw alreadyDone(row.approval_status);
 		return {
 			completionId: row.completion_id,
 			points: row.points,
 			choreCompleted: true,
+			approvalStatus: row.approval_status,
 		};
 	} catch (err) {
 		throw mapError(err);
@@ -420,7 +456,11 @@ export async function completeRotationStage(
 	if (!UUID.test(stageId)) {
 		throw new RotationDetailError('That stage was not found.', 404);
 	}
-	const { instance, doneBy, claims } = await prepare(state, choreId, options);
+	const { instance, doneBy, claims, actingAs } = await prepare(
+		state,
+		choreId,
+		options,
+	);
 	try {
 		const [, stage] = await db.batch([
 			db.execute(sql`select set_config('request.jwt.claims', ${claims}, true)`),
@@ -429,17 +469,21 @@ export async function completeRotationStage(
 				completion_id: string | null;
 				points: number;
 				already_completed: boolean;
+				approval_status: FavourStatus | null;
 			}>(
-				sql`select chore_completed, completion_id, points, already_completed from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid, ${doneBy}::uuid)`,
+				sql`select chore_completed, completion_id, points, already_completed, approval_status from app.complete_chore_stage(${instance.id}::uuid, ${stageId}::uuid, ${doneBy}::uuid, ${actingAs}::uuid)`,
 			),
 		]);
 		const row = stage.rows[0];
 		if (!row) throw new Error('complete_chore_stage returned no row');
-		if (row.chore_completed && row.already_completed) throw alreadyDone();
+		if (row.chore_completed && row.already_completed) {
+			throw alreadyDone(row.approval_status);
+		}
 		return {
 			completionId: row.completion_id,
 			points: row.points,
 			choreCompleted: row.chore_completed,
+			approvalStatus: row.chore_completed ? row.approval_status : null,
 		};
 	} catch (err) {
 		throw mapError(err);
@@ -447,8 +491,13 @@ export async function completeRotationStage(
 }
 
 /** The period already has an open completion, so this call wrote nothing. */
-function alreadyDone() {
-	return new RotationDetailError('This turn is already done for now.', 409);
+function alreadyDone(status?: FavourStatus | null) {
+	return new RotationDetailError(
+		status === 'pending'
+			? 'Someone already did this turn. It is waiting for an OK.'
+			: 'This turn is already done for now.',
+		409,
+	);
 }
 
 /** Turns the database's custom errors into messages for the screen. */

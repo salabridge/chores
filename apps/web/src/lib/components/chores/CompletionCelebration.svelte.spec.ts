@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import CompletionCelebration from './CompletionCelebration.svelte';
 import {
 	favourCompletion,
+	favourPendingCompletion,
 	goalReachedCompletion,
 	roomCompletion,
 	toiletCompletion,
@@ -68,6 +69,21 @@ describe('CompletionCelebration.svelte', () => {
 			.element(page.getByTestId('done-for'))
 			.toHaveTextContent("+10 points for you. Mia's chore is covered");
 		await expect.element(page.getByText('+10 pts')).toBeVisible();
+	});
+
+	it('says a favour waiting for approval has no points yet', async () => {
+		render(CompletionCelebration, { summary: favourPendingCompletion });
+		await expect
+			.element(page.getByTestId('done-for'))
+			.toHaveTextContent(
+				"Sent to Mia for approval. You'll get +10 points when Mia (or a parent) says it's done.",
+			);
+		await expect
+			.element(page.getByText("Clean Your Room is waiting for Mia's OK."))
+			.toBeVisible();
+		await expect.element(page.getByText('Points Pending')).toBeVisible();
+		expect(page.getByText('Points Awarded').elements()).toHaveLength(0);
+		expect(page.getByText('is covered').elements()).toHaveLength(0);
 	});
 
 	it('has no favour line for a chore of their own', async () => {

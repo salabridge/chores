@@ -175,6 +175,7 @@ describe('loadToday Help out (SB-75)', () => {
 			instances: [
 				instance('mine', {
 					completionId: 'c1',
+					completionStatus: 'approved',
 					doneById: 'mia',
 					completerId: 'mia',
 				}),
@@ -182,5 +183,22 @@ describe('loadToday Help out (SB-75)', () => {
 		});
 		const today = await loadToday(leo);
 		expect(today.personal[0]?.subtitle).toBe('Done by Mia');
+	});
+
+	it("doesn't count a favour waiting for the viewer's OK as done, or as Done by (SB-79)", async () => {
+		queueDay({
+			chores: [chore('mine')],
+			instances: [
+				instance('mine', {
+					completionId: 'c1',
+					completionStatus: 'pending',
+					doneById: 'mia',
+					completerId: 'mia',
+				}),
+			],
+		});
+		const today = await loadToday(leo);
+		expect(today.personal[0]?.variant).not.toBe('completed');
+		expect(today.personal[0]?.subtitle).not.toBe('Done by Mia');
 	});
 });

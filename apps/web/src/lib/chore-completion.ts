@@ -32,6 +32,12 @@ export interface CompletionSummary {
 	doneFor: { memberId: string; name: string } | null;
 	/** Points this completion awarded, as recorded on the completion row. */
 	points: number;
+	/**
+	 * `pending` while a favour waits for the assignee's (or a parent's) OK
+	 * (SB-79): `points` are what the member gets once it's approved, and
+	 * aren't in `totalPoints` yet. A rotation hasn't moved on yet either.
+	 */
+	approvalStatus: 'approved' | 'pending';
 	/** The member's balance now: the sum of their ledger rows. */
 	totalPoints: number;
 	/** Set for a shared rotation chore; null for a personal one (no tags). */

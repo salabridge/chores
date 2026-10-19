@@ -182,6 +182,7 @@ export async function householdWeekProgress(
 				and(
 					eq(choreCompletions.householdId, householdId),
 					isNull(choreCompletions.reopenedAt),
+					eq(choreCompletions.approvalStatus, 'approved'),
 					sql`${choreCompletions.completedAt} >= ${since}::timestamptz`,
 					eq(chores.type, 'rotation'),
 				),

@@ -12,6 +12,11 @@
 	import ConfettiBurst from '#lib/components/ui/ConfettiBurst.svelte';
 	import ProgressBar from '#lib/components/ui/ProgressBar.svelte';
 	import { doneForText } from '#lib/favour.js';
+	import {
+		POINTS_PENDING_LABEL,
+		pendingFavourText,
+		pendingSummaryLine,
+	} from '#lib/favour-approval.js';
 
 	interface Props {
 		summary: CompletionSummary;
@@ -21,7 +26,21 @@
 
 	let { summary, backHref = '/today' }: Props = $props();
 
-	const tags = $derived(summaryTags(summary));
+	// A favour waiting for its OK (SB-79): no points yet, and the rotation
+	// hasn't moved on, so nothing here may say otherwise.
+	const pending = $derived(summary.approvalStatus === 'pending');
+	const tags = $derived(
+		summaryTags(
+			pending && summary.rotation
+				? { rotation: { nextName: null, nextIsYou: false } }
+				: summary,
+		),
+	);
+	const line = $derived(
+		pending
+			? pendingSummaryLine(summary.title, summary.doneFor?.name ?? 'a parent')
+			: summaryLine(summary),
+	);
 	const tagClasses = {
 		shared: 'bg-surface-accent-blue-subtle text-text-blue',
 		next: 'bg-surface-accent-green-subtle text-text-green',
@@ -56,10 +75,12 @@
 			<h1 class="font-display text-[28px] font-bold">{celebrationHeading(summary.memberName)}</h1>
 			{#if summary.doneFor}
 				<p class="text-[18px] font-bold" data-testid="done-for">
-					{doneForText(summary.points, summary.doneFor.name)}
+					{pending
+						? pendingFavourText(summary.points, summary.doneFor.name)
+						: doneForText(summary.points, summary.doneFor.name)}
 				</p>
 			{/if}
-			<p class="text-[16px] text-text-ffedd5">{summaryLine(summary)}</p>
+			<p class="text-[16px] text-text-ffedd5">{line}</p>
 		</div>
 
 		<section
@@ -68,7 +89,9 @@
 		>
 			<div class="flex w-full flex-col gap-12">
 				<div class="flex flex-col gap-4 font-display font-bold">
-					<p class="text-[14px] text-text-secondary uppercase">Completed</p>
+					<p class="text-[14px] text-text-secondary uppercase">
+						{pending ? 'Waiting for approval' : 'Completed'}
+					</p>
 					<h2 class="text-[20px] text-text-primary">{summary.title}</h2>
 				</div>
 				{#if tags.length > 0}
@@ -85,7 +108,9 @@
 			</div>
 
 			<div class="flex w-full flex-col items-center gap-6 text-center">
-				<p class="font-display text-[14px] font-bold text-text-secondary uppercase">Points Awarded</p>
+				<p class="font-display text-[14px] font-bold text-text-secondary uppercase">
+					{pending ? POINTS_PENDING_LABEL : 'Points Awarded'}
+				</p>
 				<p class="font-display text-[48px] leading-none font-extrabold text-text-orange">
 					{pointsAwardedText(summary.points)}
 				</p>

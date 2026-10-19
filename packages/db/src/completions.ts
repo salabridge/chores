@@ -1,4 +1,5 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
+import type { CompletionApprovalStatus } from '../schema/completion-approval.ts';
 import { householdMembers } from '../schema/household-members.table.ts';
 import { pointsLedger } from '../schema/points-ledger.table.ts';
 import type { AuthenticatedTx } from './authenticated-db.ts';
@@ -75,7 +76,83 @@ export class ChoreDoerNotInHouseholdError extends Error {
 	}
 }
 
-export interface CompleteOptions {
+/**
+ * Thrown by `decideFavour` / `escalateFavour` when the completion isn't a
+ * favour waiting for a decision (it never needed approval, or it was
+ * reopened), and by `reopenCompletion` for a favour that isn't approved
+ * (SQLSTATE CP005).
+ */
+export class NotAFavourError extends Error {
+	readonly completionId: string;
+
+	constructor(completionId: string, options?: { cause?: unknown }) {
+		super(
+			`Completion ${completionId} is not a favour awaiting a decision`,
+			options,
+		);
+		this.name = 'NotAFavourError';
+		this.completionId = completionId;
+	}
+}
+
+/**
+ * Thrown by `decideFavour` when the assignee tries to decide a favour whose
+ * doer asked a parent: only a parent can decide it now (CP006).
+ */
+export class FavourEscalatedError extends Error {
+	readonly completionId: string;
+
+	constructor(completionId: string, options?: { cause?: unknown }) {
+		super(`A parent has been asked to decide favour ${completionId}`, options);
+		this.name = 'FavourEscalatedError';
+		this.completionId = completionId;
+	}
+}
+
+/**
+ * Thrown when a declined favour can't come back (a parent approving it, or the
+ * doer asking a parent) because the chore has been completed again since
+ * (CP007).
+ */
+export class FavourSupersededError extends Error {
+	readonly completionId: string;
+
+	constructor(completionId: string, options?: { cause?: unknown }) {
+		super(
+			`The chore of favour ${completionId} has been completed again since it was declined`,
+			options,
+		);
+		this.name = 'FavourSupersededError';
+		this.completionId = completionId;
+	}
+}
+
+/**
+ * Thrown by `escalateFavour` when a parent already declined the favour: a
+ * parent's decision is final (CP008).
+ */
+export class FavourDecidedByParentError extends Error {
+	readonly completionId: string;
+
+	constructor(completionId: string, options?: { cause?: unknown }) {
+		super(`A parent already decided favour ${completionId}`, options);
+		this.name = 'FavourDecidedByParentError';
+		this.completionId = completionId;
+	}
+}
+
+/**
+ * The member whose profile is open on a shared device, when it isn't the
+ * signed-in user's own (a parent's session on a managed kid's profile). The
+ * database then treats the caller as that kid, not as a parent (SB-79): a
+ * favour they record is pending, and they can't approve their own favour.
+ * Leave it out in the user's own view.
+ */
+export interface ActingAsOption {
+	actingAs?: string | null;
+}
+
+export interface CompleteOptions extends ActingAsOption {
 	/**
 	 * Who did the chore, when it wasn't the assignee (SB-74, doing a chore for
 	 * someone else). The points go to them; the chore (and its streak) stays the
@@ -100,9 +177,16 @@ export interface CompleteChoreResult {
 	/**
 	 * Who the completion credited with the points: the doer, or the assignee
 	 * when they did it themselves. For a repeat call, whoever the existing
-	 * completion credited.
+	 * completion credited. For a pending favour, who gets the points if it's
+	 * approved.
 	 */
 	creditedMemberId: string;
+	/**
+	 * `pending` for a favour by someone who isn't a parent (SB-79): `points` is
+	 * 0 and the turn hasn't moved until the assignee or a parent approves it.
+	 * For a repeat call, the existing completion's status.
+	 */
+	approvalStatus: CompletionApprovalStatus;
 }
 
 export type CompleteStageResult =
@@ -119,7 +203,10 @@ export type CompleteStageResult =
  *
  * A parent, or someone who can act as the chore's assignee, may call it; with
  * `doneBy` set to someone else, a parent or someone who can act as `doneBy`.
- * Otherwise Postgres raises insufficient_privilege.
+ * Otherwise Postgres raises insufficient_privilege. A favour (`doneBy` isn't
+ * the assignee) recorded by someone who isn't acting as a parent is
+ * `pending` (SB-79): no points and no turn hand-off until it's approved
+ * (`decideFavour`).
  */
 export async function completeChore(
 	tx: AuthenticatedTx,
@@ -127,6 +214,7 @@ export async function completeChore(
 	options: CompleteOptions = {},
 ): Promise<CompleteChoreResult> {
 	const doneBy = options.doneBy ?? null;
+	const actingAs = options.actingAs ?? null;
 	try {
 		const { rows } = await tx.execute<{
 			completion_id: string;
@@ -134,8 +222,9 @@ export async function completeChore(
 			already_completed: boolean;
 			next_member_id: string | null;
 			credited_member_id: string;
+			approval_status: CompletionApprovalStatus;
 		}>(
-			sql`select completion_id, points, already_completed, next_member_id, credited_member_id from app.complete_chore_instance(${instanceId}::uuid, ${doneBy}::uuid)`,
+			sql`select completion_id, points, already_completed, next_member_id, credited_member_id, approval_status from app.complete_chore_instance(${instanceId}::uuid, ${doneBy}::uuid, ${actingAs}::uuid)`,
 		);
 		const row = rows[0];
 		if (!row) throw new Error('complete_chore_instance returned no row');
@@ -145,6 +234,7 @@ export async function completeChore(
 			alreadyCompleted: row.already_completed,
 			nextMemberId: row.next_member_id,
 			creditedMemberId: row.credited_member_id,
+			approvalStatus: row.approval_status,
 		};
 	} catch (err) {
 		throw mapCompletionError(err, instanceId, undefined, doneBy);
@@ -168,6 +258,7 @@ export async function completeChoreStage(
 	options: CompleteOptions = {},
 ): Promise<CompleteStageResult> {
 	const doneBy = options.doneBy ?? null;
+	const actingAs = options.actingAs ?? null;
 	try {
 		const { rows } = await tx.execute<{
 			chore_completed: boolean;
@@ -176,12 +267,18 @@ export async function completeChoreStage(
 			already_completed: boolean | null;
 			next_member_id: string | null;
 			credited_member_id: string | null;
+			approval_status: CompletionApprovalStatus | null;
 		}>(
-			sql`select chore_completed, completion_id, points, already_completed, next_member_id, credited_member_id from app.complete_chore_stage(${instanceId}::uuid, ${stageId}::uuid, ${doneBy}::uuid)`,
+			sql`select chore_completed, completion_id, points, already_completed, next_member_id, credited_member_id, approval_status from app.complete_chore_stage(${instanceId}::uuid, ${stageId}::uuid, ${doneBy}::uuid, ${actingAs}::uuid)`,
 		);
 		const row = rows[0];
 		if (!row) throw new Error('complete_chore_stage returned no row');
-		if (!row.chore_completed || !row.completion_id || !row.credited_member_id) {
+		if (
+			!row.chore_completed ||
+			!row.completion_id ||
+			!row.credited_member_id ||
+			!row.approval_status
+		) {
 			return { choreCompleted: false };
 		}
 		return {
@@ -191,6 +288,7 @@ export async function completeChoreStage(
 			alreadyCompleted: row.already_completed === true,
 			nextMemberId: row.next_member_id,
 			creditedMemberId: row.credited_member_id,
+			approvalStatus: row.approval_status,
 		};
 	} catch (err) {
 		throw mapCompletionError(err, instanceId, stageId, doneBy);
@@ -201,16 +299,119 @@ export async function completeChoreStage(
  * Parent-only: reopens a completion, takes its points back with a reversing
  * ledger row (from whoever was credited: the doer, when someone did the chore
  * for the assignee), and unchecks the last stage of a staged chore. Returns false if
- * it was already reopened. A rotation's turn is not moved back.
+ * it was already reopened. A rotation's turn is not moved back. Only an
+ * approved completion can be reopened (`NotAFavourError` for a pending or
+ * declined favour: decline it instead).
  */
 export async function reopenCompletion(
 	tx: AuthenticatedTx,
 	completionId: string,
 ): Promise<boolean> {
-	const { rows } = await tx.execute<{ reopened: boolean }>(
-		sql`select app.reopen_chore_completion(${completionId}::uuid) as reopened`,
-	);
-	return rows[0]?.reopened === true;
+	try {
+		const { rows } = await tx.execute<{ reopened: boolean }>(
+			sql`select app.reopen_chore_completion(${completionId}::uuid) as reopened`,
+		);
+		return rows[0]?.reopened === true;
+	} catch (err) {
+		throw mapFavourError(err, completionId);
+	}
+}
+
+export interface DecideFavourResult {
+	/** The favour's status after the call. */
+	approvalStatus: CompletionApprovalStatus;
+	/** False when the call changed nothing (it was already decided, or a parent's decision stands). */
+	changed: boolean;
+	/** Points this call awarded to the doer (only when it approved it). */
+	points: number;
+	/** Whose turn a rotation chore moved to when this call approved it, else null. */
+	nextMemberId: string | null;
+	/** Who the current decision is recorded for (null while undecided). */
+	decidedByMemberId: string | null;
+}
+
+/**
+ * Approves or declines a favour (SB-79, `app.decide_favour`). The assignee
+ * (or a parent on their managed-kid profile, `actingAs`) decides a pending
+ * favour; any parent in their own view can decide a pending one or override
+ * the assignee's decline, and a parent's decision is final. The doer can
+ * never decide their own (insufficient_privilege, as for anyone else).
+ *
+ * Approving credits the doer with the completion's points and moves a
+ * rotation turn on; declining reopens the chore for the assignee. Deciding a
+ * decided favour again changes nothing (`changed: false`). Errors:
+ * `NotAFavourError`, `FavourEscalatedError` (the assignee, after the doer
+ * asked a parent), `FavourSupersededError` (approving a declined favour after
+ * the chore was done again).
+ */
+export async function decideFavour(
+	tx: AuthenticatedTx,
+	completionId: string,
+	approve: boolean,
+	options: ActingAsOption = {},
+): Promise<DecideFavourResult> {
+	try {
+		const { rows } = await tx.execute<{
+			approval_status: CompletionApprovalStatus;
+			changed: boolean;
+			points: number;
+			next_member_id: string | null;
+			decided_by_member_id: string | null;
+		}>(
+			sql`select approval_status, changed, points, next_member_id, decided_by_member_id from app.decide_favour(${completionId}::uuid, ${approve}, ${options.actingAs ?? null}::uuid)`,
+		);
+		const row = rows[0];
+		if (!row) throw new Error('decide_favour returned no row');
+		return {
+			approvalStatus: row.approval_status,
+			changed: row.changed,
+			points: row.points,
+			nextMemberId: row.next_member_id,
+			decidedByMemberId: row.decided_by_member_id,
+		};
+	} catch (err) {
+		throw mapFavourError(err, completionId);
+	}
+}
+
+export interface EscalateFavourResult {
+	approvalStatus: CompletionApprovalStatus;
+	/** False when it was already escalated or approved. */
+	changed: boolean;
+	escalatedAt: Date | null;
+}
+
+/**
+ * The doer asks a parent to decide their favour (SB-79, `app.escalate_favour`):
+ * a pending favour, or one the assignee declined (which goes back to
+ * pending). Only the doer can (or a parent on their profile, `actingAs`).
+ * Errors: `NotAFavourError`, `FavourDecidedByParentError` (a parent already
+ * declined it), `FavourSupersededError` (the chore was done again since the
+ * decline).
+ */
+export async function escalateFavour(
+	tx: AuthenticatedTx,
+	completionId: string,
+	options: ActingAsOption = {},
+): Promise<EscalateFavourResult> {
+	try {
+		const { rows } = await tx.execute<{
+			approval_status: CompletionApprovalStatus;
+			changed: boolean;
+			escalated_at: string | Date | null;
+		}>(
+			sql`select approval_status, changed, escalated_at from app.escalate_favour(${completionId}::uuid, ${options.actingAs ?? null}::uuid)`,
+		);
+		const row = rows[0];
+		if (!row) throw new Error('escalate_favour returned no row');
+		return {
+			approvalStatus: row.approval_status,
+			changed: row.changed,
+			escalatedAt: row.escalated_at ? new Date(row.escalated_at) : null,
+		};
+	} catch (err) {
+		throw mapFavourError(err, completionId);
+	}
 }
 
 /** A member's points: the sum of their ledger rows (there is no stored counter). */
@@ -286,6 +487,22 @@ export async function weeklyPointsProgress(
 			),
 		);
 	return weeklyGoalProgress(row?.total ?? 0, member.goal);
+}
+
+/** Maps the SB-79 favour SQLSTATEs (CP005-CP008) to the errors above; anything else passes through. */
+export function mapFavourError(err: unknown, completionId: string): unknown {
+	switch (sqlState(err)) {
+		case 'CP005':
+			return new NotAFavourError(completionId, { cause: err });
+		case 'CP006':
+			return new FavourEscalatedError(completionId, { cause: err });
+		case 'CP007':
+			return new FavourSupersededError(completionId, { cause: err });
+		case 'CP008':
+			return new FavourDecidedByParentError(completionId, { cause: err });
+		default:
+			return err;
+	}
 }
 
 /** Maps the SB-26/SB-74 SQLSTATEs (CP001-CP004) to the errors above; anything else passes through. */

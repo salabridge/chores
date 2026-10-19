@@ -68,6 +68,12 @@ const leoState = {
 	actor: { householdId: 'h1', userId: 'parent-user' },
 	member: { id: 'leo', householdId: 'h1' },
 } as unknown as ProfileState;
+/** Leo on his own login. */
+const leoSelf = {
+	mode: 'self',
+	actor: { householdId: 'h1', userId: 'leo-user' },
+	member: { id: 'leo', householdId: 'h1' },
+} as unknown as ProfileState;
 const miaState = {
 	mode: 'self',
 	actor: { householdId: 'h1', userId: 'mia-user' },
@@ -103,6 +109,9 @@ function queueState(
 		stageRows?: typeof stages;
 		instance?: Record<string, unknown> | null;
 		completion?: string;
+		/** The open completion's approval status (SB-79); approved by default. */
+		status?: 'approved' | 'pending';
+		escalated?: boolean;
 		doneStages?: string[];
 		name?: string;
 	} = {},
@@ -111,7 +120,18 @@ function queueState(
 	mocks.queue.push(opts.stageRows ?? stages);
 	if (opts.name !== undefined) mocks.queue.push([{ name: opts.name }]);
 	mocks.queue.push(
-		inst ? [{ ...inst, completionId: opts.completion ?? null }] : [],
+		inst
+			? [
+					{
+						...inst,
+						completionId: opts.completion ?? null,
+						completionStatus: opts.completion
+							? (opts.status ?? 'approved')
+							: null,
+						completionEscalatedAt: opts.escalated ? new Date() : null,
+					},
+				]
+			: [],
 	);
 	mocks.queue.push((opts.doneStages ?? []).map((stageId) => ({ stageId })));
 }
@@ -181,11 +201,81 @@ describe('completePersonalStep: who and what', () => {
 			[],
 			{ rows: [{ completion_id: COMPLETION, points: 10 }] },
 		]);
-		await completePersonalStep(leoState, CHORE, null);
+		await completePersonalStep(leoSelf, CHORE, null);
 		const queries = mocks.batch.mock.calls[0][0] as { sql: string }[];
 		expect(queries[1].sql).toContain('complete_chore_instance');
 		expect(queries[1].sql).toContain('null');
 		expect(queries[1].sql).not.toContain('"leo"');
+	});
+
+	it("passes the kid profile as acting_as, so a parent's session counts as the kid (SB-79)", async () => {
+		mocks.queue.push([chore({ points: 10 })]);
+		queueState({ stageRows: [] });
+		mocks.batch.mockResolvedValue([
+			[],
+			{
+				rows: [
+					{
+						completion_id: COMPLETION,
+						points: 10,
+						approval_status: 'approved',
+					},
+				],
+			},
+		]);
+		await completePersonalStep(leoState, CHORE, null);
+		const queries = mocks.batch.mock.calls[0][0] as { sql: string }[];
+		expect(queries[0].sql).toContain('parent-user');
+		expect(queries[1].sql).toContain('"leo"');
+	});
+
+	it('reports a favour by a kid as pending, with no points yet (SB-79)', async () => {
+		mocks.queue.push([chore({ points: 10 })]);
+		queueState({ stageRows: [] });
+		mocks.batch.mockResolvedValue([
+			[],
+			{
+				rows: [
+					{ completion_id: COMPLETION, points: 0, approval_status: 'pending' },
+				],
+			},
+		]);
+		expect(await completePersonalStep(miaState, CHORE, null)).toEqual({
+			completionId: COMPLETION,
+			points: 0,
+			choreCompleted: true,
+			approvalStatus: 'pending',
+		});
+	});
+
+	it('sends the doer of a pending favour back to it, and stops the assignee (SB-79)', async () => {
+		mocks.queue.push([chore()]);
+		queueState({
+			instance: { ...instance, completionDoneBy: 'mia' },
+			completion: COMPLETION,
+			status: 'pending',
+			doneStages: [S1, S2, S3],
+		});
+		expect(await completePersonalStep(miaState, CHORE, S3)).toEqual({
+			completionId: COMPLETION,
+			points: 0,
+			choreCompleted: true,
+			approvalStatus: 'pending',
+		});
+		mocks.queue.push([chore()]);
+		queueState({
+			instance: { ...instance, completionDoneBy: 'mia' },
+			completion: COMPLETION,
+			status: 'pending',
+			doneStages: [S1, S2, S3],
+		});
+		expect(
+			await failure(() => completePersonalStep(leoSelf, CHORE, S3)),
+		).toMatchObject({
+			status: 409,
+			message: 'Someone already did this chore. It is waiting for an OK.',
+		});
+		expect(mocks.batch).not.toHaveBeenCalled();
 	});
 
 	it('lets a parent record another household member as the doer', async () => {
@@ -312,6 +402,7 @@ describe('completePersonalStep: stages and points', () => {
 			completionId: null,
 			points: 0,
 			choreCompleted: false,
+			approvalStatus: null,
 		});
 		expect(mocks.batch).toHaveBeenCalledTimes(1);
 		const queries = mocks.batch.mock.calls[0][0] as { sql: string }[];
@@ -335,6 +426,7 @@ describe('completePersonalStep: stages and points', () => {
 						chore_completed: true,
 						completion_id: COMPLETION,
 						points: 15,
+						approval_status: 'approved',
 					}),
 				],
 			},
@@ -344,6 +436,7 @@ describe('completePersonalStep: stages and points', () => {
 			completionId: COMPLETION,
 			points: 15,
 			choreCompleted: true,
+			approvalStatus: 'approved',
 		});
 		// One call, one transaction: the stage, the completion and the ledger row
 		// are all written by the database function, never by this module.
@@ -357,13 +450,22 @@ describe('completePersonalStep: stages and points', () => {
 		queueState({ stageRows: [] });
 		mocks.batch.mockResolvedValue([
 			[],
-			{ rows: [{ completion_id: COMPLETION, points: 10 }] },
+			{
+				rows: [
+					{
+						completion_id: COMPLETION,
+						points: 10,
+						approval_status: 'approved',
+					},
+				],
+			},
 		]);
 
 		expect(await completePersonalStep(leoState, CHORE, null)).toEqual({
 			completionId: COMPLETION,
 			points: 10,
 			choreCompleted: true,
+			approvalStatus: 'approved',
 		});
 		const queries = mocks.batch.mock.calls[0][0] as { sql: string }[];
 		expect(queries[1].sql).toContain('complete_chore_instance');
@@ -394,6 +496,7 @@ describe('completePersonalStep: stages and points', () => {
 			completionId: COMPLETION,
 			points: 0,
 			choreCompleted: true,
+			approvalStatus: 'approved',
 		});
 		expect(mocks.batch).not.toHaveBeenCalled();
 		expect(mocks.inserts).toHaveLength(0);
@@ -478,6 +581,32 @@ describe('loadPersonalDetail', () => {
 			canComplete: false,
 			canCompleteForAssignee: false,
 		});
+	});
+
+	it('shows a pending favour as not done yet, not open, and not "Done by" (SB-79)', async () => {
+		mocks.queue.push([chore()]);
+		queueState({
+			instance: { ...instance, completionDoneBy: 'mia' },
+			completion: COMPLETION,
+			status: 'pending',
+			escalated: true,
+			doneStages: [S1, S2, S3],
+			name: 'Leo',
+		});
+		mocks.queue.push([{ name: 'Mia' }]);
+		const detail = await loadPersonalDetail(leo, CHORE);
+		expect(detail).toMatchObject({
+			completedThisPeriod: false,
+			doneBy: null,
+			pendingFavour: {
+				completionId: COMPLETION,
+				doneBy: { memberId: 'mia', name: 'Mia' },
+				escalated: true,
+			},
+			canComplete: false,
+			canCompleteForAssignee: false,
+		});
+		expect(detail?.stages.every((s) => s.state === 'completed')).toBe(true);
 	});
 
 	it('shows a finished chore as all done with no button', async () => {

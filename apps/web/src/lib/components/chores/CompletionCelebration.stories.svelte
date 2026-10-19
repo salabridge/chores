@@ -5,6 +5,7 @@
 	import CompletionCelebration from './CompletionCelebration.svelte';
 	import {
 		favourCompletion,
+		favourPendingCompletion,
 		goalReachedCompletion,
 		roomCompletion,
 		toiletCompletion,
@@ -29,6 +30,8 @@
 <Story name="Goal reached" args={{ summary: goalReachedCompletion }} />
 
 <Story name="Did it for someone" args={{ summary: favourCompletion }} />
+
+<Story name="Favour waiting for approval" args={{ summary: favourPendingCompletion }} />
 
 <Story
 	name="Rotation with nobody next"

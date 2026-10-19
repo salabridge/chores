@@ -1,3 +1,4 @@
+import type { PendingFavour } from './favour-approval.ts';
 import { joinNames, type RotationScope } from './rotation-loops.ts';
 
 // What the shared rotation chore screen (SB-41) shows, as plain data that the
@@ -56,6 +57,11 @@ export interface RotationDetail {
 	 * while it's open or when the turn-holder did it.
 	 */
 	doneBy: DetailDoer | null;
+	/**
+	 * A favour on this turn waiting for the turn-holder's (or a parent's) OK
+	 * (SB-79). The turn hasn't moved on yet, and it can't be completed again.
+	 */
+	pendingFavour: PendingFavour | null;
 	/** The chore doesn't occur today (a weekends chore on a weekday). */
 	availableToday: boolean;
 	/** Empty when the rotation has no stages. */
