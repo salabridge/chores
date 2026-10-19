@@ -1,4 +1,4 @@
-name: Migrate
+name: Migrate ${{ inputs.environment }}
 
 on:
   workflow_dispatch:
