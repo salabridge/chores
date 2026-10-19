@@ -6,7 +6,12 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { CompletionSummary } from '../chore-completion.ts';
 import { db } from './drizzle.ts';
 import { householdClock } from './household-today.ts';
-import { loadChore, loadRotation, UUID } from './rotation-detail.ts';
+import {
+	householdMemberName,
+	loadChore,
+	loadRotation,
+	UUID,
+} from './rotation-detail.ts';
 
 // What the completion celebration screen (SB-42) shows. Everything here is a
 // read: the points come from the completion row and the ledger that SB-26
@@ -16,7 +21,8 @@ import { loadChore, loadRotation, UUID } from './rotation-detail.ts';
 
 /**
  * The summary for one completion, as seen by `viewer`, who must be the member
- * who earned it. Returns `undefined` for anything that isn't theirs (unknown
+ * who earned it: the assignee, or whoever did it for them (SB-74), in which
+ * case `doneFor` names the assignee. Returns `undefined` for anything that isn't theirs (unknown
  * id, another household or member, a chore that doesn't match the URL), and
  * `null` when a parent has since reopened the completion (its points were
  * taken back, so there is nothing to celebrate).
@@ -37,6 +43,7 @@ export async function loadCompletionSummary(
 		db
 			.select({
 				memberId: choreCompletions.memberId,
+				doneByMemberId: choreCompletions.doneByMemberId,
 				points: choreCompletions.points,
 				reopenedAt: choreCompletions.reopenedAt,
 			})
@@ -70,9 +77,20 @@ export async function loadCompletionSummary(
 		// costs at most one indexed lookup.
 		loadRotation(viewer.householdId, choreId),
 	]);
-	if (!completion || completion.memberId !== viewer.id) return undefined;
+	// The points (and so the celebration) are the doer's when someone did the
+	// chore for its assignee.
+	const credited = completion?.doneByMemberId ?? completion?.memberId;
+	if (!completion || credited !== viewer.id) return undefined;
 	if (completion.reopenedAt) return null;
 	if (!chore) return undefined;
+	let doneFor: CompletionSummary['doneFor'] = null;
+	if (completion.doneByMemberId && completion.memberId) {
+		const name = await householdMemberName(
+			viewer.householdId,
+			completion.memberId,
+		);
+		if (name) doneFor = { memberId: completion.memberId, name };
+	}
 	const [totals] = ledger;
 
 	let rotation: CompletionSummary['rotation'] = null;
@@ -94,6 +112,7 @@ export async function loadCompletionSummary(
 		choreId,
 		title: chore.title,
 		memberName: viewer.displayName,
+		doneFor,
 		points: completion.points,
 		totalPoints: totals?.total ?? 0,
 		rotation,

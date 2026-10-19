@@ -166,6 +166,7 @@ export async function loadHouseholdOverview(
 						id: choreCompletions.id,
 						instanceId: choreCompletions.instanceId,
 						memberId: choreCompletions.memberId,
+						doneByMemberId: choreCompletions.doneByMemberId,
 					})
 					.from(choreCompletions)
 					.where(
@@ -190,8 +191,14 @@ export async function loadHouseholdOverview(
 	const completionByInstance = new Map(
 		completions.map((c) => [c.instanceId, c.id]),
 	);
+	// Whoever did it: the doer when someone did it for the assignee (SB-74).
 	const completerByInstance = new Map(
-		completions.map((c) => [c.instanceId, c.memberId]),
+		completions.map((c) => [c.instanceId, c.doneByMemberId ?? c.memberId]),
+	);
+	const doerByInstance = new Map(
+		completions.flatMap((c) =>
+			c.doneByMemberId ? [[c.instanceId, c.doneByMemberId] as const] : [],
+		),
 	);
 	const stageCount = (choreId: string) =>
 		stages.filter((s) => s.choreId === choreId).length;
@@ -212,6 +219,9 @@ export async function loadHouseholdOverview(
 			? (instance?.assignedMemberId ?? rotation?.currentMemberId ?? null)
 			: (instance?.assignedMemberId ?? chore.assignedMemberId);
 		const assigneeName = assigneeId ? (names.get(assigneeId) ?? null) : null;
+		const doerId =
+			instance && completionId ? doerByInstance.get(instance.id) : undefined;
+		const doerName = doerId ? names.get(doerId) : undefined;
 
 		let status: ChoreStatus = 'todo';
 		if (completionId) status = 'completed';
@@ -242,6 +252,7 @@ export async function loadHouseholdOverview(
 				assigneeId && assigneeName
 					? { memberId: assigneeId, name: assigneeName }
 					: null,
+			doneBy: doerId && doerName ? { memberId: doerId, name: doerName } : null,
 			status,
 			points: chore.points,
 			isLoop,
@@ -266,8 +277,9 @@ export async function loadHouseholdOverview(
 				: [];
 		});
 
-	// Who did (or holds) each of today's chores. A finished loop chore's turn
-	// has already moved on, so it counts for whoever completed it.
+	// Who did (or holds) each of today's chores. A finished chore counts for
+	// whoever completed it: a loop's turn has already moved on, and a chore done
+	// as a favour (SB-74) counts for the doer.
 	const workload = buildWorkload(
 		memberRows,
 		sorted.flatMap((r) => {

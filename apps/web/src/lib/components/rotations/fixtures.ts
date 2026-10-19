@@ -103,7 +103,9 @@ export const toiletDetail: RotationDetail = {
 	nextUp: mia,
 	isMyTurn: true,
 	canComplete: true,
+	canCompleteForTurnHolder: false,
 	completedThisPeriod: false,
+	doneBy: null,
 	availableToday: true,
 	stages: [],
 };
@@ -116,12 +118,14 @@ export const toiletWaiting: RotationDetail = {
 	nextUp: leo,
 	isMyTurn: false,
 	canComplete: false,
+	canCompleteForTurnHolder: true,
 };
 
 /** Done for this period; the turn already moved on. */
 export const toiletDone: RotationDetail = {
 	...toiletWaiting,
 	completedThisPeriod: true,
+	canCompleteForTurnHolder: false,
 };
 
 /** A staged rotation (the mocks don't cover this; see the PR notes). */

@@ -179,6 +179,44 @@ describe('loadCompletionSummary', () => {
 		expectNoWrites();
 	});
 
+	it('names whose chore it was when the member did it for someone else (SB-74)', async () => {
+		queueLoad({
+			completion: {
+				memberId: 'mia',
+				doneByMemberId: 'leo',
+				points: 20,
+				reopenedAt: null,
+			},
+		});
+		// After the goal read: the assignee's name.
+		mocks.push('household_members', [{ name: 'Mia' }]);
+		const summary = await loadCompletionSummary(leo, CHORE, COMPLETION);
+		expect(summary).toMatchObject({
+			memberName: 'Leo',
+			doneFor: { memberId: 'mia', name: 'Mia' },
+			points: 20,
+		});
+		expectNoWrites();
+	});
+
+	it('is not for the assignee when someone else did it (the points are theirs)', async () => {
+		queueLoad({
+			completion: {
+				memberId: 'leo',
+				doneByMemberId: 'mia',
+				points: 20,
+				reopenedAt: null,
+			},
+		});
+		expect(await loadCompletionSummary(leo, CHORE, COMPLETION)).toBeUndefined();
+	});
+
+	it("has no doneFor for the member's own chore", async () => {
+		queueLoad();
+		const summary = await loadCompletionSummary(leo, CHORE, COMPLETION);
+		expect(summary?.doneFor).toBeNull();
+	});
+
 	it('is undefined for an unknown completion, or ids that are not UUIDs', async () => {
 		queueLoad({ completion: null });
 		expect(await loadCompletionSummary(leo, CHORE, COMPLETION)).toBeUndefined();

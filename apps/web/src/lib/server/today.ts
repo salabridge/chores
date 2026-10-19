@@ -14,7 +14,7 @@ import { addDays, chorePeriodStart, localDate } from '@chore/db/recurrence';
 import type { AuthenticatedTx } from '@chore/db/rls';
 import { rotationTurns } from '@chore/db/rotation';
 import { SCREEN_STREAK_LOOKBACK_DAYS, skipKey } from '@chore/db/streaks';
-import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { streakWeek } from '../streak.ts';
 import {
 	buildToday,
@@ -141,7 +141,12 @@ export async function loadToday(
 						choreId: choreInstances.choreId,
 						periodStart: choreInstances.periodStart,
 						assignedMemberId: choreInstances.assignedMemberId,
-						completerId: choreCompletions.memberId,
+						completionId: choreCompletions.id,
+						// Whoever did it: the doer when someone did it for the
+						// assignee (SB-74), otherwise the assignee.
+						completerId: sql<
+							string | null
+						>`coalesce(${choreCompletions.doneByMemberId}, ${choreCompletions.memberId})`,
 					})
 					.from(choreInstances)
 					.leftJoin(
@@ -194,7 +199,7 @@ export async function loadToday(
 	const rotations: RotationFacts[] = [];
 	for (const { chore, periodStart } of dueChores) {
 		const instance = instanceByChore.get(chore.id);
-		const completed = instance?.completerId != null;
+		const completed = instance?.completionId != null;
 
 		if (chore.type === 'personal') {
 			const owner = instance?.assignedMemberId ?? chore.assignedMemberId;

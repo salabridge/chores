@@ -23,8 +23,13 @@ export interface WeeklyGoal {
 export interface CompletionSummary {
 	choreId: string;
 	title: string;
-	/** Who earned the points (the member the chore was assigned to). */
+	/** Who earned the points: the assignee, or whoever did it for them (SB-74). */
 	memberName: string;
+	/**
+	 * Whose chore it was, when the member did it for someone else (SB-74): the
+	 * assignee or rotation turn-holder. Null when it was the member's own.
+	 */
+	doneFor: { memberId: string; name: string } | null;
 	/** Points this completion awarded, as recorded on the completion row. */
 	points: number;
 	/** The member's balance now: the sum of their ledger rows. */

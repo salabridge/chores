@@ -24,6 +24,12 @@ export interface ChoreStatusRow {
 	/** Second line: the loop or owner, and when it is due. */
 	context: string;
 	assignee: OverviewAssignee | null;
+	/**
+	 * Who did today's chore when it wasn't the assignee (SB-74: a sibling did
+	 * it as a favour and got the points). Null while it's open or when the
+	 * assignee did it.
+	 */
+	doneBy: OverviewAssignee | null;
 	status: ChoreStatus;
 	points: number;
 	/** Rotation chores can be opened in the Rotation Loops Builder. */

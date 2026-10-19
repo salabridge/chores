@@ -24,6 +24,7 @@ const row = (over: Partial<ChoreStatusRow> = {}): ChoreStatusRow => ({
 	title: 'Chore',
 	context: '',
 	assignee: null,
+	doneBy: null,
 	status: 'todo',
 	points: 10,
 	isLoop: false,
