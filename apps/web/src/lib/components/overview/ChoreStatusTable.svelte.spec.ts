@@ -34,6 +34,23 @@ describe('ChoreStatusTable.svelte', () => {
 		).toHaveLength(1);
 	});
 
+	it('shows who did a chore when it was not the assignee', async () => {
+		render(ChoreStatusTable, { rows: overviewRows });
+		await expect.element(page.getByText('Done by Mia')).toBeVisible();
+		expect(page.getByText(/^Done by /).elements()).toHaveLength(1);
+	});
+
+	it('says reopening a favour takes the points back from the doer', async () => {
+		render(ChoreStatusTable, { rows: overviewRows });
+		await expect
+			.element(page.getByText('Reopening takes the 5 pts back from Mia.'))
+			.toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Reopen Make Bed' }))
+			.toHaveAccessibleDescription('Reopening takes the 5 pts back from Mia.');
+		expect(page.getByText(/^Reopening takes/).elements()).toHaveLength(1);
+	});
+
 	it('disables actions that have no handler', async () => {
 		render(ChoreStatusTable, { rows: overviewRows });
 		await expect

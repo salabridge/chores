@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildToday,
 	dueDayFor,
+	type HelpOutFacts,
+	helpOutItem,
+	helpOutSubtitle,
 	type PersonalFacts,
+	personalSubtitle,
 	pickPriority,
 	type RotationFacts,
 	rotationItem,
@@ -20,6 +24,7 @@ const personal = (over: Partial<PersonalFacts> = {}): PersonalFacts => ({
 	due: null,
 	stages: { done: 0, total: 0 },
 	completed: false,
+	doneByName: null,
 	...over,
 });
 
@@ -389,6 +394,97 @@ describe('weekly chores with a due day (SB-71)', () => {
 		);
 		expect(theirs.subtitle).toBe(
 			'Shared rotation • Mia has the turn • Due today',
+		);
+	});
+});
+
+const helpOutFacts = (over: Partial<HelpOutFacts> = {}): HelpOutFacts => ({
+	kind: 'personal',
+	choreId: 'h',
+	title: 'Trash',
+	points: 10,
+	ownerId: 'mia',
+	ownerName: 'Mia',
+	frequency: 'daily',
+	dueTime: null,
+	dueLabel: null,
+	due: null,
+	stages: { done: 0, total: 0 },
+	...over,
+});
+
+describe('help out (SB-75)', () => {
+	it('words an open personal chore with its owner and due time', () => {
+		expect(helpOutSubtitle(helpOutFacts({ dueTime: '20:00:00' }))).toBe(
+			"Mia's chore • Due by 8:00 PM",
+		);
+	});
+
+	it('words a rotation with its due day, and a started chore with its stage', () => {
+		expect(
+			helpOutSubtitle(
+				helpOutFacts({
+					kind: 'rotation',
+					ownerName: 'Dad',
+					frequency: 'weekly',
+					due: { weekday: 1, state: 'overdue' },
+				}),
+			),
+		).toBe("Dad's chore • Household rotation • Was due Mon");
+		expect(
+			helpOutSubtitle(helpOutFacts({ stages: { done: 1, total: 3 } })),
+		).toBe("Mia's chore • Stage 2 of 3");
+	});
+
+	it('links to the chore and flags overdue ones', () => {
+		const item = helpOutItem(
+			helpOutFacts({ due: { weekday: 1, state: 'overdue' } }),
+		);
+		expect(item).toMatchObject({
+			href: '/chores/h',
+			overdue: true,
+			ownerId: 'mia',
+		});
+	});
+
+	it('lists overdue first, then by owner, points and title', () => {
+		const today = buildToday({
+			member: { id: 'leo', name: 'Leo' },
+			points: 0,
+			streak: { days: 0, exceptions: 0 },
+			week: {
+				label: '',
+				number: 1,
+				days: [],
+				done: 0,
+				due: 0,
+				points: 0,
+			},
+			personal: [],
+			rotations: [],
+			helpOut: [
+				helpOutFacts({ choreId: 'a', title: 'A', ownerName: 'Mia' }),
+				helpOutFacts({ choreId: 'b', title: 'B', ownerName: 'Dad' }),
+				helpOutFacts({
+					choreId: 'c',
+					title: 'C',
+					ownerName: 'Zed',
+					due: { weekday: 1, state: 'overdue' },
+				}),
+			],
+		});
+		expect(today.helpOut.map((i) => i.choreId)).toEqual(['c', 'b', 'a']);
+	});
+
+	it('leaves Help out empty by default and out of the summary', () => {
+		expect(build({}).helpOut).toEqual([]);
+	});
+
+	it('names who did the viewer own chore when it was a favour', () => {
+		const done = personal({ completed: true, doneByName: 'Mia' });
+		expect(personalSubtitle(done)).toBe('Done by Mia');
+		expect(personalSubtitle(personal({ completed: true }))).toBe(
+			'Done for today',
 		);
 	});
 });

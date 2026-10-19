@@ -2,10 +2,13 @@
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import { fn } from 'storybook/test';
 	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
+	import { doerOptions } from '../chores/fixtures.ts';
 	import {
 		dishwasherDetail,
 		toiletDetail,
 		toiletDone,
+		toiletDoneFavour,
+		toiletFavour,
 		toiletWaiting,
 	} from './fixtures.ts';
 	import * as thisFile from './RotationChoreDetail.stories.svelte';
@@ -28,7 +31,16 @@
 
 <Story name="Someone else's turn" args={{ detail: toiletWaiting }} />
 
+<Story name="Doing it for someone" args={{ detail: toiletFavour }} />
+
+<Story
+	name="Parent records who did it"
+	args={{ detail: toiletFavour, doerOptions }}
+/>
+
 <Story name="Done for now" args={{ detail: toiletDone }} />
+
+<Story name="Done by someone else" args={{ detail: toiletDoneFavour }} />
 
 <Story
 	name="First turn ever"

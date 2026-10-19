@@ -24,6 +24,11 @@
 
 <Story name="Actions not available yet" />
 
+<Story
+	name="Done as a favour"
+	args={{ rows: overviewRows.filter((r) => r.doneBy), actions }}
+/>
+
 <Story name="With actions" args={{ actions }} />
 
 <Story name="Failing action" args={{ actions: failing }} />

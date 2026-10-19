@@ -3,6 +3,7 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import CompletionCelebration from './CompletionCelebration.svelte';
 import {
+	favourCompletion,
 	goalReachedCompletion,
 	roomCompletion,
 	toiletCompletion,
@@ -59,6 +60,19 @@ describe('CompletionCelebration.svelte', () => {
 		await expect.element(page.getByText('+15 pts')).toBeVisible();
 		expect(page.getByText('Shared rotation').elements()).toHaveLength(0);
 		expect(page.getByText(/Next up/).elements()).toHaveLength(0);
+	});
+
+	it("says the points are the member's and whose chore is covered", async () => {
+		render(CompletionCelebration, { summary: favourCompletion });
+		await expect
+			.element(page.getByTestId('done-for'))
+			.toHaveTextContent("+10 points for you. Mia's chore is covered");
+		await expect.element(page.getByText('+10 pts')).toBeVisible();
+	});
+
+	it('has no favour line for a chore of their own', async () => {
+		render(CompletionCelebration, { summary: roomCompletion });
+		expect(page.getByTestId('done-for').elements()).toHaveLength(0);
 	});
 
 	it('says when the weekly goal is reached', async () => {

@@ -4,6 +4,7 @@
 	import * as thisFile from './CompletionCelebration.stories.svelte';
 	import CompletionCelebration from './CompletionCelebration.svelte';
 	import {
+		favourCompletion,
 		goalReachedCompletion,
 		roomCompletion,
 		toiletCompletion,
@@ -26,6 +27,8 @@
 <Story name="Personal chore" args={{ summary: roomCompletion }} />
 
 <Story name="Goal reached" args={{ summary: goalReachedCompletion }} />
+
+<Story name="Did it for someone" args={{ summary: favourCompletion }} />
 
 <Story
 	name="Rotation with nobody next"

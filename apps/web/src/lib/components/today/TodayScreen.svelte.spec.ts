@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { emptyToday, todayData, weeklyDueToday } from './fixtures.ts';
+import {
+	emptyToday,
+	helpOutToday,
+	todayData,
+	weeklyDueToday,
+} from './fixtures.ts';
 import TodayScreen from './TodayScreen.svelte';
 
 describe('TodayScreen.svelte', () => {
@@ -112,6 +117,21 @@ describe('TodayScreen.svelte', () => {
 		await expect
 			.element(page.getByText('Household rotation • Due Sun'))
 			.toBeVisible();
+	});
+
+	it("collapses other members' chores under Help out", async () => {
+		render(TodayScreen, { data: helpOutToday });
+		const help = page.getByTestId('help-out');
+		await expect.element(help).not.toHaveAttribute('open');
+		await page.getByText('Help out').click();
+		await expect
+			.element(page.getByRole('link', { name: /Take Out the Trash/ }))
+			.toHaveAttribute('href', '/chores/mia-trash');
+	});
+
+	it('has no Help out group when nobody else has an open chore', async () => {
+		render(TodayScreen, { data: todayData });
+		expect(page.getByTestId('help-out').elements()).toHaveLength(0);
 	});
 
 	it('has no Later this week group without upcoming chores', async () => {

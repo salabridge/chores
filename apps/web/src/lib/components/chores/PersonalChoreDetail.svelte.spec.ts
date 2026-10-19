@@ -2,8 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import {
+	doerOptions,
 	roomDetail,
 	roomDone,
+	roomDoneFavour,
+	roomFavour,
 	roomLastStage,
 	roomReadOnly,
 	singleStepDetail,
@@ -95,7 +98,49 @@ describe('PersonalChoreDetail.svelte', () => {
 		expect(page.getByRole('progressbar').elements()).toHaveLength(0);
 	});
 
-	it('is read only for anyone but the assignee', async () => {
+	it("banners someone else's open chore and lets the member do it for them", async () => {
+		render(PersonalChoreDetail, { detail: roomFavour });
+		await expect.element(page.getByText("This is Mia's chore.")).toBeVisible();
+		await expect
+			.element(page.getByText("You'll get the points."))
+			.toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Complete Stage 2' }))
+			.toBeVisible();
+		expect(page.getByLabelText('Done by').elements()).toHaveLength(0);
+	});
+
+	it("has no banner on the member's own chore", async () => {
+		render(PersonalChoreDetail, { detail: roomDetail });
+		expect(page.getByTestId('favour-banner').elements()).toHaveLength(0);
+	});
+
+	it('offers a parent a "Done by" select that starts on the assignee', async () => {
+		render(PersonalChoreDetail, { detail: roomFavour, doerOptions });
+		await expect.element(page.getByLabelText('Done by')).toHaveValue('mia');
+		await expect
+			.element(page.getByText('Choose who did it below. They get the points.'))
+			.toBeVisible();
+	});
+
+	it('posts the chosen doer with the form', async () => {
+		render(PersonalChoreDetail, { detail: roomFavour, doerOptions });
+		await page.getByLabelText('Done by').selectOptions('dad');
+		const form = page
+			.getByRole('button', { name: 'Complete Stage 2' })
+			.element()
+			.closest('form');
+		expect(
+			(form?.elements.namedItem('doneBy') as HTMLSelectElement | null)?.value,
+		).toBe('dad');
+	});
+
+	it('shows who did a finished chore when it was not the assignee', async () => {
+		render(PersonalChoreDetail, { detail: roomDoneFavour });
+		await expect.element(page.getByText('Done by Leo')).toBeVisible();
+	});
+
+	it('is read only for anyone but the assignee when it is not open', async () => {
 		render(PersonalChoreDetail, { detail: roomReadOnly });
 		await expect
 			.element(page.getByText(/Only Mia can complete this chore/))

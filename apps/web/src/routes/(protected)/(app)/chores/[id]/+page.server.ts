@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { requireProfile } from '#lib/server/guards.js';
+import { listHouseholdMembers } from '#lib/server/members.js';
 import { loadPersonalDetail } from '#lib/server/personal-detail.js';
 import { isParentRole } from '#lib/server/profile-state.js';
 import { loadRotationDetail } from '#lib/server/rotation-detail.js';
@@ -17,8 +18,19 @@ export const load: PageServerLoad = async ({ params }) => {
 	const canEdit = state.mode === 'self' && isParentRole(member.role);
 	const rotation = await loadRotationDetail(member, params.id);
 	if (rotation === undefined) error(404, 'Chore not found');
-	if (rotation) return { rotation, personal: null, canEdit };
+	// A parent in their own view can record who did a chore (SB-75), so they
+	// get the household to choose from. Everyone else is credited as themselves.
+	const doerOptions = canEdit
+		? (await listHouseholdMembers(member.householdId)).map((m) => ({
+				id: m.id,
+				name: m.displayName,
+			}))
+		: undefined;
+	const viewerId = member.id;
+	if (rotation) {
+		return { rotation, personal: null, canEdit, doerOptions, viewerId };
+	}
 	const personal = await loadPersonalDetail(member, params.id);
 	if (!personal) error(404, 'Chore not found');
-	return { rotation: null, personal, canEdit };
+	return { rotation: null, personal, canEdit, doerOptions, viewerId };
 };

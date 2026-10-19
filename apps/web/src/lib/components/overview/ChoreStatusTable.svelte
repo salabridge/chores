@@ -10,8 +10,10 @@
 </script>
 
 <script lang="ts">
+	import { reopenFavourText } from '#lib/favour.js';
 	import { openCount, plural, rowActions } from '#lib/overview.js';
 	import Badge from '../ui/Badge.svelte';
+	import DoneByLabel from '../ui/DoneByLabel.svelte';
 	import MemberAvatar from '../ui/MemberAvatar.svelte';
 	import SecondaryButton from '../ui/SecondaryButton.svelte';
 	import SurfaceCard from '../ui/SurfaceCard.svelte';
@@ -66,6 +68,7 @@
 	kind: 'skip' | 'remind' | 'reopen',
 	label: string,
 	tone: 'orange' | 'neutral',
+	describedby?: string,
 )}
 	{@const handler = actions[kind]}
 	<SecondaryButton
@@ -75,6 +78,7 @@
 		pending={isPending(row, kind)}
 		title={handler ? undefined : unavailableHint}
 		aria-label="{label} {row.title}"
+		aria-describedby={describedby}
 		onclick={() => run(handler, row, kind)}
 	>
 		{label}
@@ -121,12 +125,17 @@
 							</span>
 						</td>
 						<td class="block lg:table-cell lg:px-16 lg:py-16 lg:align-middle">
-							<span class="flex items-center gap-8 text-[14px] text-text-primary">
-								{#if row.assignee}
-									<MemberAvatar name={row.assignee.name} size="sm" />
-									<span>{row.assignee.name}</span>
-								{:else}
-									<span class="text-text-secondary">Unassigned</span>
+							<span class="flex flex-col gap-6">
+								<span class="flex items-center gap-8 text-[14px] text-text-primary">
+									{#if row.assignee}
+										<MemberAvatar name={row.assignee.name} size="sm" />
+										<span>{row.assignee.name}</span>
+									{:else}
+										<span class="text-text-secondary">Unassigned</span>
+									{/if}
+								</span>
+								{#if row.doneBy}
+									<DoneByLabel name={row.doneBy.name} />
 								{/if}
 							</span>
 						</td>
@@ -145,7 +154,13 @@
 									{@render actionButton(row, 'remind', 'Remind', 'orange')}
 								{/if}
 								{#if available.reopen}
-									{@render actionButton(row, 'reopen', 'Reopen', 'neutral')}
+									{@render actionButton(
+										row,
+										'reopen',
+										'Reopen',
+										'neutral',
+										row.doneBy ? `reopen-note-${row.choreId}` : undefined,
+									)}
 								{/if}
 								{#if available.viewLoop}
 									<SecondaryButton variant="tinted" tone="blue" href={loopHref}>
@@ -153,6 +168,15 @@
 									</SecondaryButton>
 								{/if}
 							</span>
+							<!-- The points leave whoever earned them, not the assignee (SB-75). -->
+							{#if available.reopen && row.doneBy}
+								<p
+									id="reopen-note-{row.choreId}"
+									class="mt-6 text-[12px] text-text-secondary lg:text-right"
+								>
+									{reopenFavourText(row.points, row.doneBy.name)}
+								</p>
+							{/if}
 						</td>
 					</tr>
 				{/each}

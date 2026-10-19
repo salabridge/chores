@@ -18,30 +18,35 @@
 	const messageOf = (e: unknown, fallback: string) =>
 		isHttpError(e) && e.body.message ? e.body.message : fallback;
 
-	async function oncomplete() {
+	// A parent who recorded someone else as the doer goes back to the chore:
+	// the celebration belongs to the member who got the points.
+	const celebrates = (doneBy: string | undefined) =>
+		!doneBy || doneBy === data.viewerId;
+
+	async function oncomplete(doneBy?: string) {
 		let result: Awaited<ReturnType<typeof completeTurn>>;
 		try {
-			result = await completeTurn({ choreId: id });
+			result = await completeTurn({ choreId: id, doneBy });
 		} catch (e) {
 			// The turn may have moved on (another device); show what's true now.
 			await invalidateAll();
 			throw new Error(messageOf(e, 'Could not complete this turn. Try again.'));
 		}
 		// A completion id means the points are in the ledger; the done screen reads them.
-		await (result.completionId
+		await (result.completionId && celebrates(doneBy)
 			? goto(completionHref(id, result.completionId))
 			: invalidateAll());
 	}
 
-	async function oncompletestage(stageId: string) {
+	async function oncompletestage(stageId: string, doneBy?: string) {
 		let result: Awaited<ReturnType<typeof completeStage>>;
 		try {
-			result = await completeStage({ choreId: id, stageId });
+			result = await completeStage({ choreId: id, stageId, doneBy });
 		} catch (e) {
 			await invalidateAll();
 			throw new Error(messageOf(e, 'Could not save this stage. Try again.'));
 		}
-		if (result.choreCompleted && result.completionId) {
+		if (result.choreCompleted && result.completionId && celebrates(doneBy)) {
 			await goto(completionHref(id, result.completionId));
 		} else await invalidateAll();
 	}
@@ -55,10 +60,19 @@
 
 {#if data.rotation}
 	<PageHeader label="Rotation Loop" actions={data.canEdit ? editAction : undefined} />
-	<RotationChoreDetail detail={data.rotation} {oncomplete} {oncompletestage} />
+	<RotationChoreDetail
+		detail={data.rotation}
+		doerOptions={data.doerOptions}
+		{oncomplete}
+		{oncompletestage}
+	/>
 {:else if data.personal}
 	<PageHeader label="Personal Chore" actions={data.canEdit ? editAction : undefined} />
-	<PersonalChoreDetail detail={data.personal} onstagedone={() => invalidateAll()} />
+	<PersonalChoreDetail
+		detail={data.personal}
+		doerOptions={data.doerOptions}
+		onstagedone={() => invalidateAll()}
+	/>
 {/if}
 
 {#if data.canEdit}

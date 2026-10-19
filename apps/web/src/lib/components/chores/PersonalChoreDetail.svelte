@@ -1,7 +1,9 @@
 <script lang="ts">
+	import type { MemberOption } from '#lib/chore-creator.js';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import StickyActionBar from '#lib/components/shell/StickyActionBar.svelte';
 	import Callout from '#lib/components/ui/Callout.svelte';
+	import DoneByLabel from '#lib/components/ui/DoneByLabel.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SegmentedStageProgress from '#lib/components/ui/SegmentedStageProgress.svelte';
 	import StageStep from '#lib/components/ui/StageStep.svelte';
@@ -18,14 +20,27 @@
 		waitingText,
 	} from '#lib/personal-detail.js';
 	import { completePersonalChore } from '#lib/personal-detail.remote.js';
+	import DoneBySelect from './DoneBySelect.svelte';
+	import FavourBanner from './FavourBanner.svelte';
 
 	interface Props {
 		detail: PersonalDetail;
 		/** Called after a stage (not the last one) was saved, so the page can reload its data. */
 		onstagedone?: () => void | Promise<void>;
+		/**
+		 * Household members a parent in their own view can name as the doer
+		 * (SB-75). Leave out for everyone else.
+		 */
+		doerOptions?: MemberOption[];
 	}
 
-	let { detail, onstagedone }: Props = $props();
+	let { detail, onstagedone, doerOptions }: Props = $props();
+
+	const canAct = $derived(detail.canComplete || detail.canCompleteForAssignee);
+	const recording = $derived(Boolean(doerOptions?.length) && canAct);
+	// Starts on the assignee, so recording a chore as it stands credits them.
+	let chosenDoer = $state<string | null>(null);
+	const doneBy = $derived(chosenDoer ?? detail.assigneeId ?? '');
 
 	const staged = $derived(detail.stages.length > 0);
 	const currentStage = $derived(detail.stages.find((s) => s.state === 'current'));
@@ -75,16 +90,23 @@
 		</ul>
 	{/if}
 
-	{#if detail.canComplete}
+	{#if detail.canCompleteForAssignee && detail.assigneeName}
+		<FavourBanner ownerName={detail.assigneeName} {recording} />
+	{/if}
+
+	{#if canAct}
 		<Callout tone="info" title="What happens next">{nextText(detail)}</Callout>
 	{:else}
 		<Callout tone={detail.completedThisPeriod ? 'success' : 'info'} title={detail.completedThisPeriod ? 'Chore complete' : 'Read only'}>
 			{waitingText(detail)}
+			{#if detail.completedThisPeriod && detail.doneBy}
+				<DoneByLabel name={detail.doneBy.name} class="mt-8 flex" />
+			{/if}
 		</Callout>
 	{/if}
 </div>
 
-{#if detail.canComplete}
+{#if canAct}
 	<StickyActionBar>
 		{#snippet summary()}{rewardSummary(detail)}{/snippet}
 		<!-- A plain form post: it works without JavaScript, and `enhance` makes it
@@ -99,6 +121,13 @@
 			<input {...form.fields.choreId.as('hidden', detail.choreId)} />
 			{#if currentStage}
 				<input {...form.fields.stageId.as('hidden', currentStage.id)} />
+			{/if}
+			{#if recording && doerOptions}
+				<DoneBySelect
+					{...form.fields.doneBy.as('select')}
+					members={doerOptions}
+					bind:value={() => doneBy, (v) => (chosenDoer = v)}
+				/>
 			{/if}
 			<FormAlert issues={form.fields.issues()} />
 			<PrimaryButton type="submit" pending={form.pending > 0}>{ctaLabel(detail)}</PrimaryButton>
