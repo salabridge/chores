@@ -177,7 +177,7 @@ export const pendingFavourRow: ChoreStatusRow = {
 	instanceId: 'i-trash',
 	completionId: null,
 	title: 'Take Out Trash',
-	context: "Leo's personal chore • due today",
+	context: "Leo's personal chore â€¢ due today",
 	assignee: { memberId: 'leo', name: 'Leo' },
 	doneBy: null,
 	pendingFavour: {
