@@ -30,7 +30,7 @@ import { backendRole, isHouseholdMember } from './rls.ts';
  *
  * Nothing writes this table directly. Completing and reopening go through
  * `app.complete_chore_stage`, `app.complete_chore_instance` and
- * `app.reopen_chore_completion` (custom migration 0011), which check who may
+ * `app.reopen_chore_completion` (custom migrations 0011 and 0022), which check who may
  * act and write the completion and its ledger row in one transaction. See
  * "Completions and points" in ../README.md.
  */
@@ -45,12 +45,25 @@ export const choreCompletions = pgTable(
 		instanceId: uuid('instance_id').notNull(),
 		/**
 		 * Whose chore it was: the instance's assignee (the turn-holder for a
-		 * rotation). Points go to this member, even when a parent tapped the
-		 * button for a managed kid. NULL only if that member was later removed.
+		 * rotation). Their streak counts the period as done, whoever did it.
+		 * NULL only if that member was later removed.
 		 */
 		memberId: uuid('member_id').references(() => householdMembers.id, {
 			onDelete: 'set null',
 		}),
+		/**
+		 * Who actually did it, when that wasn't the assignee (SB-74: Mia takes
+		 * out Leo's trash as a favour). NULL means the assignee did it. The
+		 * points go to this member when it's set (the completion's ledger row is
+		 * theirs), but the streak stays with `member_id`. Written only by the
+		 * completion functions, which check the doer is in the same household.
+		 * NULL too if the doer was later removed; their ledger rows go with
+		 * them.
+		 */
+		doneByMemberId: uuid('done_by_member_id').references(
+			() => householdMembers.id,
+			{ onDelete: 'set null' },
+		),
 		/** Points awarded, copied from `chores.points` so later edits don't rewrite history. */
 		points: integer('points').notNull(),
 		completedAt: timestamp('completed_at', { withTimezone: true })
@@ -89,6 +102,11 @@ export const choreCompletions = pgTable(
 			t.memberId,
 			t.completedAt,
 		),
+		// "Chores I did for others".
+		index('chore_completions_done_by_member_id_completed_at_idx').on(
+			t.doneByMemberId,
+			t.completedAt,
+		),
 		pgPolicy('chore_completions_select', {
 			for: 'select',
 			to: backendRole,
@@ -116,6 +134,10 @@ export const choreCompletionsRelations = relations(
 		}),
 		member: one(householdMembers, {
 			fields: [choreCompletions.memberId],
+			references: [householdMembers.id],
+		}),
+		doneBy: one(householdMembers, {
+			fields: [choreCompletions.doneByMemberId],
 			references: [householdMembers.id],
 		}),
 	}),

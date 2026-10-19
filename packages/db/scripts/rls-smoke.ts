@@ -45,6 +45,7 @@ import {
 import {
 	acceptHouseholdInvite,
 	advanceRotation,
+	ChoreDoerNotInHouseholdError,
 	ChoreStagesIncompleteError,
 	canActAsMember,
 	completeChore,
@@ -1568,6 +1569,323 @@ try {
 	ok(
 		"weekly progress counts completions net of reversals; a parent sets Carol's goal",
 	);
+
+	// SB-74: doing a chore for someone else. The chore stays the assignee's
+	// (member_id, their streak, their rotation turn), the doer gets the points.
+	// Every favour is reopened at the end, so balances are as they were.
+	console.log('Doing a chore for someone else (SB-74):');
+	const favourChore = (title: string, assignee: string, points = 10) =>
+		authed.withAuth(alice.token, async (tx) => {
+			const [c] = await tx
+				.insert(chores)
+				.values({
+					householdId: household.id,
+					title,
+					points,
+					assignedMemberId: assignee,
+				})
+				.returning();
+			return c;
+		});
+	const completionRow = (completionId: string) =>
+		admin
+			.select()
+			.from(choreCompletions)
+			.where(eq(choreCompletions.id, completionId))
+			.then(([row]) => row);
+	const completionLedger = (completionId: string) =>
+		admin
+			.select()
+			.from(pointsLedger)
+			.where(eq(pointsLedger.completionId, completionId));
+	const carolBeforeFavours = await balance(carolMemberId);
+	const miaBeforeFavours = await balance(mia.id);
+
+	// Carol (a kid with her own login) takes out Mia's trash.
+	const miaTrash = await favourChore("Take out Mia's trash", mia.id);
+	const miaTrashInstance = await startInstance(bob.token, miaTrash.id, mia.id);
+	await expectRejected(
+		"Carol completing Mia's chore without saying she did it",
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				completeChore(tx, miaTrashInstance.id),
+			),
+		/only a parent or the assignee/,
+	);
+	await expectRejected(
+		'Carol naming Bob as the doer',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				completeChore(tx, miaTrashInstance.id, { doneBy: bobMemberId }),
+			),
+		/only a parent or the member who did it/,
+	);
+	const favour = await authed.withAuth(carol.token, (tx) =>
+		completeChore(tx, miaTrashInstance.id, { doneBy: carolMemberId }),
+	);
+	assert.equal(favour.points, 10);
+	assert.equal(favour.creditedMemberId, carolMemberId);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours + 10);
+	assert.equal(await balance(mia.id), miaBeforeFavours);
+	const favourRow = await completionRow(favour.completionId);
+	assert.equal(favourRow.memberId, mia.id);
+	assert.equal(favourRow.doneByMemberId, carolMemberId);
+	assert.deepEqual(
+		(await completionLedger(favour.completionId)).map((r) => [
+			r.memberId,
+			r.delta,
+			r.reason,
+		]),
+		[[carolMemberId, 10, 'completion']],
+	);
+	ok(
+		"Carol does Mia's chore: +10 pts to Carol, none to Mia; still Mia's chore",
+	);
+
+	const favourAgain = await authed.withAuth(carol.token, (tx) =>
+		completeChore(tx, miaTrashInstance.id, { doneBy: carolMemberId }),
+	);
+	assert.equal(favourAgain.alreadyCompleted, true);
+	assert.equal(favourAgain.points, 0);
+	assert.equal(favourAgain.creditedMemberId, carolMemberId);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours + 10);
+	ok('repeating the favour awards nothing again');
+
+	assert.equal(
+		await authed.withAuth(bob.token, (tx) =>
+			reopenCompletion(tx, favour.completionId),
+		),
+		true,
+	);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours);
+	assert.equal(await balance(mia.id), miaBeforeFavours);
+	assert.deepEqual(
+		(await completionLedger(favour.completionId))
+			.map((r) => [r.memberId, r.delta] as const)
+			.sort((a, b) => a[1] - b[1]),
+		[
+			[carolMemberId, -10],
+			[carolMemberId, 10],
+		],
+	);
+	ok('reopening the favour takes the points back from Carol, not Mia');
+
+	// A parent records who did it: Mia (managed kid) did Carol's chore.
+	const carolDishes = await favourChore("Carol's dishes", carolMemberId, 5);
+	const carolDishesInstance = await startInstance(
+		carol.token,
+		carolDishes.id,
+		carolMemberId,
+	);
+	await expectRejected(
+		'Carol saying Mia did her chore',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				completeChore(tx, carolDishesInstance.id, { doneBy: mia.id }),
+			),
+		/only a parent or the member who did it/,
+	);
+	const recorded = await authed.withAuth(bob.token, (tx) =>
+		completeChore(tx, carolDishesInstance.id, { doneBy: mia.id }),
+	);
+	assert.equal(recorded.creditedMemberId, mia.id);
+	assert.equal(await balance(mia.id), miaBeforeFavours + 5);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours);
+	assert.equal(
+		(await completionRow(recorded.completionId)).doneByMemberId,
+		mia.id,
+	);
+	ok("Bob (parent) records that Mia did Carol's chore: +5 pts to Mia");
+	await authed.withAuth(bob.token, (tx) =>
+		reopenCompletion(tx, recorded.completionId),
+	);
+	assert.equal(await balance(mia.id), miaBeforeFavours);
+	ok('reopening it takes the points back from Mia');
+
+	// Naming the assignee as the doer is the same as not naming anyone.
+	const selfNamed = await authed.withAuth(carol.token, (tx) =>
+		completeChore(tx, carolDishesInstance.id, { doneBy: carolMemberId }),
+	);
+	assert.equal(selfNamed.creditedMemberId, carolMemberId);
+	assert.equal(
+		(await completionRow(selfNamed.completionId)).doneByMemberId,
+		null,
+	);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours + 5);
+	await authed.withAuth(bob.token, (tx) =>
+		reopenCompletion(tx, selfNamed.completionId),
+	);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours);
+	ok('naming yourself as the doer of your own chore stores no doer');
+
+	// A rotation turn done as a favour: Carol does Mia's turn. Carol can't act
+	// as Mia, so this also checks the turn still advances.
+	const dog = await authed.withAuth(alice.token, async (tx) => {
+		const [c] = await tx
+			.insert(chores)
+			.values({
+				householdId: household.id,
+				title: 'Walk the dog',
+				type: 'rotation',
+			})
+			.returning();
+		await tx.insert(choreRotations).values({
+			choreId: c.id,
+			householdId: household.id,
+			currentMemberId: mia.id,
+		});
+		await tx
+			.insert(choreRotationMembers)
+			.values([
+				slot(c.id, mia.id, 1),
+				slot(c.id, carolMemberId, 2),
+				slot(c.id, bobMemberId, 3),
+			]);
+		return c;
+	});
+	const dogInstance = await startInstance(bob.token, dog.id, mia.id);
+	const dogDone = await authed.withAuth(carol.token, (tx) =>
+		completeChore(tx, dogInstance.id, { doneBy: carolMemberId }),
+	);
+	assert.equal(dogDone.creditedMemberId, carolMemberId);
+	assert.equal(dogDone.nextMemberId, carolMemberId);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours + 10);
+	assert.equal(await balance(mia.id), miaBeforeFavours);
+	const dogTurns = await authed.withAuth(alice.token, (tx) =>
+		getRotationTurns(tx, dog.id),
+	);
+	assert.equal(dogTurns?.doneLast?.memberId, mia.id);
+	assert.equal(dogTurns?.activeTurn?.memberId, carolMemberId);
+	await authed.withAuth(bob.token, (tx) =>
+		reopenCompletion(tx, dogDone.completionId),
+	);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours);
+	ok(
+		"Carol does Mia's rotation turn: Carol gets the points, Mia's turn is used up",
+	);
+
+	// Stages done as a favour are recorded for the doer.
+	const miaRoom = await authed.withAuth(alice.token, async (tx) => {
+		const [c] = await tx
+			.insert(chores)
+			.values({
+				householdId: household.id,
+				title: "Tidy Mia's room",
+				points: 15,
+				assignedMemberId: mia.id,
+			})
+			.returning();
+		const stages = await tx
+			.insert(choreStages)
+			.values([
+				{
+					householdId: household.id,
+					choreId: c.id,
+					position: 1,
+					title: 'Toys',
+				},
+				{
+					householdId: household.id,
+					choreId: c.id,
+					position: 2,
+					title: 'Bed',
+				},
+			])
+			.returning();
+		return { chore: c, stages };
+	});
+	const [roomStageOne, roomStageTwo] = miaRoom.stages;
+	const roomInstance = await startInstance(bob.token, miaRoom.chore.id, mia.id);
+	await expectRejected(
+		"Carol checking a stage of Mia's chore as Mia",
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				completeChoreStage(tx, roomInstance.id, roomStageOne.id),
+			),
+		/only a parent or the assignee/,
+	);
+	const roomFirst = await authed.withAuth(carol.token, (tx) =>
+		completeChoreStage(tx, roomInstance.id, roomStageOne.id, {
+			doneBy: carolMemberId,
+		}),
+	);
+	assert.equal(roomFirst.choreCompleted, false);
+	const roomLast = await authed.withAuth(carol.token, (tx) =>
+		completeChoreStage(tx, roomInstance.id, roomStageTwo.id, {
+			doneBy: carolMemberId,
+		}),
+	);
+	assert.ok(roomLast.choreCompleted);
+	assert.equal(roomLast.creditedMemberId, carolMemberId);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours + 15);
+	const roomProgress = await admin
+		.select()
+		.from(choreStageProgress)
+		.where(eq(choreStageProgress.instanceId, roomInstance.id));
+	assert.deepEqual(
+		roomProgress.map((r) => r.completedByMemberId),
+		[carolMemberId, carolMemberId],
+	);
+	await authed.withAuth(bob.token, (tx) =>
+		reopenCompletion(tx, roomLast.completionId),
+	);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours);
+	ok("Carol checks off Mia's stages: recorded as Carol's, +15 to Carol");
+
+	// Nobody from another household can be named as the doer.
+	const [daveHouse] = await admin
+		.insert(households)
+		.values({
+			name: 'Smoke test Dave house',
+			createdBy: dave.id,
+			setupCompletedAt: new Date(),
+		})
+		.returning();
+	const [daveMember] = await admin
+		.select()
+		.from(householdMembers)
+		.where(
+			and(
+				eq(householdMembers.householdId, daveHouse.id),
+				eq(householdMembers.userId, dave.id),
+			),
+		);
+	assert.ok(daveMember, "Dave's own household made him its owner");
+	await assert.rejects(
+		authed.withAuth(bob.token, (tx) =>
+			completeChore(tx, miaTrashInstance.id, { doneBy: daveMember.id }),
+		),
+		ChoreDoerNotInHouseholdError,
+	);
+	await expectRejected(
+		"Carol naming Dave (another household's member) as the doer",
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				completeChore(tx, miaTrashInstance.id, { doneBy: daveMember.id }),
+			),
+		/not in this household/,
+	);
+	await expectRejected(
+		'Dave completing our chore as himself',
+		() =>
+			authed.withAuth(dave.token, (tx) =>
+				completeChore(tx, miaTrashInstance.id, { doneBy: daveMember.id }),
+			),
+		/no chore instance/,
+	);
+	await expectRejected(
+		'Dave checking our stage as himself',
+		() =>
+			authed.withAuth(dave.token, (tx) =>
+				completeChoreStage(tx, roomInstance.id, roomStageTwo.id, {
+					doneBy: daveMember.id,
+				}),
+			),
+		/no chore instance/,
+	);
+	await admin.delete(households).where(eq(households.id, daveHouse.id));
+	assert.equal(await balance(mia.id), miaBeforeFavours);
+	ok('a member of another household is refused as the doer (parent or kid)');
 
 	const daveLedger = await authed.withAuth(dave.token, async (tx) => ({
 		completions: await tx.select().from(choreCompletions),

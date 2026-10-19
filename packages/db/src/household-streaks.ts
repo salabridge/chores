@@ -105,6 +105,7 @@ export async function householdStreaks(
 				.select({
 					instanceId: choreCompletions.instanceId,
 					completedAt: choreCompletions.completedAt,
+					doneByMemberId: choreCompletions.doneByMemberId,
 				})
 				.from(choreCompletions)
 				.where(

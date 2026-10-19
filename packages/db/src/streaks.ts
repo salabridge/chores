@@ -18,6 +18,12 @@ export interface DueChore {
 	date: string;
 	/** `skipped` (a parent's Skip) doesn't count against the member. */
 	outcome: 'done' | 'missed' | 'skipped';
+	/**
+	 * For a `done` chore that someone else did as a favour (SB-74): who did it.
+	 * The day still counts for `memberId`, whose chore it was; the doer gets
+	 * the points but no streak credit. Absent when the assignee did it.
+	 */
+	doneByMemberId?: string;
 }
 
 /** A parent excusing a member for a whole day. */
@@ -223,6 +229,8 @@ export interface StreakInstance {
 export interface StreakCompletion {
 	instanceId: string;
 	completedAt: Date;
+	/** `chore_completions.done_by_member_id`: who did it, when not the assignee. */
+	doneByMemberId?: string | null;
 }
 
 /**
@@ -238,6 +246,8 @@ export interface StreakCompletion {
  *   instance has no known turn-holder, so it's left out.
  * - An archived chore counts for periods due before its archive date, and
  *   on that date only if it was done; later periods are left out.
+ * - A chore someone else did for the assignee (SB-74) is still done for the
+ *   assignee; the doer is reported as `doneByMemberId` and gets no credit.
  * - Weekly chores are due on the period's Sunday, so they appear once that
  *   day arrives; weekends chores only on Saturdays and Sundays.
  */
@@ -254,10 +264,16 @@ export function resolveDueChores(input: {
 	const instanceByPeriod = new Map(
 		input.instances.map((i) => [`${i.choreId}|${i.periodStart}`, i]),
 	);
-	const completedDates = new Map<string, string[]>();
+	const completedDates = new Map<
+		string,
+		{ date: string; doneBy: string | null }[]
+	>();
 	for (const c of input.completions) {
 		const dates = completedDates.get(c.instanceId) ?? [];
-		dates.push(localDate(timeZone, c.completedAt));
+		dates.push({
+			date: localDate(timeZone, c.completedAt),
+			doneBy: c.doneByMemberId ?? null,
+		});
 		completedDates.set(c.instanceId, dates);
 	}
 	const out: DueChore[] = [];
@@ -279,18 +295,23 @@ export function resolveDueChores(input: {
 				: chore.assignedMemberId;
 			if (!memberId) continue;
 			let outcome: DueChore['outcome'] = 'missed';
+			let doneBy: string | null = null;
+			const onTime = (completedDates.get(instance?.id ?? '') ?? []).find(
+				(d) => d.date >= start && d.date <= due,
+			);
 			if (input.skippedPeriods?.has(skipKey(chore.id, start))) {
 				outcome = 'skipped';
-			} else if (
-				(completedDates.get(instance?.id ?? '') ?? []).some(
-					(d) => d >= start && d <= due,
-				)
-			) {
+			} else if (onTime) {
 				outcome = 'done';
+				doneBy = onTime.doneBy;
 			}
 			// Archived that very day: keep what was done, drop what wasn't.
 			if (due === archivedDate && outcome !== 'done') continue;
-			out.push({ memberId, date: due, outcome });
+			out.push(
+				doneBy && doneBy !== memberId
+					? { memberId, date: due, outcome, doneByMemberId: doneBy }
+					: { memberId, date: due, outcome },
+			);
 		}
 	}
 	return out;
