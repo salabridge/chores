@@ -38,12 +38,12 @@ export const DEFAULT_WEEKLY_GOAL = 200;
 export const MAX_WEEKLY_GOAL = 10_000;
 export const MAX_KIDS = 12;
 
-/** Avatar colours are the `MemberAvatar` tones. */
-export const AVATAR_COLORS = ['orange', 'blue', 'green', 'amber'] as const;
-export type AvatarColor = (typeof AVATAR_COLORS)[number];
+import { isAvatarColor, normalizeAvatarColor } from './avatar-color.ts';
 
-export const isAvatarColor = (value: unknown): value is AvatarColor =>
-	(AVATAR_COLORS as readonly string[]).includes(String(value));
+export { AVATAR_PRESETS as AVATAR_COLORS } from './avatar-color.ts';
+export { isAvatarColor };
+/** A preset key or a custom `#rrggbb`. */
+export type AvatarColor = string;
 
 /** What the database knows about a user's setup, boiled down to one row each. */
 export interface SetupMembership {
@@ -193,6 +193,28 @@ function parseInitial(raw: unknown): Parsed<string | null> {
 	return { ok: true, value: initial };
 }
 
+export interface AvatarInput {
+	avatarColor: AvatarColor;
+	avatarInitial: string | null;
+}
+
+/** An avatar colour (preset or hex, stored lower-case) and an optional initial. */
+export function parseAvatarInput(data: {
+	avatarColor?: unknown;
+	avatarInitial?: unknown;
+}): Parsed<AvatarInput> {
+	if (!isAvatarColor(data.avatarColor)) return fail('Choose an avatar colour.');
+	const initial = parseInitial(data.avatarInitial);
+	if (!initial.ok) return initial;
+	return {
+		ok: true,
+		value: {
+			avatarColor: normalizeAvatarColor(data.avatarColor),
+			avatarInitial: initial.value,
+		},
+	};
+}
+
 export function parseParentInput(data: {
 	displayName?: unknown;
 	avatarColor?: unknown;
@@ -200,16 +222,11 @@ export function parseParentInput(data: {
 }): Parsed<ParentInput> {
 	const name = parseName(data.displayName, 'your name', MAX_DISPLAY_NAME);
 	if (!name.ok) return name;
-	if (!isAvatarColor(data.avatarColor)) return fail('Choose an avatar colour.');
-	const initial = parseInitial(data.avatarInitial);
-	if (!initial.ok) return initial;
+	const avatar = parseAvatarInput(data);
+	if (!avatar.ok) return avatar;
 	return {
 		ok: true,
-		value: {
-			displayName: name.value,
-			avatarColor: data.avatarColor,
-			avatarInitial: initial.value,
-		},
+		value: { displayName: name.value, ...avatar.value },
 	};
 }
 

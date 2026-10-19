@@ -49,4 +49,26 @@ describe('MemberAvatar.svelte', () => {
 			false,
 		);
 	});
+
+	it('styles a custom hex tone inline and lower-cases it', async () => {
+		render(MemberAvatar, { name: 'Mia', tone: '#A1B2C3' });
+		const el = page.getByRole('img', { name: 'Mia' }).element() as HTMLElement;
+		expect(el.style.borderColor).not.toBe('');
+		expect(el.getAttribute('style')).toContain('color-mix');
+		expect(el.getAttribute('style')).toContain('#a1b2c3');
+	});
+
+	it('uses token classes, not inline style, for a preset tone', async () => {
+		render(MemberAvatar, { name: 'Mia', tone: 'red' });
+		const el = page.getByRole('img', { name: 'Mia' }).element() as HTMLElement;
+		expect(el.className).toContain('border-border-red');
+		expect(el.hasAttribute('style')).toBe(false);
+	});
+
+	it('falls back to orange for an unknown legacy tone', async () => {
+		render(MemberAvatar, { name: 'Mia', tone: 'chartreuse' });
+		const el = page.getByRole('img', { name: 'Mia' }).element() as HTMLElement;
+		expect(el.className).toContain('border-border-orange');
+		expect(el.hasAttribute('style')).toBe(false);
+	});
 });

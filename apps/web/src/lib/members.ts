@@ -7,9 +7,25 @@ export interface HouseholdMember {
 	displayName: string;
 	role: HouseholdRole;
 	avatarColor: string | null;
+	avatarInitial: string | null;
 	birthYear: number | null;
 	/** A kid profile with no login, run by a parent on the household's devices. */
 	managed: boolean;
+}
+
+/**
+ * Whether `actor` (a parent) may change `target`'s avatar. Mirrors the
+ * `household_members_update` policy: owners can change anyone's, a parent
+ * only their own and kids'. Kids never can.
+ */
+export function canEditMemberAvatar(
+	actor: { id: string; role: HouseholdRole },
+	target: { id: string; role: HouseholdRole },
+): boolean {
+	if (actor.role === 'owner') return true;
+	if (actor.role === 'parent')
+		return target.role === 'kid' || target.id === actor.id;
+	return false;
 }
 
 /** How a member is described under their name ("Owner", "Managed kid"). */

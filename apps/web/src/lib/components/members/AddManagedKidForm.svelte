@@ -1,11 +1,10 @@
 <script lang="ts">
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
-	import ChoiceChips from '#lib/components/ui/ChoiceChips.svelte';
+	import AvatarColorPicker from '#lib/components/ui/AvatarColorPicker.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
 	import { addManagedKidMember } from '#lib/members.remote.js';
 	import {
-		AVATAR_COLORS,
 		BIRTH_YEAR_PATTERN,
 		DEFAULT_WEEKLY_GOAL,
 		MAX_DISPLAY_NAME,
@@ -23,13 +22,9 @@
 	} = $props();
 
 	const DEFAULT_COLOR = 'blue';
-	let color = $state<string | number>(DEFAULT_COLOR);
+	let color = $state(DEFAULT_COLOR);
 	/** The name of the kid just added, for the confirmation. */
 	let added = $state<string | null>(null);
-	const options = AVATAR_COLORS.map((value) => ({
-		value,
-		label: value.charAt(0).toUpperCase() + value.slice(1),
-	}));
 </script>
 
 {#if kidCount >= MAX_KIDS}
@@ -88,12 +83,7 @@
 			<span class="text-[14px] font-semibold text-text-secondary">
 				Avatar colour
 			</span>
-			<ChoiceChips
-				label="Avatar colour"
-				name="avatarColor"
-				{options}
-				bind:value={color}
-			/>
+			<AvatarColorPicker name="avatarColor" bind:value={color} />
 		</div>
 		<p class="text-[13px] text-text-secondary">
 			A managed kid has no login. You switch into their profile on this

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	currentStep,
+	parseAvatarInput,
 	parseHouseholdInput,
 	parseKidInput,
 	parseParentInput,
@@ -142,8 +143,37 @@ describe('parseParentInput', () => {
 			parseParentInput({ displayName: 'x'.repeat(51), avatarColor: 'blue' }).ok,
 		).toBe(false);
 		expect(
-			parseParentInput({ displayName: 'Mom', avatarColor: 'pink' }).ok,
+			parseParentInput({ displayName: 'Mom', avatarColor: 'chartreuse' }).ok,
 		).toBe(false);
+	});
+
+	it('accepts a custom hex colour and stores it lower-case', () => {
+		const ok = parseParentInput({ displayName: 'Mom', avatarColor: '#A1B2C3' });
+		expect(ok.ok && ok.value.avatarColor).toBe('#a1b2c3');
+		expect(
+			parseParentInput({ displayName: 'Mom', avatarColor: 'red' }).ok,
+		).toBe(true);
+	});
+
+	it('parseAvatarInput checks colour and initial without needing a name', () => {
+		expect(
+			parseAvatarInput({ avatarColor: '#A1B2C3', avatarInitial: ' mj ' }),
+		).toEqual({
+			ok: true,
+			value: { avatarColor: '#a1b2c3', avatarInitial: 'mj' },
+		});
+		expect(parseAvatarInput({ avatarColor: 'nope' }).ok).toBe(false);
+		expect(
+			parseAvatarInput({ avatarColor: 'red', avatarInitial: 'abc' }).ok,
+		).toBe(false);
+	});
+
+	it('rejects malformed hex colours', () => {
+		for (const avatarColor of ['#abc', '#12345g', 'a1b2c3', '#a1b2c3ff']) {
+			const result = parseParentInput({ displayName: 'Mom', avatarColor });
+			expect(result.ok).toBe(false);
+			expect(!result.ok && result.message).toBe('Choose an avatar colour.');
+		}
 	});
 
 	it('limits the initial to two characters', () => {

@@ -11,5 +11,5 @@ export const load: PageServerLoad = async () => {
 		listHouseholdMembers(actor.householdId),
 		listPendingInvites(actor.householdId),
 	]);
-	return { members, invites, actorRole: actor.role };
+	return { members, invites, actorRole: actor.role, actorId: actor.id };
 };

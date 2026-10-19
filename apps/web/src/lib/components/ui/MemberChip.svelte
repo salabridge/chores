@@ -4,7 +4,7 @@
 
 	interface Props extends Omit<HTMLAttributes<HTMLSpanElement>, 'children'> {
 		name: string;
-		tone?: 'orange' | 'blue' | 'green' | 'amber';
+		tone?: string | null;
 	}
 
 	let { name, tone = 'orange', class: className, ...rest }: Props = $props();

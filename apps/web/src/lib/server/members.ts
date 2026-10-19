@@ -1,7 +1,12 @@
 import { householdMembers } from '@chore/db';
-import { asc, eq } from 'drizzle-orm';
-import { type HouseholdMember, sortMembers } from '../members.ts';
-import { type KidInput, MAX_KIDS } from '../setup.ts';
+import { and, asc, eq } from 'drizzle-orm';
+import {
+	canEditMemberAvatar,
+	type HouseholdMember,
+	type HouseholdRole,
+	sortMembers,
+} from '../members.ts';
+import { type AvatarInput, type KidInput, MAX_KIDS } from '../setup.ts';
 import { db } from './drizzle.ts';
 import { insertManagedKid } from './kids.ts';
 
@@ -29,6 +34,7 @@ export async function listHouseholdMembers(
 			displayName: householdMembers.displayName,
 			role: householdMembers.role,
 			avatarColor: householdMembers.avatarColor,
+			avatarInitial: householdMembers.avatarInitial,
 			birthYear: householdMembers.birthYear,
 			userId: householdMembers.userId,
 		})
@@ -54,4 +60,42 @@ export async function addManagedKid(
 	if (!(await insertManagedKid(householdId, input, 'after-setup'))) {
 		throw new MemberError(`A household can have up to ${MAX_KIDS} kids.`);
 	}
+}
+
+/**
+ * Changes a member's avatar colour and initial. `actor` is the signed-in
+ * parent; the target is looked up inside the actor's household, then checked
+ * with the same rule as the `household_members_update` policy, because this
+ * connection bypasses RLS.
+ */
+export async function updateMemberAvatar(
+	actor: { id: string; householdId: string; role: HouseholdRole },
+	memberId: string,
+	input: AvatarInput,
+): Promise<void> {
+	const [target] = await db
+		.select({ id: householdMembers.id, role: householdMembers.role })
+		.from(householdMembers)
+		.where(
+			and(
+				eq(householdMembers.id, memberId),
+				eq(householdMembers.householdId, actor.householdId),
+			),
+		);
+	if (!target) throw new MemberError('That member was not found.');
+	if (!canEditMemberAvatar(actor, target)) {
+		throw new MemberError("You can't change that member's avatar.");
+	}
+	await db
+		.update(householdMembers)
+		.set({
+			avatarColor: input.avatarColor,
+			avatarInitial: input.avatarInitial,
+		})
+		.where(
+			and(
+				eq(householdMembers.id, memberId),
+				eq(householdMembers.householdId, actor.householdId),
+			),
+		);
 }

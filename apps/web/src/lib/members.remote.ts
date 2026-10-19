@@ -7,13 +7,17 @@ import {
 	resendInvite,
 	revokeInvite,
 } from '#lib/server/invites.js';
-import { addManagedKid, MemberError } from '#lib/server/members.js';
+import {
+	addManagedKid,
+	MemberError,
+	updateMemberAvatar as saveMemberAvatar,
+} from '#lib/server/members.js';
 import { resetProfileCache } from '#lib/server/profiles.js';
 import { APP_ORIGIN } from '$app/env/private';
 import { form, getRequestEvent } from '$app/server';
 import { inviteLink, parseInviteInput } from './invites.ts';
 import { isUuid } from './rewards.ts';
-import { parseKidInput } from './setup.ts';
+import { parseAvatarInput, parseKidInput } from './setup.ts';
 
 // Remote functions for the parent portal's Members screen (SB-66). Each one
 // is parent-only and takes the household from the caller's own profile,
@@ -68,6 +72,23 @@ export const addManagedKidMember = form(
 		await write(() => addManagedKid(actor.householdId, parsed.value));
 		resetProfileCache();
 		return { saved: true };
+	},
+);
+
+/**
+ * Changes a member's avatar colour and initial. Owners can change anyone's, a
+ * parent their own and kids'; `updateMemberAvatar` enforces that.
+ */
+export const updateMemberAvatar = form(
+	'unchecked',
+	async (data: { id: string; avatarColor: string; avatarInitial?: string }) => {
+		const { actor } = await requireParentProfile();
+		if (!isUuid(data.id)) invalid('That member was not found.');
+		const parsed = parseAvatarInput(data);
+		if (!parsed.ok) invalid(parsed.message);
+		await write(() => saveMemberAvatar(actor, data.id, parsed.value));
+		resetProfileCache();
+		return { saved: true, id: data.id };
 	},
 );
 
