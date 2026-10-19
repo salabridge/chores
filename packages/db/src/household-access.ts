@@ -81,3 +81,26 @@ export async function acceptHouseholdInvite(
 	if (!id) throw new Error('accept_household_invite returned no member id');
 	return id;
 }
+
+/**
+ * Accepts a household invite by moving the signed-in user's own household into
+ * the invite's (`app.merge_household_via_invite`, SB-76) and returns their new
+ * `household_members.id`. `householdId` is the household they agreed to give
+ * up; they must be one of its owners. Every member moves (nobody above the
+ * invite's role) with their points balance, and the old household is deleted
+ * with its chores, rewards and history. Refusals carry a stable HINT: those of
+ * `acceptHouseholdInvite`, plus `not-owner`, `same-household` and
+ * `household-full` for the combined kid count.
+ */
+export async function mergeHouseholdViaInvite(
+	tx: AuthenticatedTx,
+	token: string,
+	householdId: string,
+): Promise<string> {
+	const { rows } = await tx.execute<{ id: string }>(
+		sql`select app.merge_household_via_invite(${token}, ${householdId}::uuid) as id`,
+	);
+	const id = rows[0]?.id;
+	if (!id) throw new Error('merge_household_via_invite returned no member id');
+	return id;
+}
