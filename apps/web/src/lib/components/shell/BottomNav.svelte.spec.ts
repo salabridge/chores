@@ -14,6 +14,20 @@ describe('BottomNav.svelte', () => {
 			.toHaveAttribute('href', '/streak');
 	});
 
+	it('adds Overview and Account only for a parent', async () => {
+		const view = render(BottomNav, { pathname: '/today' });
+		await expect
+			.element(page.getByRole('link', { name: 'Account' }))
+			.not.toBeInTheDocument();
+		await view.rerender({ pathname: '/today', parent: true });
+		await expect
+			.element(page.getByRole('link', { name: 'Overview' }))
+			.toHaveAttribute('href', '/overview');
+		await expect
+			.element(page.getByRole('link', { name: 'Account' }))
+			.toHaveAttribute('href', '/account');
+	});
+
 	it('marks only the current tab with aria-current="page"', async () => {
 		render(BottomNav, { pathname: '/rewards' });
 		await expect

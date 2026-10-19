@@ -19,6 +19,8 @@
 
 <Story name="Rotation Builder active" args={{ pathname: '/rotations' }} />
 
+<Story name="Account active" args={{ pathname: '/account' }} />
+
 <Story name="Single parent" args={{ parentNames: ['Sam'] }} />
 
 <Story name="Favours waiting" args={{ pendingFavours: 3 }} />

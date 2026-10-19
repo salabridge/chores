@@ -37,6 +37,7 @@
 			class="sticky top-0 z-20 hidden lg:grid"
 			pathname={page.url.pathname}
 			member={data.shellMember}
+			parent={data.isParent}
 		/>
 	{/if}
 	<main
@@ -48,6 +49,10 @@
 		{@render children()}
 	</main>
 	{#if showNav}
-		<BottomNav class="lg:hidden" pathname={page.url.pathname} />
+		<BottomNav
+			class="lg:hidden"
+			pathname={page.url.pathname}
+			parent={data.isParent}
+		/>
 	{/if}
 </div>

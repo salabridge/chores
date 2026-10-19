@@ -29,6 +29,10 @@
 
 <Story name="No household" args={{ member: null }} />
 
+<Story name="Parent" args={{ parent: true }} />
+
+<Story name="Parent on Overview" args={{ pathname: '/overview', parent: true }} />
+
 <Story
 	name="Visual test"
 	tags={['visual-test', '!autodocs']}

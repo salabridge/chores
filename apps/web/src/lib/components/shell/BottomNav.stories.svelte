@@ -27,6 +27,10 @@
 
 <Story name="No active tab" args={{ pathname: '/settings' }} />
 
+<Story name="Parent" args={{ parent: true }} />
+
+<Story name="Parent on Account" args={{ pathname: '/account', parent: true }} />
+
 <Story
 	name="Visual test"
 	tags={['visual-test', '!autodocs']}

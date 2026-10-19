@@ -27,12 +27,22 @@
 		{ href: '/members', label: 'Members', icon: 'users' },
 	] as const;
 
+	// Outside the portal: the parent's own Today screen and their account.
+	const personalItems = [
+		{ href: '/today', label: 'My Today', icon: 'home' },
+		{ href: '/account', label: 'Account', icon: 'user' },
+	] as const;
+
 	// `/chores/new` has its own item, so it must not light up Chores too.
 	const isActive = (href: string) =>
 		href === '/chores'
 			? pathname === href ||
 				(pathname.startsWith(`${href}/`) && !pathname.startsWith('/chores/new'))
 			: pathname === href || pathname.startsWith(`${href}/`);
+
+	type NavItem =
+		| (typeof items)[number]
+		| (typeof personalItems)[number];
 
 	const label = $derived(parentLabel(parentNames));
 
@@ -44,6 +54,74 @@
 		open = false;
 	});
 </script>
+
+{#snippet navItem(item: NavItem)}
+	{@const active = isActive(item.href)}
+	<li>
+		<a
+			href={item.href}
+			aria-current={active ? 'page' : undefined}
+			class={[
+				'flex items-center gap-12 rounded-[12px] px-12 py-10 text-[14px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-orange',
+				active
+					? 'bg-surface-accent-orange-subtle font-semibold text-text-orange'
+					: 'font-medium text-text-secondary hover:bg-background-base',
+			]}
+		>
+			<svg
+				width="18"
+				height="18"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				{#if item.icon === 'grid'}
+					<rect width="7" height="7" x="3" y="3" rx="1" />
+					<rect width="7" height="7" x="14" y="3" rx="1" />
+					<rect width="7" height="7" x="14" y="14" rx="1" />
+					<rect width="7" height="7" x="3" y="14" rx="1" />
+				{:else if item.icon === 'plus'}
+					<circle cx="12" cy="12" r="10" />
+					<path d="M8 12h8M12 8v8" />
+				{:else if item.icon === 'list'}
+					<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+				{:else if item.icon === 'gift'}
+					<rect width="18" height="4" x="3" y="8" rx="1" />
+					<path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+					<path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
+				{:else if item.icon === 'users'}
+					<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+					<circle cx="9" cy="7" r="4" />
+					<path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+				{:else if item.icon === 'home'}
+					<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />
+				{:else if item.icon === 'user'}
+					<circle cx="12" cy="8" r="4" />
+					<path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
+				{:else}
+					<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+					<path d="M21 3v5h-5" />
+					<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+					<path d="M8 16H3v5" />
+				{/if}
+			</svg>
+			{item.label}
+			{#if item.href === '/overview' && pendingFavours > 0}
+				<span
+					class="ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-accent-orange px-6 py-2 text-[11px] font-bold text-text-default"
+					data-testid="favours-badge"
+				>
+					<span aria-hidden="true">{navBadgeText(pendingFavours)}</span>
+					<span class="sr-only">{plural(pendingFavours, 'favour')} to approve</span>
+				</span>
+			{/if}
+		</a>
+	</li>
+{/snippet}
 
 <aside
 	class="flex shrink-0 flex-col border-b border-border-subtle bg-surface-default lg:sticky lg:top-0 lg:h-dvh lg:w-[260px] lg:gap-32 lg:overflow-y-auto lg:border-r lg:border-b-0 lg:p-24"
@@ -84,69 +162,15 @@
 			open ? 'flex' : 'hidden',
 		]}
 	>
-		<nav aria-label="Parent portal">
+		<nav aria-label="Parent portal" class="flex flex-col gap-16">
 			<ul class="flex flex-col gap-8">
 				{#each items as item (item.href)}
-					{@const active = isActive(item.href)}
-					<li>
-						<a
-							href={item.href}
-							aria-current={active ? 'page' : undefined}
-							class={[
-								'flex items-center gap-12 rounded-[12px] px-12 py-10 text-[14px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-orange',
-								active
-									? 'bg-surface-accent-orange-subtle font-semibold text-text-orange'
-									: 'font-medium text-text-secondary hover:bg-background-base',
-							]}
-						>
-							<svg
-								width="18"
-								height="18"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
-							>
-								{#if item.icon === 'grid'}
-									<rect width="7" height="7" x="3" y="3" rx="1" />
-									<rect width="7" height="7" x="14" y="3" rx="1" />
-									<rect width="7" height="7" x="14" y="14" rx="1" />
-									<rect width="7" height="7" x="3" y="14" rx="1" />
-								{:else if item.icon === 'plus'}
-									<circle cx="12" cy="12" r="10" />
-									<path d="M8 12h8M12 8v8" />
-								{:else if item.icon === 'list'}
-									<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-								{:else if item.icon === 'gift'}
-									<rect width="18" height="4" x="3" y="8" rx="1" />
-									<path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
-									<path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
-								{:else if item.icon === 'users'}
-									<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-									<circle cx="9" cy="7" r="4" />
-									<path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-								{:else}
-									<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-									<path d="M21 3v5h-5" />
-									<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-									<path d="M8 16H3v5" />
-								{/if}
-							</svg>
-							{item.label}
-							{#if item.href === '/overview' && pendingFavours > 0}
-								<span
-									class="ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-accent-orange px-6 py-2 text-[11px] font-bold text-text-default"
-									data-testid="favours-badge"
-								>
-									<span aria-hidden="true">{navBadgeText(pendingFavours)}</span>
-									<span class="sr-only">{plural(pendingFavours, 'favour')} to approve</span>
-								</span>
-							{/if}
-						</a>
-					</li>
+					{@render navItem(item)}
+				{/each}
+			</ul>
+			<ul class="flex flex-col gap-8 border-t border-border-subtle pt-16">
+				{#each personalItems as item (item.href)}
+					{@render navItem(item)}
 				{/each}
 			</ul>
 		</nav>

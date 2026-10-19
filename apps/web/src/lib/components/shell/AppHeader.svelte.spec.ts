@@ -39,6 +39,21 @@ describe('AppHeader.svelte', () => {
 			.not.toHaveAttribute('aria-current');
 	});
 
+	it('adds Overview and Account only for a parent', async () => {
+		const view = render(AppHeader, { pathname: '/today', member });
+		const nav = page.getByRole('navigation', { name: 'Main' });
+		await expect
+			.element(nav.getByRole('link', { name: 'Overview' }))
+			.not.toBeInTheDocument();
+		await view.rerender({ pathname: '/today', member, parent: true });
+		await expect
+			.element(nav.getByRole('link', { name: 'Overview' }))
+			.toHaveAttribute('href', '/overview');
+		await expect
+			.element(nav.getByRole('link', { name: 'Account' }))
+			.toHaveAttribute('href', '/account');
+	});
+
 	it('shows only the nav without a member', async () => {
 		render(AppHeader, { pathname: '/today' });
 		await expect
