@@ -9,11 +9,19 @@
 		roomDoneFavour,
 		roomFavour,
 		roomLastStage,
+		roomPendingFavour,
 		roomReadOnly,
 		singleStepDetail,
 	} from './fixtures.ts';
 	import * as thisFile from './PersonalChoreDetail.stories.svelte';
 	import PersonalChoreDetail from './PersonalChoreDetail.svelte';
+
+	const favourActions = {
+		approve: fn(async () => {}),
+		decline: fn(async () => {}),
+		askParent: fn(async () => {}),
+	};
+	const owner = { id: 'mia', isParent: false };
 
 	const { Story } = defineMeta({
 		title: 'Chores/PersonalChoreDetail',
@@ -45,6 +53,36 @@
 <Story name="Done by someone else" args={{ detail: roomDoneFavour }} />
 
 <Story name="Done for now" args={{ detail: roomDone }} />
+
+<Story
+	name="Favour waiting for the owner's OK"
+	args={{
+		detail: { ...roomPendingFavour, isAssignee: true },
+		favourActions,
+		viewer: owner,
+	}}
+/>
+
+<Story
+	name="Favour waiting, seen by the doer"
+	args={{
+		detail: roomPendingFavour,
+		favourActions,
+		viewer: { id: 'leo', isParent: false },
+	}}
+/>
+
+<Story
+	name="Favour waiting for a parent"
+	args={{
+		detail: {
+			...roomPendingFavour,
+			pendingFavour: { completionId: 'c1', doneBy: { memberId: 'leo', name: 'Leo' }, escalated: true },
+		},
+		favourActions,
+		viewer: { id: 'leo', isParent: false },
+	}}
+/>
 
 <Story
 	name="Visual test"

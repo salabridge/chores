@@ -4,9 +4,13 @@
 		responsiveVisualTestParameters,
 		VisualTestGrid,
 	} from '#lib/visual-test/index.js';
+	import { leoFavours, miaFavours } from '../favours/fixtures.ts';
 	import { emptyToday, helpOutToday, todayData, weeklyDueToday } from './fixtures.js';
 	import * as thisFile from './TodayScreen.stories.svelte';
 	import TodayScreen from './TodayScreen.svelte';
+
+	const noop = async () => {};
+	const favourActions = { approve: noop, decline: noop, askParent: noop };
 
 	const { Story } = defineMeta({
 		title: 'Today/TodayScreen',
@@ -33,6 +37,10 @@
 <Story name="Weekly chores with a due day" args={{ data: weeklyDueToday }} />
 
 <Story name="Others' chores to help out with" args={{ data: helpOutToday }} />
+
+<Story name="Needs your OK" args={{ favours: leoFavours, favourActions }} />
+
+<Story name="Your favours" args={{ favours: miaFavours, favourActions }} />
 
 <Story
 	name="Visual test"

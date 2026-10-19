@@ -8,7 +8,7 @@
 
 	/**
 	 * Shown on a chore that belongs to someone else (SB-75): "This is Leo's
-	 * chore. You'll get the points." A parent in their own view picks who did
+	 * chore. Leo approves it, then you get the points." A parent in their own view picks who did
 	 * it instead, so the banner points at the select.
 	 */
 	interface Props {
@@ -23,5 +23,5 @@
 </script>
 
 <Callout tone="action" title={favourBannerTitle(ownerName)} class={className} data-testid="favour-banner">
-	{recording ? recordBannerText : favourBannerText}
+	{recording ? recordBannerText : favourBannerText(ownerName)}
 </Callout>

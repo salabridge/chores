@@ -9,10 +9,17 @@
 		toiletDone,
 		toiletDoneFavour,
 		toiletFavour,
+		toiletPendingFavour,
 		toiletWaiting,
 	} from './fixtures.ts';
 	import * as thisFile from './RotationChoreDetail.stories.svelte';
 	import RotationChoreDetail from './RotationChoreDetail.svelte';
+
+	const favourActions = {
+		approve: fn(async () => {}),
+		decline: fn(async () => {}),
+		askParent: fn(async () => {}),
+	};
 
 	const { Story } = defineMeta({
 		title: 'Rotations/RotationChoreDetail',
@@ -64,6 +71,24 @@
 				'The turn has already moved on. Reload to see whose turn it is.',
 			);
 		},
+	}}
+/>
+
+<Story
+	name="Favour waiting for the turn-holder's OK"
+	args={{
+		detail: { ...toiletPendingFavour, isMyTurn: true },
+		favourActions,
+		viewer: { id: 'mia', isParent: false },
+	}}
+/>
+
+<Story
+	name="Favour waiting, seen by the doer"
+	args={{
+		detail: toiletPendingFavour,
+		favourActions,
+		viewer: { id: 'leo', isParent: false },
 	}}
 />
 

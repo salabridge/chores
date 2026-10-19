@@ -7,6 +7,7 @@
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SegmentedStageProgress from '#lib/components/ui/SegmentedStageProgress.svelte';
 	import StageStep from '#lib/components/ui/StageStep.svelte';
+	import type { FavourActions } from '#lib/favour-approval.js';
 	import {
 		ctaLabel,
 		doneStageCount,
@@ -20,6 +21,7 @@
 		waitingText,
 	} from '#lib/personal-detail.js';
 	import { completePersonalChore } from '#lib/personal-detail.remote.js';
+	import PendingFavourNotice from '../favours/PendingFavourNotice.svelte';
 	import DoneBySelect from './DoneBySelect.svelte';
 	import FavourBanner from './FavourBanner.svelte';
 
@@ -32,9 +34,17 @@
 		 * (SB-75). Leave out for everyone else.
 		 */
 		doerOptions?: MemberOption[];
+		/**
+		 * Approving, declining and asking a parent about a pending favour
+		 * (SB-80). Together with `viewer`, it shows the favour's state in
+		 * place of the read-only note.
+		 */
+		favourActions?: FavourActions;
+		/** Who is looking, and whether the chore is theirs or they're a parent. */
+		viewer?: { id: string; isParent: boolean };
 	}
 
-	let { detail, onstagedone, doerOptions }: Props = $props();
+	let { detail, onstagedone, doerOptions, favourActions, viewer }: Props = $props();
 
 	const canAct = $derived(detail.canComplete || detail.canCompleteForAssignee);
 	const recording = $derived(Boolean(doerOptions?.length) && canAct);
@@ -96,6 +106,15 @@
 
 	{#if canAct}
 		<Callout tone="info" title="What happens next">{nextText(detail)}</Callout>
+	{:else if detail.pendingFavour && favourActions && viewer}
+		<PendingFavourNotice
+			favour={detail.pendingFavour}
+			title={detail.title}
+			points={detail.points}
+			ownerName={detail.assigneeName}
+			viewer={{ ...viewer, isOwner: detail.isAssignee }}
+			actions={favourActions}
+		/>
 	{:else}
 		<Callout tone={detail.completedThisPeriod ? 'success' : 'info'} title={detail.completedThisPeriod ? 'Chore complete' : 'Read only'}>
 			{waitingText(detail)}

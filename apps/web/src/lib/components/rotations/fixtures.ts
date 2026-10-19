@@ -152,3 +152,13 @@ export const dishwasherDetail: RotationDetail = {
 		{ id: 's3', title: 'Unload and put away', hint: null, state: 'locked' },
 	],
 };
+
+/** Mia's turn, with Leo's favour waiting for her OK (SB-80). */
+export const toiletPendingFavour: RotationDetail = {
+	...toiletWaiting,
+	pendingFavour: {
+		completionId: 'c1',
+		doneBy: { memberId: 'leo', name: 'Leo' },
+		escalated: false,
+	},
+};

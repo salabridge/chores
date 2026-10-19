@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import ChoreStatusTable from './ChoreStatusTable.svelte';
-import { overviewRows } from './fixtures.ts';
+import { overviewRows, pendingFavourRow } from './fixtures.ts';
 
 describe('ChoreStatusTable.svelte', () => {
 	it('lists each chore with its context, assignee, status and points', async () => {
@@ -111,5 +111,16 @@ describe('ChoreStatusTable.svelte', () => {
 		await vi.waitFor(() =>
 			expect(getComputedStyle(head).display).toBe('table-header-group'),
 		);
+	});
+
+	it('shows "Pending: Mia" while a favour waits for an OK', async () => {
+		render(ChoreStatusTable, { rows: [pendingFavourRow] });
+		await expect
+			.element(page.getByTestId('pending-by'))
+			.toHaveTextContent('Pending: Mia');
+		expect(page.getByTestId('done-by').elements()).toHaveLength(0);
+		expect(
+			page.getByRole('button', { name: /Reopen/ }).elements(),
+		).toHaveLength(0);
 	});
 });

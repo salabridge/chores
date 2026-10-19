@@ -10,6 +10,7 @@
 	<ParentSidebar
 		pathname={page.url.pathname}
 		parentNames={data.parents.map((p) => p.name)}
+		pendingFavours={data.pendingFavours}
 	/>
 	<main class="flex min-w-0 flex-1 flex-col gap-24 p-16 lg:p-40">
 		{@render children()}

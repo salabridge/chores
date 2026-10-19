@@ -10,7 +10,7 @@
 </script>
 
 <script lang="ts">
-	import { reopenFavourText } from '#lib/favour.js';
+	import { pendingByText, reopenFavourText } from '#lib/favour.js';
 	import { openCount, plural, rowActions } from '#lib/overview.js';
 	import Badge from '../ui/Badge.svelte';
 	import DoneByLabel from '../ui/DoneByLabel.svelte';
@@ -140,6 +140,13 @@
 									</span>
 									{#if row.doneBy}
 										<DoneByLabel name={row.doneBy.name} />
+									{:else if row.pendingFavour?.doneBy}
+										<span
+											class="text-[12px] font-semibold text-text-amber"
+											data-testid="pending-by"
+										>
+											{pendingByText(row.pendingFavour.doneBy.name)}
+										</span>
 									{/if}
 								</span>
 							</td>

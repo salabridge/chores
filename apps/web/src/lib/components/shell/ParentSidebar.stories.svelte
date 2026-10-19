@@ -21,6 +21,10 @@
 
 <Story name="Single parent" args={{ parentNames: ['Sam'] }} />
 
+<Story name="Favours waiting" args={{ pendingFavours: 3 }} />
+
+<Story name="Many favours waiting" args={{ pendingFavours: 12 }} />
+
 <Story
 	name="Visual test"
 	tags={['visual-test', '!autodocs']}

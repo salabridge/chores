@@ -4,6 +4,7 @@
 		type ChoreRowActions,
 	} from '#lib/components/overview/ChoreStatusTable.svelte';
 	import ExceptionsNotesPanel from '#lib/components/overview/ExceptionsNotesPanel.svelte';
+	import FavoursToApprovePanel from '#lib/components/overview/FavoursToApprovePanel.svelte';
 	import ManageChoresPanel from '#lib/components/overview/ManageChoresPanel.svelte';
 	import MemberWorkloadPanel from '#lib/components/overview/MemberWorkloadPanel.svelte';
 	import OverviewStats from '#lib/components/overview/OverviewStats.svelte';
@@ -11,6 +12,7 @@
 	import WorkspaceHeader from '#lib/components/shell/WorkspaceHeader.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
+	import { favourActions } from '#lib/favour-client.js';
 	import { invalidateAll } from '$app/navigation';
 
 	let { data } = $props();
@@ -55,6 +57,7 @@
 
 <div class="grid items-start gap-16 xl:grid-cols-[minmax(0,1fr)_340px]">
 	<div class="flex min-w-0 flex-col gap-16" data-slot="overview-main">
+		<FavoursToApprovePanel favours={data.favours} actions={favourActions} />
 		<ChoreStatusTable rows={data.overview.rows} {actions} unavailableHint="Coming soon" />
 		<p role="status" class="text-[13px] text-text-secondary empty:hidden">{notice}</p>
 		<UpcomingRotationsPanel rotations={data.overview.rotations} />
