@@ -6,3 +6,10 @@ allowBuilds:
 catalog: 
   drizzle-orm: ^0.45.3
   drizzle-kit: ^0.31.11
+# Security floors for transitive deps whose parents pin old ranges (Dependabot alerts).
+# Drop each one once the parent's own range moves past it.
+overrides:
+  # drizzle-kit -> @esbuild-kit/core-utils pins ~0.18 (GHSA-67mh-4wv8-2f99)
+  esbuild@<0.25.0: ^0.25.0
+  # @sveltejs/kit 2.x pins ^0.6.0 (GHSA-pxg6-pf52-xh8x)
+  cookie@<0.7.0: ^0.7.0
