@@ -39,7 +39,7 @@
 	subtitle="Change what this chore is. Points already earned and completions already recorded stay as they are."
 >
 	{#snippet actions()}
-		<PrimaryButton type="submit" form={CHORE_FORM_ID}>Save Changes</PrimaryButton>
+		<PrimaryButton size="sm" type="submit" form={CHORE_FORM_ID}>Save Changes</PrimaryButton>
 	{/snippet}
 </WorkspaceHeader>
 

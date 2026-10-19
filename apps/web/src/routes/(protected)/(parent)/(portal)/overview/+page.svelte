@@ -47,7 +47,7 @@
 >
 	{#snippet actions()}
 		<SecondaryButton href="/rotations">Manage Loops</SecondaryButton>
-		<PrimaryButton href="/chores/new?preset=household-rotation">+ New Chore Loop</PrimaryButton>
+		<PrimaryButton size="sm" href="/chores/new?preset=household-rotation">+ New Chore Loop</PrimaryButton>
 	{/snippet}
 </WorkspaceHeader>
 

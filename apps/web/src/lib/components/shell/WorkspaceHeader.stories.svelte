@@ -21,12 +21,7 @@
 
 {#snippet actions()}
 	<SecondaryButton href="#rotations">Manage Loops</SecondaryButton>
-	<PrimaryButton
-		href="#new"
-		class="h-auto w-auto rounded-[10px] px-16 py-8 text-[14px]"
-	>
-		New Chore Loop
-	</PrimaryButton>
+	<PrimaryButton href="#new" size="sm">New Chore Loop</PrimaryButton>
 {/snippet}
 
 <Story name="Title only" args={{ subtitle: undefined }} />

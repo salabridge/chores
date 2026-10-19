@@ -96,7 +96,7 @@
 		<SecondaryButton onclick={reviewExample}>
 			Review Example
 		</SecondaryButton>
-		<PrimaryButton type="submit" form={CHORE_FORM_ID}>
+		<PrimaryButton size="sm" type="submit" form={CHORE_FORM_ID}>
 			{isRotation ? 'Next: Eligibility Setup' : 'Create Chore'}
 		</PrimaryButton>
 	{/snippet}
