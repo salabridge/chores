@@ -104,10 +104,11 @@ belongs to Neon's Next.js SDK, which we don't use, so we don't need it.
 ### CI
 
 GitHub Actions reads secrets from GitHub **environments**. The **Migrate**
-workflow (`.github/workflows/migrate.yml`) runs by hand against the `dev`,
-`production`, or `e2e` environment, and each environment holds that branch's
-`DATABASE_URL` secret. The workflow only runs from `main`; dispatching it from
-any other branch skips the job. The PR workflow runs only Biome and needs no secrets.
+workflow (`.github/workflows/migrate.yml`) runs by hand and migrates `e2e`,
+then `dev`, then `production`, each from its own environment's `DATABASE_URL`
+secret. A failure stops the run before it reaches the next environment, and
+`production` waits for a required reviewer. The workflow only runs from `main`;
+dispatching it from any other branch skips every job. The PR workflow runs only Biome and needs no secrets.
 
 The **Chromatic** workflow (`.github/workflows/chromatic.yml`) publishes the
 `apps/web` Storybook to [Chromatic](https://www.chromatic.com/) and runs its
