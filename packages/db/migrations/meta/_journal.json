@@ -169,6 +169,13 @@
 			"when": 1792369593921,
 			"tag": "0023_household_merge_via_invite",
 			"breakpoints": true
+		},
+		{
+			"idx": 24,
+			"version": "7",
+			"when": 1792372555668,
+			"tag": "0024_chore_completions_favour_approval",
+			"breakpoints": true
 		}
 	]
 }

@@ -112,6 +112,9 @@ export async function householdStreaks(
 					and(
 						eq(choreCompletions.householdId, householdId),
 						isNull(choreCompletions.reopenedAt),
+						// A favour counts once it's approved (SB-79), for the period it
+						// was done in.
+						eq(choreCompletions.approvalStatus, 'approved'),
 						gte(choreCompletions.completedAt, since),
 					),
 				),

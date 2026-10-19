@@ -14,8 +14,10 @@
  * Cast: Alice creates a household (owner) and a managed kid, Mia, with no
  * login. She invites Bob as a parent and Carol as a kid; both accept. They
  * set up chores with stages, and Carol works through today's instance. They
- * take turns on a rotation chore. Dave signs up and stays out until he
- * moves his own household into Alice's on an invite (SB-76).
+ * take turns on a rotation chore. Carol and Mia do each other's chores as
+ * favours, which wait for the owner's (or a parent's) OK (SB-74, SB-79). Dave
+ * signs up and stays out until he moves his own household into Alice's on an
+ * invite (SB-76).
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -54,10 +56,15 @@ import {
 	createAuthenticatedDb,
 	createInviteToken,
 	currentMemberId,
+	decideFavour,
+	escalateFavour,
+	FavourDecidedByParentError,
+	FavourEscalatedError,
 	getRotationTurns,
 	isHouseholdParent,
 	memberPointsBalance,
 	mergeHouseholdViaInvite,
+	NotAFavourError,
 	NotHouseholdParentError,
 	reopenCompletion,
 	requireHouseholdParent,
@@ -1574,7 +1581,9 @@ try {
 
 	// SB-74: doing a chore for someone else. The chore stays the assignee's
 	// (member_id, their streak, their rotation turn), the doer gets the points.
-	// Every favour is reopened at the end, so balances are as they were.
+	// Since SB-79 a kid's favour waits for the assignee's OK: Mia is a managed
+	// kid, so Alice approves on Mia's profile (`actingAs`). Every favour is
+	// reopened at the end, so balances are as they were.
 	console.log('Doing a chore for someone else (SB-74):');
 	const favourChore = (title: string, assignee: string, points = 10) =>
 		authed.withAuth(alice.token, async (tx) => {
@@ -1625,8 +1634,17 @@ try {
 	const favour = await authed.withAuth(carol.token, (tx) =>
 		completeChore(tx, miaTrashInstance.id, { doneBy: carolMemberId }),
 	);
-	assert.equal(favour.points, 10);
+	assert.equal(favour.points, 0);
+	assert.equal(favour.approvalStatus, 'pending');
 	assert.equal(favour.creditedMemberId, carolMemberId);
+	assert.equal(await balance(carolMemberId), carolBeforeFavours);
+	ok("Carol does Mia's chore: pending, no points yet (SB-79)");
+	const approvedByMia = await authed.withAuth(alice.token, (tx) =>
+		decideFavour(tx, favour.completionId, true, { actingAs: mia.id }),
+	);
+	assert.equal(approvedByMia.approvalStatus, 'approved');
+	assert.equal(approvedByMia.points, 10);
+	assert.equal(approvedByMia.decidedByMemberId, mia.id);
 	assert.equal(await balance(carolMemberId), carolBeforeFavours + 10);
 	assert.equal(await balance(mia.id), miaBeforeFavours);
 	const favourRow = await completionRow(favour.completionId);
@@ -1641,13 +1659,14 @@ try {
 		[[carolMemberId, 10, 'completion']],
 	);
 	ok(
-		"Carol does Mia's chore: +10 pts to Carol, none to Mia; still Mia's chore",
+		"Mia (on her profile) approves: +10 pts to Carol, none to Mia; still Mia's chore",
 	);
 
 	const favourAgain = await authed.withAuth(carol.token, (tx) =>
 		completeChore(tx, miaTrashInstance.id, { doneBy: carolMemberId }),
 	);
 	assert.equal(favourAgain.alreadyCompleted, true);
+	assert.equal(favourAgain.approvalStatus, 'approved');
 	assert.equal(favourAgain.points, 0);
 	assert.equal(favourAgain.creditedMemberId, carolMemberId);
 	assert.equal(await balance(carolMemberId), carolBeforeFavours + 10);
@@ -1690,6 +1709,7 @@ try {
 	const recorded = await authed.withAuth(bob.token, (tx) =>
 		completeChore(tx, carolDishesInstance.id, { doneBy: mia.id }),
 	);
+	assert.equal(recorded.approvalStatus, 'approved');
 	assert.equal(recorded.creditedMemberId, mia.id);
 	assert.equal(await balance(mia.id), miaBeforeFavours + 5);
 	assert.equal(await balance(carolMemberId), carolBeforeFavours);
@@ -1750,7 +1770,18 @@ try {
 		completeChore(tx, dogInstance.id, { doneBy: carolMemberId }),
 	);
 	assert.equal(dogDone.creditedMemberId, carolMemberId);
-	assert.equal(dogDone.nextMemberId, carolMemberId);
+	assert.equal(dogDone.approvalStatus, 'pending');
+	assert.equal(dogDone.nextMemberId, null);
+	assert.equal(
+		(await authed.withAuth(alice.token, (tx) => getRotationTurns(tx, dog.id)))
+			?.activeTurn?.memberId,
+		mia.id,
+	);
+	ok("a pending favour turn doesn't move the rotation (SB-79)");
+	const dogApproved = await authed.withAuth(bob.token, (tx) =>
+		decideFavour(tx, dogDone.completionId, true),
+	);
+	assert.equal(dogApproved.nextMemberId, carolMemberId);
 	assert.equal(await balance(carolMemberId), carolBeforeFavours + 10);
 	assert.equal(await balance(mia.id), miaBeforeFavours);
 	const dogTurns = await authed.withAuth(alice.token, (tx) =>
@@ -1819,6 +1850,11 @@ try {
 	);
 	assert.ok(roomLast.choreCompleted);
 	assert.equal(roomLast.creditedMemberId, carolMemberId);
+	assert.equal(roomLast.approvalStatus, 'pending');
+	assert.equal(await balance(carolMemberId), carolBeforeFavours);
+	await authed.withAuth(alice.token, (tx) =>
+		decideFavour(tx, roomLast.completionId, true, { actingAs: mia.id }),
+	);
 	assert.equal(await balance(carolMemberId), carolBeforeFavours + 15);
 	const roomProgress = await admin
 		.select()
@@ -1901,6 +1937,171 @@ try {
 			authed.withAuth(dave.token, (tx) => completeChore(tx, bagInstance.id)),
 		/no chore instance/,
 	);
+
+	// SB-79: a favour waits for the owner's OK. Baby Sam (a managed kid) is
+	// the sibling who isn't the assignee. Alice on a kid's profile passes
+	// `actingAs`, and then counts as that kid, not as a parent.
+	console.log('Favours need approval (SB-79):');
+	const carolBeforeApprovals = await balance(carolMemberId);
+	const miaBeforeApprovals = await balance(mia.id);
+
+	// Mia (Alice on Mia's profile) does Carol's chore: pending even though a
+	// parent is signed in.
+	const carolBins = await favourChore("Carol's bins", carolMemberId, 7);
+	const carolBinsInstance = await startInstance(
+		carol.token,
+		carolBins.id,
+		carolMemberId,
+	);
+	const miaFavour = await authed.withAuth(alice.token, (tx) =>
+		completeChore(tx, carolBinsInstance.id, {
+			doneBy: mia.id,
+			actingAs: mia.id,
+		}),
+	);
+	assert.equal(miaFavour.approvalStatus, 'pending');
+	assert.equal(await balance(mia.id), miaBeforeApprovals);
+	ok("on Mia's profile, doing Carol's chore is pending, no points");
+
+	await expectRejected(
+		'Mia (on her profile) approving her own favour',
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				decideFavour(tx, miaFavour.completionId, true, { actingAs: mia.id }),
+			),
+		/a favour you did yourself/,
+	);
+	await expectRejected(
+		"Sam (a sibling, not Carol) approving Mia's favour",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				decideFavour(tx, miaFavour.completionId, true, { actingAs: sam.id }),
+			),
+		/only the member whose chore it is, or a parent/,
+	);
+	await expectRejected(
+		"Dave (another household) approving Mia's favour",
+		() =>
+			authed.withAuth(dave.token, (tx) =>
+				decideFavour(tx, miaFavour.completionId, true),
+			),
+		/no completion/,
+	);
+	await expectRejected(
+		"Carol asking a parent about Mia's favour (only the doer can)",
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				escalateFavour(tx, miaFavour.completionId),
+			),
+		/only the member who did this favour/,
+	);
+	await assert.rejects(
+		authed.withAuth(bob.token, (tx) =>
+			reopenCompletion(tx, miaFavour.completionId),
+		),
+		NotAFavourError,
+	);
+	const carolOwn = await authed.withAuth(carol.token, (tx) =>
+		completeChore(tx, carolBinsInstance.id),
+	);
+	assert.equal(carolOwn.alreadyCompleted, true);
+	assert.equal(carolOwn.approvalStatus, 'pending');
+	ok(
+		"the doer, a sibling and an outsider can't decide it; it blocks Carol completing; it can't be reopened",
+	);
+
+	// Carol declines; Mia asks a parent; Carol can't decide it any more; Bob
+	// approves, and that's final.
+	const carolDeclines = await authed.withAuth(carol.token, (tx) =>
+		decideFavour(tx, miaFavour.completionId, false),
+	);
+	assert.equal(carolDeclines.approvalStatus, 'declined');
+	assert.equal(await balance(mia.id), miaBeforeApprovals);
+	const asked = await authed.withAuth(alice.token, (tx) =>
+		escalateFavour(tx, miaFavour.completionId, { actingAs: mia.id }),
+	);
+	assert.equal(asked.approvalStatus, 'pending');
+	assert.ok(asked.escalatedAt);
+	await assert.rejects(
+		authed.withAuth(carol.token, (tx) =>
+			decideFavour(tx, miaFavour.completionId, false),
+		),
+		FavourEscalatedError,
+	);
+	const bobApproves = await authed.withAuth(bob.token, (tx) =>
+		decideFavour(tx, miaFavour.completionId, true),
+	);
+	assert.equal(bobApproves.approvalStatus, 'approved');
+	assert.equal(bobApproves.points, 7);
+	assert.equal(await balance(mia.id), miaBeforeApprovals + 7);
+	const carolLate = await authed.withAuth(carol.token, (tx) =>
+		decideFavour(tx, miaFavour.completionId, false),
+	);
+	assert.equal(carolLate.changed, false);
+	assert.equal(carolLate.approvalStatus, 'approved');
+	await authed.withAuth(bob.token, (tx) =>
+		reopenCompletion(tx, miaFavour.completionId),
+	);
+	assert.equal(await balance(mia.id), miaBeforeApprovals);
+	ok(
+		"Carol declines, Mia asks a parent, Bob approves (+7 Mia); Carol can't overturn it",
+	);
+
+	// A parent's decline is final: the doer can't ask a parent.
+	const miaBed = await favourChore("Make Mia's bed", mia.id, 4);
+	const miaBedInstance = await startInstance(bob.token, miaBed.id, mia.id);
+	const carolBed = await authed.withAuth(carol.token, (tx) =>
+		completeChore(tx, miaBedInstance.id, { doneBy: carolMemberId }),
+	);
+	assert.equal(carolBed.approvalStatus, 'pending');
+	await authed.withAuth(bob.token, (tx) =>
+		decideFavour(tx, carolBed.completionId, false),
+	);
+	await assert.rejects(
+		authed.withAuth(carol.token, (tx) =>
+			escalateFavour(tx, carolBed.completionId),
+		),
+		FavourDecidedByParentError,
+	);
+	const miaOwnBed = await authed.withAuth(alice.token, (tx) =>
+		completeChore(tx, miaBedInstance.id, { actingAs: mia.id }),
+	);
+	assert.equal(miaOwnBed.alreadyCompleted, false);
+	assert.equal(miaOwnBed.approvalStatus, 'approved');
+	assert.equal(await balance(carolMemberId), carolBeforeApprovals);
+	await authed.withAuth(bob.token, (tx) =>
+		reopenCompletion(tx, miaOwnBed.completionId),
+	);
+	ok("Bob's decline is final; the chore is open again and Mia does it herself");
+
+	// The assignee and a parent deciding at once take turns on the row lock:
+	// whichever lands second sees the first. Mia declines, then Bob's approve
+	// lands and overrides it; Mia's late approve changes nothing.
+	const miaShoes = await favourChore("Mia's shoes", mia.id, 3);
+	const miaShoesInstance = await startInstance(bob.token, miaShoes.id, mia.id);
+	const carolShoes = await authed.withAuth(carol.token, (tx) =>
+		completeChore(tx, miaShoesInstance.id, { doneBy: carolMemberId }),
+	);
+	const [assigneeFirst, parentSecond] = await Promise.all([
+		authed.withAuth(alice.token, (tx) =>
+			decideFavour(tx, carolShoes.completionId, false, { actingAs: mia.id }),
+		),
+		authed.withAuth(bob.token, (tx) =>
+			decideFavour(tx, carolShoes.completionId, true),
+		),
+	]);
+	assert.ok(assigneeFirst.changed || parentSecond.changed);
+	const shoesRow = await completionRow(carolShoes.completionId);
+	// Either order ends approved: a parent's approve overrides the assignee's
+	// decline, and the assignee can't overturn a parent's approve.
+	assert.equal(shoesRow.approvalStatus, 'approved');
+	assert.equal(shoesRow.decidedByMemberId, bobMemberId);
+	assert.equal(await balance(carolMemberId), carolBeforeApprovals + 3);
+	await authed.withAuth(bob.token, (tx) =>
+		reopenCompletion(tx, carolShoes.completionId),
+	);
+	assert.equal(await balance(carolMemberId), carolBeforeApprovals);
+	ok('Mia (declining) and Bob (approving) at once: the parent wins either way');
 
 	console.log('Rewards:');
 	const rewardRows = await authed.withAuth(bob.token, (tx) =>

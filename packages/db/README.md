@@ -399,9 +399,11 @@ done.
   whose chore it was (`member_id`: the instance's assignee, even when a parent
   tapped the button for a managed kid), who did it when that was someone else
   (`done_by_member_id`, see **Doing a chore for someone else** below) and the
-  points copied from `chores.points`. At most one *open* completion exists per
-  instance (a partial unique index), which is what makes completing twice a
-  no-op.
+  points copied from `chores.points`. `approval_status` is `approved` for
+  everything except a kid's favour, which is `pending` until its owner or a
+  parent decides (see **Favours need approval** below). At most one *open*
+  completion exists per instance (a partial unique index over rows that
+  aren't reopened or declined), which is what makes completing twice a no-op.
 - **Ledger** (`points_ledger`): append-only. Every point change is a row with
   a `delta` and a `reason`: `completion` (+), `reversal` (-, a parent reopened
   it), `reward_claim` (-, written with its `reward_claims` row) or `adjustment` (a parent's
@@ -455,10 +457,12 @@ gets the points, but it was still Leo's chore. `completeChore(tx, instanceId,
   household member. The doer must be in the chore's household
   (`ChoreDoerNotInHouseholdError`, SQLSTATE `CP004`). Being the assignee isn't
   enough to name someone else, so a kid can't hand their points to a sibling.
-- **Points go to the doer.** The completion's `completion` ledger row is the
-  doer's (`creditedMemberId` in the result), and a reopen reverses whoever
-  that row credited, so the points come back from Mia, not Leo. The ledger
-  checks are unchanged (still `completion`, positive).
+- **Points go to the doer**, once the favour is approved (SB-79, below; a
+  parent recording the doer is approved straight away). The completion's
+  `completion` ledger row is the doer's (`creditedMemberId` in the result),
+  and a reopen reverses whoever that row credited, so the points come back
+  from Mia, not Leo. The ledger checks are unchanged (still `completion`,
+  positive).
 - **The chore stays the assignee's.** `member_id` is still Leo, and
   `done_by_member_id` is Mia (NULL when the assignee did it; naming the
   assignee stores NULL too). Index `(done_by_member_id, completed_at)` serves
@@ -475,6 +479,80 @@ gets the points, but it was still Leo's chore. `completeChore(tx, instanceId,
 - **Streaks:** the period counts as done for Leo, so his streak and the family
   streak don't break. Mia gets the points but no streak credit (it wasn't her
   chore). `resolveDueChores()` reports her as `doneByMemberId` on that day.
+
+#### Favours need approval (SB-79)
+
+Without a check, a kid could grab a sibling's points or use up their rotation
+turn. So a favour by someone who isn't a parent waits for the owner of the
+chore: when Mia does Leo's chore it's recorded as "Mia says she did it", and
+nobody gets points until Leo (or a parent) says it's done. Custom migration
+`0024` adds the state and the functions.
+
+- **When it's pending.** `app.complete_chore_instance` / `complete_chore_stage`
+  write the completion as `pending` when the doer isn't the assignee and the
+  caller isn't acting as a parent. No ledger row, no rotation hand-off;
+  `points` in the result is 0 and `approvalStatus` is `pending`. Stage
+  progress is still recorded for Mia. Self-completions and a parent recording
+  the doer are `approved` straight away, exactly as before.
+- **Acting as a profile (`actingAs`).** On the shared device a parent's
+  session acts as a managed kid, and the database only sees the parent's JWT.
+  So the completion and favour helpers take `actingAs`: the member whose
+  profile is open. While it's set (and isn't the user's own member), the
+  caller counts as that kid, not as a parent (internal
+  `app.favour_actor`): Mia on the tablet gets a pending favour and can't
+  approve it herself. The web app passes it whenever a kid profile is active.
+  It must be a member the user can act as (42501 otherwise), and on a profile
+  only that member or the assignee can be named as the doer.
+- **A pending favour blocks the instance.** It's open, so nobody else can
+  complete it: a repeat call (including Leo completing it himself) returns it
+  with `alreadyCompleted: true` and `approvalStatus: 'pending'`. Leo approves
+  or declines it instead. Completing it himself doesn't silently decline
+  Mia's favour: that would let him take the points and skip the "ask a
+  parent" route.
+- **Deciding** (`decideFavour(tx, completionId, approve, { actingAs })`,
+  `app.decide_favour`):
+  - The assignee decides a pending favour (their login, or a parent on their
+    managed-kid profile), unless the doer has asked a parent
+    (`FavourEscalatedError`, CP006).
+  - Any parent in their own view decides a pending favour, or overrides the
+    assignee's decline. A parent's decision is final: once a parent decided,
+    deciding again (parent or assignee) changes nothing.
+  - The doer never decides their own favour, and nobody else can (42501).
+    Nobody outside the household can see it (P0002).
+  - **Approve** writes the doer's `completion` ledger row (the points copied
+    when it was done) and advances a rotation turn if it's still the
+    assignee's (if a parent skipped them meanwhile, the turn stays put).
+    Stages a decline cleared are checked again for the doer.
+  - **Decline** marks it `declined` and unchecks the stages the doer checked
+    (the assignee's own checks stay), so the chore is open again for Leo.
+  - Deciding the same way twice does nothing (`changed: false`).
+  - Approving a declined favour after the chore was completed again fails
+    with `FavourSupersededError` (CP007).
+- **Asking a parent** (`escalateFavour(tx, completionId, { actingAs })`,
+  `app.escalate_favour`): only the doer. On a pending favour it sets
+  `escalated_at`; on one the assignee declined it goes back to `pending`
+  with `escalated_at` set (CP007 if the chore was completed again since). From
+  then on only a parent decides it. A parent's decline can't be escalated
+  (`FavourDecidedByParentError`, CP008). Asking twice changes nothing.
+- **Columns.** `decided_by_member_id` / `decided_at` record the latest
+  decision: the assignee (also when a parent tapped it on the assignee's
+  profile) or the parent. A decline by the assignee is the only one the doer
+  can escalate (`decided_by_member_id = member_id` and no `escalated_at`).
+  For a favour that was declined and then escalated, they still name the
+  assignee until a parent decides.
+- **Races.** Both functions lock the chore instance, then the completion
+  (the same order as completing), so an assignee and a parent deciding at
+  once take turns, and the second sees the first's decision. Either order
+  ends with the parent's decision. The unique index still guards a second
+  open completion.
+- **Reopening** only applies to approved completions (`NotAFavourError`,
+  CP005, for a pending or declined favour: decline it instead).
+- **Streaks** count only approved completions. Approving later still counts
+  for the period the chore was done in, since streaks go by `completed_at`.
+- **Edge cases.** If the doer leaves the household while their favour is
+  pending, approving it marks the chore done but credits nobody. A parent who
+  is also the assignee decides as a parent, but their decline counts as the
+  assignee's, so the doer can still ask another parent.
 
 ### Skips and reminders
 
@@ -556,7 +634,8 @@ and lives in `src/streaks.ts`.
   a rotation chore with no row has no known turn-holder and is left out).
   Periods that ended before the chore was created don't count.
 - **Favours.** A chore someone else did for its assignee (SB-74) counts as
-  done for the assignee; the doer gets the points but no streak credit.
+  done for the assignee; the doer gets the points but no streak credit. Only
+  once it's approved (SB-79): a pending or declined favour doesn't count.
 - **On time.** A period is done only if an open completion's local date falls
   inside it, so finishing yesterday's chore today doesn't rescue yesterday.
   Reopened completions don't count.
@@ -586,7 +665,7 @@ role. Access follows household membership and role:
 | `chore_stage_progress`  | members               | members check off stages as themselves; parents for anyone in the household; uncheck (delete) the same way |
 | `chore_rotations`       | members               | parents; the turn moves through `app.advance_chore_rotation` (members for their own turn, parents for anyone) |
 | `chore_rotation_members`| members               | parents                                                                                 |
-| `chore_completions`     | members               | nobody directly; written by `app.complete_chore_instance` / `complete_chore_stage` / `reopen_chore_completion` (a doer other than the assignee: themselves, or anyone in the household for a parent) |
+| `chore_completions`     | members               | nobody directly; written by `app.complete_chore_instance` / `complete_chore_stage` / `reopen_chore_completion` (a doer other than the assignee: themselves, or anyone in the household for a parent), and `app.decide_favour` / `escalate_favour` for a kid's favour (the assignee or a parent decides, never the doer; only the doer asks a parent) |
 | `points_ledger`         | members               | append-only; parents insert `adjustment` rows, completions and reversals come from the functions above |
 | `rewards`               | members               | parents                                                                                 |
 | `reward_claims`         | members               | nobody directly; written by `insertRewardClaim()` with its ledger row                    |
@@ -645,6 +724,14 @@ generate --custom`, so the snapshot is unchanged): `app.merge_household_via_invi
 and the invite checks moved out of `app.accept_household_invite` into the
 internal `app.claim_open_invite`, which both call (accept's behaviour is
 unchanged).
+`0024_chore_completions_favour_approval.sql` (SB-79) is generated for the
+`approval_status` enum and columns, the rebuilt open-completion index (a
+declined favour doesn't count as open) and the reopen check, then
+hand-written: the completion functions take `acting_as` and write a kid's
+favour as `pending` (drop and create again, since their arguments change),
+plus `app.decide_favour`, `app.escalate_favour` and the internal
+`app.favour_actor`, and `app.reopen_chore_completion` refuses anything not
+approved.
 
 **Two connection strings** (see `.env.example`):
 
@@ -697,7 +784,15 @@ excluding the member whose turn it is. For favours (SB-74) it covers a kid
 doing a sibling's chore, rotation turn and stages (points to the kid, the
 chore and turn still the sibling's), a parent recording the doer, reopening
 taking the points back from the doer, a kid naming someone else, and a member
-of another household refused as the doer. For merging a household on invite
+of another household refused as the doer. For favour approval (SB-79) it
+covers a kid's favour staying pending (no points, no rotation hand-off) until
+the assignee approves on their profile, a favour recorded on a kid's profile
+being pending even with a parent signed in, the doer, a sibling and another
+household refused as deciders, the pending favour blocking the assignee
+completing it, reopening refused while pending, decline then "ask a parent"
+then a parent's approval (and the assignee unable to overturn it), a
+parent's decline being final, and the assignee and a parent deciding at
+once. For merging a household on invite
 accept (SB-76) it covers a non-owner, the wrong email, someone else's
 household id, the invite's own household, the combined kid limit, a merge
 rolled back with its transaction, and a successful merge (roles, the
