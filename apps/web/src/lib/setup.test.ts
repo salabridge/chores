@@ -143,7 +143,7 @@ describe('parseParentInput', () => {
 			parseParentInput({ displayName: 'x'.repeat(51), avatarColor: 'blue' }).ok,
 		).toBe(false);
 		expect(
-			parseParentInput({ displayName: 'Mom', avatarColor: 'pink' }).ok,
+			parseParentInput({ displayName: 'Mom', avatarColor: 'chartreuse' }).ok,
 		).toBe(false);
 	});
 

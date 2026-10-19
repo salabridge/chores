@@ -8,6 +8,10 @@ export const AVATAR_PRESETS = [
 	'green',
 	'amber',
 	'red',
+	'purple',
+	'pink',
+	'teal',
+	'slate',
 ] as const;
 export type AvatarPreset = (typeof AVATAR_PRESETS)[number];
 
@@ -26,6 +30,11 @@ export const AVATAR_PRESET_CLASSES: Record<AvatarPreset, string> = {
 	green: 'border-border-green bg-surface-accent-green-subtle text-text-green',
 	amber: 'border-border-amber bg-surface-accent-amber-subtle text-text-amber',
 	red: 'border-border-red bg-surface-accent-red-subtle text-text-red',
+	purple:
+		'border-border-purple bg-surface-accent-purple-subtle text-text-purple',
+	pink: 'border-border-pink bg-surface-accent-pink-subtle text-text-pink',
+	teal: 'border-border-teal bg-surface-accent-teal-subtle text-text-teal',
+	slate: 'border-border-slate bg-surface-accent-slate-subtle text-text-slate',
 };
 
 export const isAvatarPreset = (value: unknown): value is AvatarPreset =>

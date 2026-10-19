@@ -20,7 +20,7 @@ describe('isAvatarColor', () => {
 	});
 
 	it.each([
-		'pink',
+		'chartreuse',
 		'',
 		'#abc',
 		'#abcdef0',
@@ -36,8 +36,11 @@ describe('isAvatarColor', () => {
 		expect(isAvatarColor(value)).toBe(false);
 	});
 
-	it('includes red among the presets', () => {
-		expect(AVATAR_PRESETS).toContain('red');
+	it('ships at least eight presets, including red and the new families', () => {
+		expect(AVATAR_PRESETS.length).toBeGreaterThanOrEqual(8);
+		for (const preset of ['red', 'purple', 'pink', 'teal', 'slate']) {
+			expect(AVATAR_PRESETS).toContain(preset);
+		}
 	});
 });
 
@@ -66,7 +69,7 @@ describe('resolveAvatarColor', () => {
 		});
 	});
 
-	it.each(['teal', '', null, undefined, '#12', 7])(
+	it.each(['chartreuse', '', null, undefined, '#12', 7])(
 		'falls back to orange for %j',
 		(value) => {
 			expect(resolveAvatarColor(value)).toEqual({

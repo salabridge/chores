@@ -9,7 +9,18 @@ const hidden = (container: HTMLElement) =>
 describe('AvatarColorPicker.svelte', () => {
 	it('offers every preset plus Custom', async () => {
 		render(AvatarColorPicker, { name: 'avatarColor', value: 'blue' });
-		for (const label of ['Orange', 'Blue', 'Green', 'Amber', 'Red', 'Custom']) {
+		for (const label of [
+			'Orange',
+			'Blue',
+			'Green',
+			'Amber',
+			'Red',
+			'Purple',
+			'Pink',
+			'Teal',
+			'Slate',
+			'Custom',
+		]) {
 			await expect
 				.element(page.getByText(label, { exact: true }))
 				.toBeVisible();
