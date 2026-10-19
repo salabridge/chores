@@ -7,7 +7,14 @@ vi.mock('#lib/invite.remote.js', async () => {
 	return await import('../../../../.storybook/mocks/invite-remote.ts');
 });
 
-import { links, openKidInvite, openParentInvite, token } from './fixtures.ts';
+import {
+	joinedHousehold,
+	links,
+	openKidInvite,
+	openParentInvite,
+	ownedHousehold,
+	token,
+} from './fixtures.ts';
 import InviteLanding from './InviteLanding.svelte';
 
 const base = { token, problem: null, ...links };
@@ -111,6 +118,77 @@ describe('InviteLanding.svelte', () => {
 			.toBeVisible();
 		await expect
 			.element(page.getByRole('button', { name: /^Join/ }))
+			.not.toBeInTheDocument();
+	});
+
+	it('lets an owner move their household in after typing its name', async () => {
+		render(InviteLanding, {
+			...base,
+			invite: openParentInvite,
+			signedInAs: 'sam@example.com',
+			problem: 'already-in-household',
+			current: ownedHousehold,
+		});
+		await expect
+			.element(page.getByText(/You'll join as a parent/))
+			.toBeVisible();
+		await expect.element(page.getByText('Mia', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('24 points')).toBeVisible();
+		await expect.element(page.getByText('Pat (you)')).toBeVisible();
+		await expect
+			.element(
+				page.getByText(
+					'Quinn, Mia and Leo will join Burbridge Household with you; their points come with them.',
+				),
+			)
+			.toBeVisible();
+		await expect
+			.element(
+				page.getByText(
+					/6 chores, 2 rewards and history \(41 completed chores\)/,
+				),
+			)
+			.toBeVisible();
+		const move = page.getByRole('button', {
+			name: 'Move Pat Place into Burbridge Household',
+		});
+		await expect.element(move).toBeDisabled();
+		await page.getByLabelText('Type Pat Place to confirm').fill('Pat');
+		await expect.element(move).toBeDisabled();
+		await page.getByLabelText('Type Pat Place to confirm').fill(' pat place ');
+		await expect.element(move).toBeEnabled();
+		await expect
+			.element(page.getByRole('button', { name: /^Join/ }))
+			.not.toBeInTheDocument();
+	});
+
+	it('says everyone joins as a kid on a kid invite', async () => {
+		render(InviteLanding, {
+			...base,
+			invite: openKidInvite,
+			signedInAs: 'ava@example.com',
+			problem: 'already-in-household',
+			current: ownedHousehold,
+		});
+		await expect
+			.element(page.getByText(/so will everyone who comes with you/))
+			.toBeVisible();
+	});
+
+	it('offers a non-owner a way to leave their household', async () => {
+		render(InviteLanding, {
+			...base,
+			invite: openParentInvite,
+			signedInAs: 'sam@example.com',
+			problem: 'already-in-household',
+			current: joinedHousehold,
+		});
+		await expect
+			.element(page.getByRole('button', { name: 'Leave Pat Place' }))
+			.toBeVisible();
+		await expect.element(page.getByText(/stay behind/)).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: /^Move/ }))
 			.not.toBeInTheDocument();
 	});
 });

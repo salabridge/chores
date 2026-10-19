@@ -14,7 +14,8 @@
  * Cast: Alice creates a household (owner) and a managed kid, Mia, with no
  * login. She invites Bob as a parent and Carol as a kid; both accept. They
  * set up chores with stages, and Carol works through today's instance. They
- * take turns on a rotation chore. Dave signs up but never joins.
+ * take turns on a rotation chore. Dave signs up and stays out until he
+ * moves his own household into Alice's on an invite (SB-76).
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -56,6 +57,7 @@ import {
 	getRotationTurns,
 	isHouseholdParent,
 	memberPointsBalance,
+	mergeHouseholdViaInvite,
 	NotHouseholdParentError,
 	reopenCompletion,
 	requireHouseholdParent,
@@ -2427,6 +2429,199 @@ try {
 		/chore_skips_chore_period_member_key/,
 	);
 	ok('reminders and skips: parents write, members read, assignees dismiss');
+
+	console.log('Merging a household on invite accept (SB-76):');
+	// Dave sets up his own household through RLS (so he's its owner), with a
+	// managed kid, Zoe, who has 7 points.
+	const [daveHome] = await authed.withAuth(dave.token, (tx) =>
+		tx
+			.insert(households)
+			.values({ name: 'Smoke test Dave home', setupCompletedAt: new Date() })
+			.returning(),
+	);
+	const zoe = await authed.withAuth(dave.token, async (tx) => {
+		const [kid] = await tx
+			.insert(householdMembers)
+			.values({ householdId: daveHome.id, role: 'kid', displayName: 'Zoe' })
+			.returning();
+		await tx.insert(pointsLedger).values({
+			householdId: daveHome.id,
+			memberId: kid.id,
+			delta: 7,
+			reason: 'adjustment',
+			note: 'Smoke test',
+		});
+		return kid;
+	});
+	const daveInvite = createInviteToken();
+	const bobToDave = createInviteToken();
+	await admin.insert(householdInvites).values([
+		{
+			householdId: household.id,
+			email: dave.email,
+			role: 'parent',
+			tokenHash: daveInvite.tokenHash,
+		},
+		{
+			householdId: daveHome.id,
+			email: bob.email,
+			role: 'parent',
+			tokenHash: bobToDave.tokenHash,
+		},
+	]);
+	const [thirdHouse] = await admin
+		.insert(households)
+		.values({
+			name: 'Smoke test third house',
+			createdBy: alice.id,
+			setupCompletedAt: new Date(),
+		})
+		.returning();
+	await expectRejected(
+		"Bob (a parent, not an owner) moving Alice's household into Dave's",
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				mergeHouseholdViaInvite(tx, bobToDave.token, household.id),
+			),
+		/only an owner of the household can move it/,
+	);
+	await expectRejected(
+		"Carol merging with Dave's invite (wrong email)",
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				mergeHouseholdViaInvite(tx, daveInvite.token, daveHome.id),
+			),
+		/invite is for a different email/,
+	);
+	await expectRejected(
+		"Dave naming someone else's household",
+		() =>
+			authed.withAuth(dave.token, (tx) =>
+				mergeHouseholdViaInvite(tx, daveInvite.token, thirdHouse.id),
+			),
+		/only an owner of the household can move it/,
+	);
+	await expectRejected(
+		'Dave naming the household the invite is for',
+		() =>
+			authed.withAuth(dave.token, (tx) =>
+				mergeHouseholdViaInvite(tx, daveInvite.token, household.id),
+			),
+		/that is the household the invite is for/,
+	);
+	await admin.delete(households).where(eq(households.id, thirdHouse.id));
+
+	// Fill Alice's household to 12 kids: Zoe would be the 13th.
+	const [{ kids }] = await admin
+		.select({ kids: sql<number>`count(*)::int` })
+		.from(householdMembers)
+		.where(
+			and(
+				eq(householdMembers.householdId, household.id),
+				eq(householdMembers.role, 'kid'),
+			),
+		);
+	const mergeFillers = await admin
+		.insert(householdMembers)
+		.values(
+			Array.from({ length: 12 - kids }, (_, i) => ({
+				householdId: household.id,
+				role: 'kid' as const,
+				displayName: `Filler ${i + 1}`,
+			})),
+		)
+		.returning({ id: householdMembers.id });
+	await expectRejected(
+		'a merge that would take the household past 12 kids',
+		() =>
+			authed.withAuth(dave.token, (tx) =>
+				mergeHouseholdViaInvite(tx, daveInvite.token, daveHome.id),
+			),
+		/household is full/,
+	);
+	await admin.delete(householdMembers).where(
+		inArray(
+			householdMembers.id,
+			mergeFillers.map((f) => f.id),
+		),
+	);
+
+	// Atomic: a merge whose transaction fails afterwards leaves both
+	// households as they were (the PGlite check in the PR also fails one
+	// part-way through the function).
+	await expectRejected(
+		'a merge rolled back after it ran',
+		() =>
+			authed.withAuth(dave.token, async (tx) => {
+				await mergeHouseholdViaInvite(tx, daveInvite.token, daveHome.id);
+				throw new Error('roll back');
+			}),
+		/roll back/,
+	);
+	const [stillThere] = await admin
+		.select()
+		.from(households)
+		.where(eq(households.id, daveHome.id));
+	const [zoeStill] = await admin
+		.select()
+		.from(householdMembers)
+		.where(eq(householdMembers.id, zoe.id));
+	const [daveInviteRow] = await admin
+		.select()
+		.from(householdInvites)
+		.where(eq(householdInvites.tokenHash, daveInvite.tokenHash));
+	assert.ok(stillThere && zoeStill?.householdId === daveHome.id);
+	assert.equal(daveInviteRow.acceptedAt, null);
+	ok('a rolled-back merge leaves both households and the invite untouched');
+
+	const daveMemberId = await authed.withAuth(dave.token, (tx) =>
+		mergeHouseholdViaInvite(tx, daveInvite.token, daveHome.id),
+	);
+	const gone = await admin
+		.select()
+		.from(households)
+		.where(eq(households.id, daveHome.id));
+	assert.equal(gone.length, 0);
+	const moved = await authed.withAuth(alice.token, (tx) =>
+		tx
+			.select()
+			.from(householdMembers)
+			.where(
+				and(
+					eq(householdMembers.householdId, household.id),
+					inArray(householdMembers.displayName, ['Zoe']),
+				),
+			),
+	);
+	const daveRow = await authed.withAuth(dave.token, (tx) =>
+		tx
+			.select()
+			.from(householdMembers)
+			.where(eq(householdMembers.id, daveMemberId)),
+	);
+	assert.equal(daveRow[0]?.role, 'parent');
+	assert.equal(daveRow[0]?.householdId, household.id);
+	assert.equal(moved.length, 1);
+	assert.equal(moved[0].userId, null);
+	assert.equal(await balance(moved[0].id), 7);
+	const [carried] = await admin
+		.select()
+		.from(pointsLedger)
+		.where(eq(pointsLedger.memberId, moved[0].id));
+	assert.equal(carried.reason, 'adjustment');
+	assert.equal(carried.note, 'Carried over from Smoke test Dave home');
+	assert.equal(carried.createdBy, dave.id);
+	ok(
+		"Dave moves his household into Alice's: he's a parent, Zoe keeps her 7 points, his household is gone",
+	);
+	await expectRejected(
+		'merging with the same invite again',
+		() =>
+			authed.withAuth(dave.token, (tx) =>
+				mergeHouseholdViaInvite(tx, daveInvite.token, daveHome.id),
+			),
+		/invite already accepted/,
+	);
 
 	console.log('Leaving and removing:');
 	await expectNoRows('Bob removing Alice (owner)', () =>

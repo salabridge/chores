@@ -121,6 +121,52 @@ invitee signs up or in, then calls `acceptHouseholdInvite(tx, token)`
 their verified email matches, then creates their member row. The invite is
 the parent's approval; there's no separate approval step.
 
+### Merging a household on invite accept (SB-76)
+
+A user is in one household at a time, so an invite to someone who already
+has one is refused (`already-in-household`). That's a dead end for an owner
+(two parents each set up a household, then one invites the other), so an
+owner can instead move their household into the inviter's:
+`mergeHouseholdViaInvite(tx, token, householdId)`
+(`app.merge_household_via_invite`, custom migration `0023`). `householdId` is
+the household they saw on the confirm screen and agreed to give up.
+
+- **Checks.** The invite is checked exactly as for a plain accept (the shared
+  `app.claim_open_invite`: signed in, open, not expired, verified email
+  matches). Then the caller must be an owner of `householdId` (`not-owner`,
+  which is also what a household that doesn't exist gets), it can't be the
+  invite's household (`same-household`), and it must be their only
+  membership. The 12-kid cap applies to the combined household
+  (`household-full`). Each refusal has a stable HINT, as in `0020`.
+- **Members move** as new rows in the target: the caller with the invite's
+  role, other owners and parents as `parent`, kids (managed or with a login) as
+  kids. Nobody moves in above the invite's role, so with a kid invite everyone
+  joins as a kid: the invite is the target's only approval. Display name,
+  avatar, birth year and weekly goal come along, and so do PINs (with their
+  lockout state) for members who are parents in the target. A user who's
+  already in the target is skipped.
+- **Points**: each moved member with a non-zero balance gets one `adjustment`
+  row in the target ("Carried over from {old household}", `created_by` the
+  caller). A negative balance carries over too.
+- **Everything else is deleted** with the old household: chores, stages,
+  rotations, instances, completions, rewards, claims, skips, reminders,
+  invites and ledger history, so streaks start fresh. Completions and reward
+  claims are deleted explicitly before the household (their FKs to chores,
+  instances and rewards are NO ACTION / RESTRICT), so the delete doesn't
+  depend on cascade order. Device profiles acting as an old kid fall back to
+  the parent's view (the FK sets `active_member_id` NULL).
+- **Atomic and serialized.** It's one statement: a failure anywhere leaves both
+  households as they were. It takes the invite row, the caller's accept lock
+  (shared with `accept_household_invite`) and both household rows in id order,
+  so concurrent merges wait instead of deadlocking, and nothing can be added to
+  the old household while it runs.
+
+Bringing chores and rewards across, and telling the inviter, are follow-ups.
+
+**Leaving.** Anyone may delete their own membership (the delete policy). The
+web app does it on the server for a non-owner who wants to accept an invite
+instead, and refuses to remove a household's only owner.
+
 **Setup** (`households.setup_completed_at`, SB-56): NULL while the creator is in the
 web app's first-run setup flow (`/setup`); set when they finish. Households that
 existed when column `0016` landed were backfilled as finished, and a partial
@@ -533,7 +579,7 @@ role. Access follows household membership and role:
 | `households`            | members (and creator) | anyone can create one (and becomes owner); owners update/delete                         |
 | `household_members`     | members               | owners add/change/remove anyone; parents add managed kids and change/remove kids and edit their own profile; anyone can leave |
 | `household_member_pins` | the parent themselves | the parent themselves                                                                   |
-| `household_invites`     | parents               | parents invite kids, owners invite parents; delete to revoke; accept via `app.accept_household_invite` |
+| `household_invites`     | parents               | parents invite kids, owners invite parents; delete to revoke; accept via `app.accept_household_invite` (or `app.merge_household_via_invite`) |
 | `chores`                | members               | parents; `assigned_member_id` must be a member of the same household                    |
 | `chore_stages`          | members               | parents                                                                                 |
 | `chore_instances`       | members               | any member can start a period (insert); parents update/delete                           |
@@ -594,6 +640,11 @@ the hand-off triggers, and the commit-time rotation check.
 `done_by_member_id` column, then hand-written: it replaces the 0011 completion
 functions (drop and create, since they gain a `done_by` argument) and moves
 the turn move out of `app.advance_chore_rotation` into an internal function.
+`0023_household_merge_via_invite.sql` (SB-76) is hand-written (`drizzle-kit
+generate --custom`, so the snapshot is unchanged): `app.merge_household_via_invite`,
+and the invite checks moved out of `app.accept_household_invite` into the
+internal `app.claim_open_invite`, which both call (accept's behaviour is
+unchanged).
 
 **Two connection strings** (see `.env.example`):
 
@@ -646,7 +697,11 @@ excluding the member whose turn it is. For favours (SB-74) it covers a kid
 doing a sibling's chore, rotation turn and stages (points to the kid, the
 chore and turn still the sibling's), a parent recording the doer, reopening
 taking the points back from the doer, a kid naming someone else, and a member
-of another household refused as the doer. It also checks the FKs and
+of another household refused as the doer. For merging a household on invite
+accept (SB-76) it covers a non-owner, the wrong email, someone else's
+household id, the invite's own household, the combined kid limit, a merge
+rolled back with its transaction, and a successful merge (roles, the
+carried-over balance and its ledger row, the old household gone). It also checks the FKs and
 the one-row-per-user constraint. It deletes everything it created when it
 finishes.
 
