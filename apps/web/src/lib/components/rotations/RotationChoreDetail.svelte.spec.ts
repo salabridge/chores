@@ -8,6 +8,7 @@ import {
 	toiletDone,
 	toiletDoneFavour,
 	toiletFavour,
+	toiletPendingFavour,
 	toiletWaiting,
 } from './fixtures.ts';
 import RotationChoreDetail from './RotationChoreDetail.svelte';
@@ -123,5 +124,36 @@ describe('RotationChoreDetail.svelte', () => {
 			...handlers(),
 		});
 		await expect.element(page.getByText('Nobody yet')).toBeVisible();
+	});
+
+	const favourActions = () => ({
+		approve: vi.fn(async (_id: string) => {}),
+		decline: vi.fn(async (_id: string) => {}),
+		askParent: vi.fn(async (_id: string) => {}),
+	});
+
+	it('asks the turn-holder to approve a pending favour', async () => {
+		const actions = favourActions();
+		render(RotationChoreDetail, {
+			detail: { ...toiletPendingFavour, isMyTurn: true },
+			...handlers(),
+			favourActions: actions,
+			viewer: { id: 'mia', isParent: false },
+		});
+		await page.getByRole('button', { name: "Yes, it's done" }).click();
+		expect(actions.approve).toHaveBeenCalledWith('c1');
+		expect(
+			page.getByRole('button', { name: 'Mark my turn done' }).elements(),
+		).toHaveLength(0);
+	});
+
+	it('shows the doer that it waits for the turn-holder', async () => {
+		render(RotationChoreDetail, {
+			detail: toiletPendingFavour,
+			...handlers(),
+			favourActions: favourActions(),
+			viewer: { id: 'leo', isParent: false },
+		});
+		await expect.element(page.getByText('Waiting for Mia')).toBeVisible();
 	});
 });

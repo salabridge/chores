@@ -51,4 +51,28 @@ describe('ParentSidebar.svelte', () => {
 		await expect.element(page.getByText('Co-Captains')).toBeVisible();
 		await expect.element(page.getByText('PARENT PORTAL ACTIVE')).toBeVisible();
 	});
+
+	it('badges Overview with the favours waiting', async () => {
+		const view = render(ParentSidebar, {
+			pathname: '/chores',
+			pendingFavours: 3,
+		});
+		await expect
+			.element(page.getByTestId('favours-badge'))
+			.toHaveTextContent('3');
+		await expect
+			.element(
+				page.getByRole('link', { name: 'Overview 3 favours to approve' }),
+			)
+			.toBeVisible();
+		await view.rerender({ pendingFavours: 12 });
+		await expect
+			.element(page.getByTestId('favours-badge'))
+			.toHaveTextContent('9+');
+	});
+
+	it('has no badge when nothing waits', async () => {
+		render(ParentSidebar, { pathname: '/overview', pendingFavours: 0 });
+		expect(page.getByTestId('favours-badge').elements()).toHaveLength(0);
+	});
 });

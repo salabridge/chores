@@ -48,7 +48,7 @@
 					Help out
 				</span>
 				<span class="text-[13px] text-text-secondary">
-					{plural(items.length, 'open chore')} from others. Do one and the points are yours.
+					{plural(items.length, 'open chore')} from others. Do one, its owner approves it, then you get the points.
 				</span>
 			</span>
 			<svg

@@ -6,6 +6,7 @@
 	import RotationChoreDetail from '#lib/components/rotations/RotationChoreDetail.svelte';
 	import PageHeader from '#lib/components/shell/PageHeader.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
+	import { favourActions } from '#lib/favour-client.js';
 	import { completeStage, completeTurn } from '#lib/rotation-detail.remote.js';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
@@ -65,6 +66,8 @@
 		doerOptions={data.doerOptions}
 		{oncomplete}
 		{oncompletestage}
+		{favourActions}
+		viewer={{ id: data.viewerId, isParent: data.canEdit }}
 	/>
 {:else if data.personal}
 	<PageHeader label="Personal Chore" actions={data.canEdit ? editAction : undefined} />
@@ -72,6 +75,8 @@
 		detail={data.personal}
 		doerOptions={data.doerOptions}
 		onstagedone={() => invalidateAll()}
+		{favourActions}
+		viewer={{ id: data.viewerId, isParent: data.canEdit }}
 	/>
 {/if}
 

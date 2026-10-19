@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import { leoFavours, miaFavours } from '../favours/fixtures.ts';
 import {
 	emptyToday,
 	helpOutToday,
@@ -137,5 +138,34 @@ describe('TodayScreen.svelte', () => {
 	it('has no Later this week group without upcoming chores', async () => {
 		render(TodayScreen, { data: todayData });
 		expect(page.getByTestId('later-this-week').elements()).toHaveLength(0);
+	});
+
+	it('puts the "Needs your OK" card on Today', async () => {
+		const approve = vi.fn(async (_id: string) => {});
+		render(TodayScreen, {
+			data: todayData,
+			favours: leoFavours,
+			favourActions: { approve, decline: vi.fn(), askParent: vi.fn() },
+		});
+		await expect
+			.element(page.getByTestId('favour-approval'))
+			.toHaveTextContent('Mia says they did Take Out Trash');
+		await page.getByRole('button', { name: "Yes, it's done" }).click();
+		expect(approve).toHaveBeenCalledWith('c1');
+	});
+
+	it("shows the member's pending favours and their outcomes", async () => {
+		render(TodayScreen, {
+			data: todayData,
+			favours: miaFavours,
+			favourActions: { approve: vi.fn(), decline: vi.fn(), askParent: vi.fn() },
+		});
+		await expect.element(page.getByText('Waiting for Leo')).toBeVisible();
+		await expect.element(page.getByText('+10 pts, Leo approved')).toBeVisible();
+	});
+
+	it('shows no favour cards without favours', async () => {
+		render(TodayScreen, { data: todayData });
+		expect(page.getByTestId('favour-approval').elements()).toHaveLength(0);
 	});
 });

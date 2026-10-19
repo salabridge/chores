@@ -170,3 +170,22 @@ export const overviewNotes: OverviewNote[] = [
 		text: 'Feed Dog is done, so Leo is up next.',
 	},
 ];
+
+/** SB-80: Mia says she did Leo's chore; it shows "Pending: Mia". */
+export const pendingFavourRow: ChoreStatusRow = {
+	choreId: 'trash',
+	instanceId: 'i-trash',
+	completionId: null,
+	title: 'Take Out Trash',
+	context: "Leo's personal chore • due today",
+	assignee: { memberId: 'leo', name: 'Leo' },
+	doneBy: null,
+	pendingFavour: {
+		completionId: 'c1',
+		doneBy: { memberId: 'mia', name: 'Mia' },
+		escalated: false,
+	},
+	status: 'todo',
+	points: 10,
+	isLoop: false,
+};

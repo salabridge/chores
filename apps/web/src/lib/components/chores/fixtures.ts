@@ -157,3 +157,13 @@ export const goalReachedCompletion: CompletionSummary = {
 	totalPoints: 215,
 	goal: goal(215, 200),
 };
+
+/** Mia's chore, with Leo's favour waiting for her OK (SB-80). */
+export const roomPendingFavour: PersonalDetail = {
+	...roomReadOnly,
+	pendingFavour: {
+		completionId: 'c1',
+		doneBy: { memberId: 'leo', name: 'Leo' },
+		escalated: false,
+	},
+};

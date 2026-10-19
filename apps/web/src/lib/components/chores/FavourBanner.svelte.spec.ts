@@ -8,7 +8,7 @@ describe('FavourBanner.svelte', () => {
 		render(FavourBanner, { ownerName: 'Leo' });
 		await expect.element(page.getByText("This is Leo's chore.")).toBeVisible();
 		await expect
-			.element(page.getByText("You'll get the points."))
+			.element(page.getByText('Leo approves it, then you get the points.'))
 			.toBeVisible();
 	});
 
@@ -17,6 +17,8 @@ describe('FavourBanner.svelte', () => {
 		await expect
 			.element(page.getByText('Choose who did it below. They get the points.'))
 			.toBeVisible();
-		expect(page.getByText("You'll get the points.").elements()).toHaveLength(0);
+		expect(
+			page.getByText('Leo approves it, then you get the points.').elements(),
+		).toHaveLength(0);
 	});
 });

@@ -4,7 +4,7 @@
 	import { VisualTestGrid, visualTestParameters } from '#lib/visual-test/index.js';
 	import * as thisFile from './ChoreStatusTable.stories.svelte';
 	import ChoreStatusTable from './ChoreStatusTable.svelte';
-	import { overviewRows } from './fixtures.ts';
+	import { overviewRows, pendingFavourRow } from './fixtures.ts';
 
 	const { Story } = defineMeta({
 		title: 'Overview/ChoreStatusTable',
@@ -41,6 +41,8 @@
 	args={{ actions }}
 	parameters={{ layout: 'fullscreen' }}
 />
+
+<Story name="Pending favour" args={{ rows: [pendingFavourRow, ...overviewRows.slice(0, 2)], actions }} />
 
 <Story
 	name="Visual test"

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import TodayFavours from '#lib/components/favours/TodayFavours.svelte';
 	import Badge from '#lib/components/ui/Badge.svelte';
 	import ChoreCard from '#lib/components/ui/ChoreCard.svelte';
 	import MemberAvatar from '#lib/components/ui/MemberAvatar.svelte';
@@ -7,6 +8,7 @@
 	import StreakBanner from '#lib/components/ui/StreakBanner.svelte';
 	import SummaryTile from '#lib/components/ui/SummaryTile.svelte';
 	import WeeklyProgressCard from '#lib/components/ui/WeeklyProgressCard.svelte';
+	import type { FavourActions, MemberFavours } from '#lib/favour-approval.js';
 	import { plural } from '#lib/overview.js';
 	import {
 		choreHref,
@@ -18,7 +20,14 @@
 	import HelpOut from './HelpOut.svelte';
 	import LaterThisWeek from './LaterThisWeek.svelte';
 
-	let { data }: { data: TodayData } = $props();
+	interface Props {
+		data: TodayData;
+		/** Favours waiting for the viewer's OK and the ones they did (SB-80). */
+		favours?: MemberFavours | null;
+		favourActions?: FavourActions;
+	}
+
+	let { data, favours = null, favourActions }: Props = $props();
 
 	// Chores the member can still act on today, for the streak banner's note.
 	const stillToDo = $derived(
@@ -113,6 +122,10 @@
 		</div>
 		<PointsPill points={data.points} variant="header" />
 	</div>
+
+	{#if favours && favourActions}
+		<TodayFavours {favours} actions={favourActions} />
+	{/if}
 
 	<div class="flex flex-col gap-12 lg:flex-row lg:items-center lg:justify-between lg:gap-24">
 		<h1 class="font-display text-[30px] font-semibold text-text-primary lg:text-[40px]">

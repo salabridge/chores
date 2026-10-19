@@ -8,6 +8,7 @@ import {
 	roomDoneFavour,
 	roomFavour,
 	roomLastStage,
+	roomPendingFavour,
 	roomReadOnly,
 	singleStepDetail,
 } from './fixtures.ts';
@@ -102,7 +103,7 @@ describe('PersonalChoreDetail.svelte', () => {
 		render(PersonalChoreDetail, { detail: roomFavour });
 		await expect.element(page.getByText("This is Mia's chore.")).toBeVisible();
 		await expect
-			.element(page.getByText("You'll get the points."))
+			.element(page.getByText('Mia approves it, then you get the points.'))
 			.toBeVisible();
 		await expect
 			.element(page.getByRole('button', { name: 'Complete Stage 2' }))
@@ -152,5 +153,42 @@ describe('PersonalChoreDetail.svelte', () => {
 		render(PersonalChoreDetail, { detail: roomDone });
 		await expect.element(page.getByText('Chore complete')).toBeVisible();
 		expect(page.getByRole('button').elements()).toHaveLength(0);
+	});
+
+	const favourProps = () => ({
+		favourActions: {
+			approve: vi.fn(async (_id: string) => {}),
+			decline: vi.fn(async (_id: string) => {}),
+			askParent: vi.fn(async (_id: string) => {}),
+		},
+	});
+
+	it('asks the owner to approve a pending favour instead of offering Mark Done', async () => {
+		const p = favourProps();
+		render(PersonalChoreDetail, {
+			detail: { ...roomPendingFavour, isAssignee: true },
+			viewer: { id: 'mia', isParent: false },
+			...p,
+		});
+		await expect
+			.element(page.getByTestId('favour-approval'))
+			.toHaveTextContent('Leo says they did');
+		expect(
+			page.getByRole('button', { name: 'Mark Done' }).elements(),
+		).toHaveLength(0);
+		await page.getByRole('button', { name: 'Not done' }).click();
+		expect(p.favourActions.decline).toHaveBeenCalledWith('c1');
+	});
+
+	it('shows the doer that it waits for the owner, with Ask a parent', async () => {
+		const p = favourProps();
+		render(PersonalChoreDetail, {
+			detail: roomPendingFavour,
+			viewer: { id: 'leo', isParent: false },
+			...p,
+		});
+		await expect.element(page.getByText('Waiting for Mia')).toBeVisible();
+		await page.getByRole('button', { name: 'Ask a parent' }).click();
+		expect(p.favourActions.askParent).toHaveBeenCalledWith('c1');
 	});
 });

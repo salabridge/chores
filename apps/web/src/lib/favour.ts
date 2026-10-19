@@ -9,7 +9,8 @@ export const possessive = (name: string) => `${name}'s`;
 export const favourBannerTitle = (ownerName: string) =>
 	`This is ${possessive(ownerName)} chore.`;
 
-export const favourBannerText = "You'll get the points.";
+export const favourBannerText = (ownerName: string) =>
+	`${ownerName} approves it, then you get the points.`;
 
 /** The same banner for a parent, who picks who did it. */
 export const recordBannerText = 'Choose who did it below. They get the points.';
@@ -27,3 +28,6 @@ export const reopenFavourText = (points: number, doerName: string) =>
 
 /** The label over the parent's "who did it" select. */
 export const DONE_BY_LABEL = 'Done by';
+
+/** "Pending: Mia" in the overview status table, while a favour waits for an OK. */
+export const pendingByText = (name: string) => `Pending: ${name}`;

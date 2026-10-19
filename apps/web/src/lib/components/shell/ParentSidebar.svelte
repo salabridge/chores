@@ -1,16 +1,21 @@
 <script lang="ts">
 	import Logo from '#lib/components/ui/Logo.svelte';
 	import MemberAvatar from '#lib/components/ui/MemberAvatar.svelte';
+	import { navBadgeText } from '#lib/favour-approval.js';
+	import { plural } from '#lib/overview.js';
 	import { parentLabel } from '#lib/parent-label.js';
 
 	let {
 		pathname,
 		parentNames = [],
+		pendingFavours = 0,
 	}: {
 		/** Current URL path, used to mark the active nav item. */
 		pathname: string;
 		/** Display names of the household's parents, for the footer. */
 		parentNames?: string[];
+		/** Favours waiting for a decision (SB-80); a count badge on Overview. */
+		pendingFavours?: number;
 	} = $props();
 
 	const items = [
@@ -131,6 +136,15 @@
 								{/if}
 							</svg>
 							{item.label}
+							{#if item.href === '/overview' && pendingFavours > 0}
+								<span
+									class="ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-accent-orange px-6 py-2 text-[11px] font-bold text-text-default"
+									data-testid="favours-badge"
+								>
+									<span aria-hidden="true">{navBadgeText(pendingFavours)}</span>
+									<span class="sr-only">{plural(pendingFavours, 'favour')} to approve</span>
+								</span>
+							{/if}
 						</a>
 					</li>
 				{/each}

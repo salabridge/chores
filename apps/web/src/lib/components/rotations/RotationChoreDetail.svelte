@@ -3,12 +3,14 @@
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import DoneBySelect from '#lib/components/chores/DoneBySelect.svelte';
 	import FavourBanner from '#lib/components/chores/FavourBanner.svelte';
+	import PendingFavourNotice from '#lib/components/favours/PendingFavourNotice.svelte';
 	import StickyActionBar from '#lib/components/shell/StickyActionBar.svelte';
 	import Callout from '#lib/components/ui/Callout.svelte';
 	import DoneByLabel from '#lib/components/ui/DoneByLabel.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import RotationLoopVisual from '#lib/components/ui/RotationLoopVisual.svelte';
 	import StageStep from '#lib/components/ui/StageStep.svelte';
+	import type { FavourActions } from '#lib/favour-approval.js';
 	import {
 		advanceText,
 		ctaLabel,
@@ -34,9 +36,19 @@
 		 * (SB-75). Leave out for everyone else.
 		 */
 		doerOptions?: MemberOption[];
+		/** Decisions on a pending favour (SB-80); see `PersonalChoreDetail`. */
+		favourActions?: FavourActions;
+		viewer?: { id: string; isParent: boolean };
 	}
 
-	let { detail, oncomplete, oncompletestage, doerOptions }: Props = $props();
+	let {
+		detail,
+		oncomplete,
+		oncompletestage,
+		doerOptions,
+		favourActions,
+		viewer,
+	}: Props = $props();
 
 	const canAct = $derived(detail.canComplete || detail.canCompleteForTurnHolder);
 	const recording = $derived(Boolean(doerOptions?.length) && canAct);
@@ -145,6 +157,15 @@
 
 	{#if canAct}
 		<Callout tone="action" title="How to complete this turn">{howToText(detail)}</Callout>
+	{:else if detail.pendingFavour && favourActions && viewer}
+		<PendingFavourNotice
+			favour={detail.pendingFavour}
+			title={detail.title}
+			points={detail.points}
+			ownerName={detail.activeTurn?.name ?? null}
+			viewer={{ ...viewer, isOwner: detail.isMyTurn }}
+			actions={favourActions}
+		/>
 	{:else}
 		<Callout tone={detail.completedThisPeriod ? 'success' : 'info'} title={waitingTitle}>
 			{waitingText(detail)}
