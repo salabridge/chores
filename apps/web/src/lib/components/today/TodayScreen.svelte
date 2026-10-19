@@ -15,6 +15,7 @@
 		type TodayData,
 		type TodayItem,
 	} from '#lib/today.js';
+	import HelpOut from './HelpOut.svelte';
 	import LaterThisWeek from './LaterThisWeek.svelte';
 
 	let { data }: { data: TodayData } = $props();
@@ -172,4 +173,7 @@
 
 	<!-- Weekly chores due on a later day (SB-71); renders nothing when there are none. -->
 	<LaterThisWeek items={data.later} />
+
+	<!-- Other members' open chores to pick up for the points (SB-75); renders nothing when there are none. -->
+	<HelpOut items={data.helpOut} />
 </div>

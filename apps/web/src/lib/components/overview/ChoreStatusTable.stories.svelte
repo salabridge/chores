@@ -24,11 +24,23 @@
 
 <Story name="Actions not available yet" />
 
+<Story
+	name="Done as a favour"
+	args={{ rows: overviewRows.filter((r) => r.doneBy), actions }}
+/>
+
 <Story name="With actions" args={{ actions }} />
 
 <Story name="Failing action" args={{ actions: failing }} />
 
 <Story name="Empty" args={{ rows: [] }} />
+
+<!-- Full width, so the Visual test shows the table layout next to the stacked one. -->
+<Story
+	name="Wide"
+	args={{ actions }}
+	parameters={{ layout: 'fullscreen' }}
+/>
 
 <Story
 	name="Visual test"

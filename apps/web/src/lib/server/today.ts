@@ -19,6 +19,7 @@ import { streakWeek } from '../streak.ts';
 import {
 	buildToday,
 	dueDayFor,
+	type HelpOutFacts,
 	type PersonalFacts,
 	type RotationFacts,
 	type TodayData,
@@ -142,6 +143,7 @@ export async function loadToday(
 						periodStart: choreInstances.periodStart,
 						assignedMemberId: choreInstances.assignedMemberId,
 						completionId: choreCompletions.id,
+						doneById: choreCompletions.doneByMemberId,
 						// Whoever did it: the doer when someone did it for the
 						// assignee (SB-74), otherwise the assignee.
 						completerId: sql<
@@ -197,14 +199,36 @@ export async function loadToday(
 
 	const personal: PersonalFacts[] = [];
 	const rotations: RotationFacts[] = [];
+	const helpOut: HelpOutFacts[] = [];
 	for (const { chore, periodStart } of dueChores) {
 		const instance = instanceByChore.get(chore.id);
 		const completed = instance?.completionId != null;
 
 		if (chore.type === 'personal') {
 			const owner = instance?.assignedMemberId ?? chore.assignedMemberId;
-			if (owner !== member.id) continue;
 			if (skipped.has(skipKey(chore.id, periodStart))) continue;
+			if (owner !== member.id) {
+				// Another member's open chore, for "Help out" (SB-75). Done,
+				// unassigned and not-yet-due ones are left out.
+				const ownerName = owner ? names.get(owner) : undefined;
+				const due = dueDayFor(chore, periodStart, clock.today);
+				if (owner && ownerName && !completed && due?.state !== 'upcoming') {
+					helpOut.push({
+						kind: 'personal',
+						choreId: chore.id,
+						title: chore.title,
+						points: chore.points,
+						ownerId: owner,
+						ownerName,
+						frequency: chore.frequency,
+						dueTime: chore.dueTime,
+						dueLabel: chore.dueLabel,
+						due,
+						stages: stagesFor(chore.id, instance?.id),
+					});
+				}
+				continue;
+			}
 			personal.push({
 				choreId: chore.id,
 				title: chore.title,
@@ -215,12 +239,43 @@ export async function loadToday(
 				due: dueDayFor(chore, periodStart, clock.today),
 				stages: stagesFor(chore.id, instance?.id),
 				completed,
+				doneByName: instance?.doneById
+					? (names.get(instance.doneById) ?? null)
+					: null,
 			});
 			continue;
 		}
 
-		if (!viewerLoops.has(chore.id)) continue;
 		const rotation = rotationByChore.get(chore.id);
+		if (!viewerLoops.has(chore.id)) {
+			// Not the viewer's loop: another member's turn they could take
+			// (SB-75). Loops the viewer is in already show up on their own list.
+			const holder = rotation
+				? rotationTurns(
+						loopMembers.filter((m) => m.choreId === chore.id),
+						rotation.currentMemberId,
+						rotation.lastCompletedMemberId,
+					).activeTurn
+				: null;
+			const holderName = holder ? names.get(holder.memberId) : undefined;
+			const due = dueDayFor(chore, periodStart, clock.today);
+			if (holder && holderName && !completed && due?.state !== 'upcoming') {
+				helpOut.push({
+					kind: 'rotation',
+					choreId: chore.id,
+					title: chore.title,
+					points: chore.points,
+					ownerId: holder.memberId,
+					ownerName: holderName,
+					frequency: chore.frequency,
+					dueTime: chore.dueTime,
+					dueLabel: chore.dueLabel,
+					due,
+					stages: stagesFor(chore.id, instance?.id),
+				});
+			}
+			continue;
+		}
 		// The same turn the rotation screen shows: the stored one if still
 		// eligible, otherwise the first eligible member.
 		const turn = rotation
@@ -258,5 +313,6 @@ export async function loadToday(
 		}),
 		personal,
 		rotations,
+		helpOut,
 	});
 }

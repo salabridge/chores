@@ -1,17 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import { doerOptions } from '../chores/fixtures.ts';
 import {
 	dishwasherDetail,
 	toiletDetail,
 	toiletDone,
+	toiletDoneFavour,
+	toiletFavour,
 	toiletWaiting,
 } from './fixtures.ts';
 import RotationChoreDetail from './RotationChoreDetail.svelte';
 
 const handlers = () => ({
-	oncomplete: vi.fn(async () => {}),
-	oncompletestage: vi.fn(async (_stageId: string) => {}),
+	oncomplete: vi.fn(async (_doneBy?: string) => {}),
+	oncompletestage: vi.fn(async (_stageId: string, _doneBy?: string) => {}),
 });
 
 describe('RotationChoreDetail.svelte', () => {
@@ -72,6 +75,32 @@ describe('RotationChoreDetail.svelte', () => {
 		expect(page.getByRole('button').elements()).toHaveLength(0);
 	});
 
+	it("banners another member's turn and lets the member take it", async () => {
+		const h = handlers();
+		render(RotationChoreDetail, { detail: toiletFavour, ...h });
+		await expect.element(page.getByText("This is Mia's chore.")).toBeVisible();
+		await page.getByRole('button', { name: 'Mark my turn done' }).click();
+		expect(h.oncomplete).toHaveBeenCalledWith(undefined);
+	});
+
+	it('lets a parent record who did the turn, starting on the turn-holder', async () => {
+		const h = handlers();
+		render(RotationChoreDetail, {
+			detail: toiletFavour,
+			doerOptions,
+			...h,
+		});
+		await expect.element(page.getByLabelText('Done by')).toHaveValue('mia');
+		await page.getByLabelText('Done by').selectOptions('dad');
+		await page.getByRole('button', { name: 'Mark my turn done' }).click();
+		expect(h.oncomplete).toHaveBeenCalledWith('dad');
+	});
+
+	it('shows who did a finished turn when it was not the turn-holder', async () => {
+		render(RotationChoreDetail, { detail: toiletDoneFavour, ...handlers() });
+		await expect.element(page.getByText('Done by Leo')).toBeVisible();
+	});
+
 	it('says the turn is done and offers no button afterwards', async () => {
 		render(RotationChoreDetail, { detail: toiletDone, ...handlers() });
 		await expect.element(page.getByText('Turn complete')).toBeVisible();
@@ -84,7 +113,7 @@ describe('RotationChoreDetail.svelte', () => {
 		await expect.element(page.getByText('Load the dishwasher')).toBeVisible();
 		await expect.element(page.getByText('Current stage')).toBeVisible();
 		await page.getByRole('button', { name: 'Finish stage 2 of 3' }).click();
-		expect(h.oncompletestage).toHaveBeenCalledWith('s2');
+		expect(h.oncompletestage).toHaveBeenCalledWith('s2', undefined);
 		expect(h.oncomplete).not.toHaveBeenCalled();
 	});
 

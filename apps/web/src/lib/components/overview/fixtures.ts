@@ -65,7 +65,8 @@ export const overviewRows: ChoreStatusRow[] = [
 		title: 'Make Bed',
 		context: "Leo's personal chore • done",
 		assignee: { memberId: 'leo', name: 'Leo' },
-		doneBy: null,
+		// Mia did it as a favour (SB-75).
+		doneBy: { memberId: 'mia', name: 'Mia' },
 		status: 'completed',
 		points: 5,
 		isLoop: false,

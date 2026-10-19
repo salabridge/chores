@@ -118,6 +118,12 @@ export const toiletWaiting: RotationDetail = {
 	nextUp: leo,
 	isMyTurn: false,
 	canComplete: false,
+	canCompleteForTurnHolder: false,
+};
+
+/** Mia holds the turn and it's open: Leo can take it for her and get the points (SB-75). */
+export const toiletFavour: RotationDetail = {
+	...toiletWaiting,
 	canCompleteForTurnHolder: true,
 };
 
@@ -125,7 +131,12 @@ export const toiletWaiting: RotationDetail = {
 export const toiletDone: RotationDetail = {
 	...toiletWaiting,
 	completedThisPeriod: true,
-	canCompleteForTurnHolder: false,
+};
+
+/** Done by Leo for the turn-holder; the turn moved on all the same. */
+export const toiletDoneFavour: RotationDetail = {
+	...toiletDone,
+	doneBy: { memberId: 'leo', name: 'Leo' },
 };
 
 /** A staged rotation (the mocks don't cover this; see the PR notes). */

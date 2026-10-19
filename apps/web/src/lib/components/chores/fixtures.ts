@@ -64,15 +64,24 @@ export const singleStepDetail: PersonalDetail = {
 	stages: [],
 };
 
-/** Someone else's chore: the screen reads as view only. */
+/** Someone else's chore that can't be done now: the screen reads as view only. */
 export const roomReadOnly: PersonalDetail = {
 	...roomDetail,
 	isAssignee: false,
 	canComplete: false,
-	canCompleteForAssignee: true,
+	canCompleteForAssignee: false,
 	assigneeId: 'mia',
 	assigneeName: 'Mia',
 };
+
+/** Mia's open chore, seen by Leo: he can do it for her and get the points (SB-75). */
+export const roomFavour: PersonalDetail = {
+	...roomReadOnly,
+	canCompleteForAssignee: true,
+};
+
+/** The members a parent can name as the doer. */
+export const doerOptions: MemberOption[] = householdMembers;
 
 /** Done for this period. */
 export const roomDone: PersonalDetail = {
@@ -80,6 +89,15 @@ export const roomDone: PersonalDetail = {
 	completedThisPeriod: true,
 	canComplete: false,
 	stages: roomDetail.stages.map((s) => ({ ...s, state: 'completed' as const })),
+};
+
+/** Mia's chore, done by Leo as a favour. */
+export const roomDoneFavour: PersonalDetail = {
+	...roomDone,
+	isAssignee: false,
+	assigneeId: 'mia',
+	assigneeName: 'Mia',
+	doneBy: { memberId: 'leo', name: 'Leo' },
 };
 
 // Completion celebration screen (SB-42)
@@ -114,6 +132,14 @@ export const roomCompletion: CompletionSummary = {
 	totalPoints: 135,
 	rotation: null,
 	goal: goal(135, 200),
+};
+
+/** Leo did Mia's chore: the points are his, the chore is covered (SB-75). */
+export const favourCompletion: CompletionSummary = {
+	...roomCompletion,
+	doneFor: { memberId: 'mia', name: 'Mia' },
+	points: 10,
+	totalPoints: 130,
 };
 
 /** The weekly goal is met. */

@@ -1,7 +1,11 @@
 <script lang="ts">
+	import type { MemberOption } from '#lib/chore-creator.js';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
+	import DoneBySelect from '#lib/components/chores/DoneBySelect.svelte';
+	import FavourBanner from '#lib/components/chores/FavourBanner.svelte';
 	import StickyActionBar from '#lib/components/shell/StickyActionBar.svelte';
 	import Callout from '#lib/components/ui/Callout.svelte';
+	import DoneByLabel from '#lib/components/ui/DoneByLabel.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import RotationLoopVisual from '#lib/components/ui/RotationLoopVisual.svelte';
 	import StageStep from '#lib/components/ui/StageStep.svelte';
@@ -18,13 +22,27 @@
 
 	interface Props {
 		detail: RotationDetail;
-		/** Completes the turn (no stages). Throw an Error with a message to show it. */
-		oncomplete: () => Promise<void>;
+		/**
+		 * Completes the turn (no stages). `doneBy` is set only when a parent
+		 * picked who did it. Throw an Error with a message to show it.
+		 */
+		oncomplete: (doneBy?: string) => Promise<void>;
 		/** Checks off one stage; the last one completes the turn. Same error handling. */
-		oncompletestage: (stageId: string) => Promise<void>;
+		oncompletestage: (stageId: string, doneBy?: string) => Promise<void>;
+		/**
+		 * Household members a parent in their own view can name as the doer
+		 * (SB-75). Leave out for everyone else.
+		 */
+		doerOptions?: MemberOption[];
 	}
 
-	let { detail, oncomplete, oncompletestage }: Props = $props();
+	let { detail, oncomplete, oncompletestage, doerOptions }: Props = $props();
+
+	const canAct = $derived(detail.canComplete || detail.canCompleteForTurnHolder);
+	const recording = $derived(Boolean(doerOptions?.length) && canAct);
+	// Starts on the turn-holder, so recording the turn as it stands credits them.
+	let chosenDoer = $state<string | null>(null);
+	const doneBy = $derived(chosenDoer ?? detail.activeTurn?.memberId ?? '');
 
 	let pending = $state(false);
 	let error = $state<string | null>(null);
@@ -44,10 +62,11 @@
 		pending = true;
 		error = null;
 		try {
+			const doer = recording ? doneBy : undefined;
 			if (detail.stages.length > 0 && currentStage) {
-				await oncompletestage(currentStage.id);
+				await oncompletestage(currentStage.id, doer);
 			} else {
-				await oncomplete();
+				await oncomplete(doer);
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Something went wrong. Try again.';
@@ -120,17 +139,30 @@
 		</section>
 	{/if}
 
-	{#if detail.canComplete}
+	{#if detail.canCompleteForTurnHolder && detail.activeTurn}
+		<FavourBanner ownerName={detail.activeTurn.name} {recording} />
+	{/if}
+
+	{#if canAct}
 		<Callout tone="action" title="How to complete this turn">{howToText(detail)}</Callout>
 	{:else}
 		<Callout tone={detail.completedThisPeriod ? 'success' : 'info'} title={waitingTitle}>
 			{waitingText(detail)}
+			{#if detail.completedThisPeriod && detail.doneBy}
+				<DoneByLabel name={detail.doneBy.name} class="mt-8 flex" />
+			{/if}
 		</Callout>
 	{/if}
 </div>
 
-{#if detail.canComplete}
+{#if canAct}
 	<StickyActionBar>
+		{#if recording && doerOptions}
+			<DoneBySelect
+				members={doerOptions}
+				bind:value={() => doneBy, (v) => (chosenDoer = v)}
+			/>
+		{/if}
 		<PrimaryButton {pending} onclick={submit}>{ctaLabel(detail)}</PrimaryButton>
 	</StickyActionBar>
 {/if}

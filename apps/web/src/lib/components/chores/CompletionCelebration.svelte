@@ -11,6 +11,7 @@
 	} from '#lib/chore-completion.js';
 	import ConfettiBurst from '#lib/components/ui/ConfettiBurst.svelte';
 	import ProgressBar from '#lib/components/ui/ProgressBar.svelte';
+	import { doneForText } from '#lib/favour.js';
 
 	interface Props {
 		summary: CompletionSummary;
@@ -53,6 +54,11 @@
 
 		<div class="flex w-full flex-col items-center gap-12 text-center">
 			<h1 class="font-display text-[28px] font-bold">{celebrationHeading(summary.memberName)}</h1>
+			{#if summary.doneFor}
+				<p class="text-[18px] font-bold" data-testid="done-for">
+					{doneForText(summary.points, summary.doneFor.name)}
+				</p>
+			{/if}
 			<p class="text-[16px] text-text-ffedd5">{summaryLine(summary)}</p>
 		</div>
 

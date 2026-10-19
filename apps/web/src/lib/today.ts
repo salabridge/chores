@@ -3,6 +3,7 @@
 // into the client.
 
 import { choreDueDate, dueDayState } from '@chore/db/recurrence';
+import { doneByText, possessive } from './favour.ts';
 import { formatTime, plural } from './overview.ts';
 import type { StreakWeek } from './streak.ts';
 import {
@@ -34,6 +35,21 @@ export interface TodayItem {
 	/** The viewer holds the turn of an open rotation. */
 	myTurn: boolean;
 	/** Where the card links to. */
+	href: string;
+}
+
+/**
+ * Another member's open chore the viewer could pick up (SB-75). Doing it
+ * credits the viewer with the points; it stays the owner's chore.
+ */
+export interface HelpOutItem {
+	choreId: string;
+	title: string;
+	ownerId: string;
+	ownerName: string;
+	subtitle: string;
+	points: number;
+	overdue: boolean;
 	href: string;
 }
 
@@ -72,6 +88,11 @@ export interface TodayData {
 	 * together, by day. Not counted in the summary: they aren't due today.
 	 */
 	later: TodayItem[];
+	/**
+	 * Other members' chores that are open now, for the collapsed "Help out"
+	 * section (SB-75). Not counted in the summary: they aren't the viewer's.
+	 */
+	helpOut: HelpOutItem[];
 	/** The Weekly Progress card (SB-68): the same week the Streak tab shows. */
 	week: StreakWeek;
 }
@@ -115,6 +136,24 @@ export interface PersonalFacts {
 	due: DueDay | null;
 	stages: { done: number; total: number };
 	completed: boolean;
+	/** Who did it when it wasn't the viewer (SB-74, a favour); null otherwise. */
+	doneByName: string | null;
+}
+
+/** An open chore of another member, as the server found it (SB-75). */
+export interface HelpOutFacts {
+	kind: 'personal' | 'rotation';
+	choreId: string;
+	title: string;
+	points: number;
+	/** Whose chore it is: the assignee, or the holder of the rotation's turn. */
+	ownerId: string;
+	ownerName: string;
+	frequency: Frequency;
+	dueTime: string | null;
+	dueLabel: string | null;
+	due: DueDay | null;
+	stages: { done: number; total: number };
 }
 
 /** A rotation the viewer is part of that occurs today, as the server found it. */
@@ -191,10 +230,18 @@ const currentStage = (stages: { done: number; total: number }) =>
 export function personalSubtitle(
 	f: Pick<
 		PersonalFacts,
-		'completed' | 'stages' | 'dueLabel' | 'dueTime' | 'frequency' | 'due'
+		| 'completed'
+		| 'stages'
+		| 'dueLabel'
+		| 'dueTime'
+		| 'frequency'
+		| 'due'
+		| 'doneByName'
 	>,
 ): string {
-	if (f.completed) return 'Done for today';
+	if (f.completed) {
+		return f.doneByName ? doneByText(f.doneByName) : 'Done for today';
+	}
 	if (hasStarted(f.stages)) {
 		const tail = isOverdue(f.due)
 			? dueDayPart(f.due)
@@ -275,6 +322,45 @@ export function rotationItem(f: RotationFacts, viewerId: string): TodayItem {
 	};
 }
 
+/** "Leo's chore • Due by 8:00 PM", "Leo's chore • Stage 2 of 3". */
+export function helpOutSubtitle(f: HelpOutFacts): string {
+	const owner = `${possessive(f.ownerName)} chore`;
+	if (hasStarted(f.stages)) {
+		return `${owner} • Stage ${currentStage(f.stages)} of ${f.stages.total}`;
+	}
+	if (f.kind === 'rotation') {
+		const day = dueDayPart(f.due);
+		return day
+			? `${owner} • Household rotation • ${day}`
+			: `${owner} • Household rotation`;
+	}
+	return `${owner} • ${dueText(f)}`;
+}
+
+export function helpOutItem(f: HelpOutFacts): HelpOutItem {
+	return {
+		choreId: f.choreId,
+		title: f.title,
+		ownerId: f.ownerId,
+		ownerName: f.ownerName,
+		subtitle: helpOutSubtitle(f),
+		points: f.points,
+		overdue: isOverdue(f.due),
+		href: choreHref(f.choreId),
+	};
+}
+
+/** Overdue first, then by owner, then biggest points, then title. */
+export function sortHelpOut(items: readonly HelpOutItem[]): HelpOutItem[] {
+	return [...items].sort(
+		(a, b) =>
+			Number(b.overdue) - Number(a.overdue) ||
+			a.ownerName.localeCompare(b.ownerName) ||
+			b.points - a.points ||
+			a.title.localeCompare(b.title),
+	);
+}
+
 /**
  * The highest-value open rotation where it's the viewer's turn, or null. Ties
  * go to the title that sorts first, so the pick is stable.
@@ -324,6 +410,8 @@ export function buildToday(input: {
 	week: StreakWeek;
 	personal: readonly PersonalFacts[];
 	rotations: readonly RotationFacts[];
+	/** Other members' open chores (SB-75); leave out the ones not due yet. */
+	helpOut?: readonly HelpOutFacts[];
 }): TodayData {
 	const personal = sortTodayItems(
 		input.personal.filter((f) => !isLater(f)).map(personalItem),
@@ -354,6 +442,7 @@ export function buildToday(input: {
 		personal,
 		rotations,
 		later,
+		helpOut: sortHelpOut((input.helpOut ?? []).map(helpOutItem)),
 		week: input.week,
 	};
 }

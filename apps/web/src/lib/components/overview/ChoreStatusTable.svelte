@@ -10,8 +10,10 @@
 </script>
 
 <script lang="ts">
+	import { reopenFavourText } from '#lib/favour.js';
 	import { openCount, plural, rowActions } from '#lib/overview.js';
 	import Badge from '../ui/Badge.svelte';
+	import DoneByLabel from '../ui/DoneByLabel.svelte';
 	import MemberAvatar from '../ui/MemberAvatar.svelte';
 	import SecondaryButton from '../ui/SecondaryButton.svelte';
 	import SurfaceCard from '../ui/SurfaceCard.svelte';
@@ -66,6 +68,7 @@
 	kind: 'skip' | 'remind' | 'reopen',
 	label: string,
 	tone: 'orange' | 'neutral',
+	describedby?: string,
 )}
 	{@const handler = actions[kind]}
 	<SecondaryButton
@@ -75,6 +78,7 @@
 		pending={isPending(row, kind)}
 		title={handler ? undefined : unavailableHint}
 		aria-label="{label} {row.title}"
+		aria-describedby={describedby}
 		onclick={() => run(handler, row, kind)}
 	>
 		{label}
@@ -95,68 +99,93 @@
 		{#if error}
 			<p role="alert" class="text-[13px] text-text-orange">{error}</p>
 		{/if}
-		<table aria-label="Chore status" class="block w-full text-left lg:table">
-			<thead class="hidden lg:table-header-group">
-				<tr class="bg-background-base font-display text-[13px] font-bold text-text-secondary">
-					<th scope="col" class="w-[32%] rounded-l-[8px] px-16 py-12 font-bold">CHORE / LOOP</th>
-					<th scope="col" class="w-[18%] px-16 py-12 font-bold">ASSIGNEE</th>
-					<th scope="col" class="w-[15%] px-16 py-12 font-bold">STATUS</th>
-					<th scope="col" class="w-[10%] px-16 py-12 font-bold">POINTS</th>
-					<th scope="col" class="rounded-r-[8px] px-16 py-12 text-right font-bold">ACTIONS</th>
-				</tr>
-			</thead>
-			<tbody class="block lg:table-row-group">
-				{#each rows as row (row.choreId)}
-					{@const available = rowActions(row)}
-					<tr
-						data-status={row.status}
-						class="flex flex-col gap-8 border-b border-border-subtle p-16 last:border-b-0 lg:table-row lg:p-0"
-					>
-						<td class="block min-w-0 lg:table-cell lg:px-16 lg:py-16 lg:align-middle">
-							<span class="flex flex-col gap-4">
-								<span class="font-display text-[14px] font-semibold text-text-primary">
-									{row.title}
-								</span>
-								<span class="text-[12px] text-text-secondary">{row.context}</span>
-							</span>
-						</td>
-						<td class="block lg:table-cell lg:px-16 lg:py-16 lg:align-middle">
-							<span class="flex items-center gap-8 text-[14px] text-text-primary">
-								{#if row.assignee}
-									<MemberAvatar name={row.assignee.name} size="sm" />
-									<span>{row.assignee.name}</span>
-								{:else}
-									<span class="text-text-secondary">Unassigned</span>
-								{/if}
-							</span>
-						</td>
-						<td class="block lg:table-cell lg:px-16 lg:py-16 lg:align-middle">
-							<Badge tone={row.status} />
-						</td>
-						<td class="block text-[14px] text-text-primary lg:table-cell lg:px-16 lg:py-16 lg:align-middle">
-							{row.points} pts
-						</td>
-						<td class="block lg:table-cell lg:px-16 lg:py-16 lg:align-middle">
-							<span class="flex flex-wrap items-center gap-8 lg:justify-end">
-								{#if available.skip}
-									{@render actionButton(row, 'skip', 'Skip', 'neutral')}
-								{/if}
-								{#if available.remind}
-									{@render actionButton(row, 'remind', 'Remind', 'orange')}
-								{/if}
-								{#if available.reopen}
-									{@render actionButton(row, 'reopen', 'Reopen', 'neutral')}
-								{/if}
-								{#if available.viewLoop}
-									<SecondaryButton variant="tinted" tone="blue" href={loopHref}>
-										View Loop
-									</SecondaryButton>
-								{/if}
-							</span>
-						</td>
+		<!-- The table/card switch follows the card's width, not the viewport's, so a
+		     narrow column on a wide screen gets the stacked layout. The scroll is a
+		     fallback for content that still doesn't fit. -->
+		<div class="@container overflow-x-auto" data-slot="chore-status-scroll">
+			<table aria-label="Chore status" class="block w-full text-left @xl:table">
+				<thead class="hidden @xl:table-header-group">
+					<tr class="bg-background-base font-display text-[13px] font-bold text-text-secondary">
+						<th scope="col" class="w-[32%] rounded-l-[8px] px-16 py-12 font-bold">CHORE / LOOP</th>
+						<th scope="col" class="w-[18%] px-16 py-12 font-bold">ASSIGNEE</th>
+						<th scope="col" class="w-[15%] px-16 py-12 font-bold">STATUS</th>
+						<th scope="col" class="w-[10%] px-16 py-12 font-bold">POINTS</th>
+						<th scope="col" class="rounded-r-[8px] px-16 py-12 text-right font-bold">ACTIONS</th>
 					</tr>
-				{/each}
-			</tbody>
-		</table>
+				</thead>
+				<tbody class="block @xl:table-row-group">
+					{#each rows as row (row.choreId)}
+						{@const available = rowActions(row)}
+						<tr
+							data-status={row.status}
+							class="flex flex-col gap-8 border-b border-border-subtle p-16 last:border-b-0 @xl:table-row @xl:p-0"
+						>
+							<td class="block min-w-0 @xl:table-cell @xl:px-16 @xl:py-16 @xl:align-middle">
+								<span class="flex flex-col gap-4">
+									<span class="font-display text-[14px] font-semibold text-text-primary">
+										{row.title}
+									</span>
+									<span class="text-[12px] text-text-secondary">{row.context}</span>
+								</span>
+							</td>
+							<td class="block @xl:table-cell @xl:px-16 @xl:py-16 @xl:align-middle">
+								<span class="flex flex-col gap-6">
+									<span class="flex items-center gap-8 text-[14px] text-text-primary">
+										{#if row.assignee}
+											<MemberAvatar name={row.assignee.name} size="sm" />
+											<span>{row.assignee.name}</span>
+										{:else}
+											<span class="text-text-secondary">Unassigned</span>
+										{/if}
+									</span>
+									{#if row.doneBy}
+										<DoneByLabel name={row.doneBy.name} />
+									{/if}
+								</span>
+							</td>
+							<td class="block @xl:table-cell @xl:px-16 @xl:py-16 @xl:align-middle">
+								<Badge tone={row.status} />
+							</td>
+							<td class="block text-[14px] text-text-primary @xl:table-cell @xl:px-16 @xl:py-16 @xl:align-middle">
+								{row.points} pts
+							</td>
+							<td class="block @xl:table-cell @xl:px-16 @xl:py-16 @xl:align-middle">
+								<span class="flex flex-wrap items-center gap-8 @xl:justify-end">
+									{#if available.skip}
+										{@render actionButton(row, 'skip', 'Skip', 'neutral')}
+									{/if}
+									{#if available.remind}
+										{@render actionButton(row, 'remind', 'Remind', 'orange')}
+									{/if}
+									{#if available.reopen}
+										{@render actionButton(
+											row,
+											'reopen',
+											'Reopen',
+											'neutral',
+											row.doneBy ? `reopen-note-${row.choreId}` : undefined,
+										)}
+									{/if}
+									{#if available.viewLoop}
+										<SecondaryButton variant="tinted" tone="blue" href={loopHref}>
+											View Loop
+										</SecondaryButton>
+									{/if}
+								</span>
+								<!-- The points leave whoever earned them, not the assignee (SB-75). -->
+								{#if available.reopen && row.doneBy}
+									<p
+										id="reopen-note-{row.choreId}"
+										class="mt-6 text-[12px] text-text-secondary @xl:text-right"
+									>
+										{reopenFavourText(row.points, row.doneBy.name)}
+									</p>
+								{/if}
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
 	{/if}
 </SurfaceCard>

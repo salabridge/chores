@@ -1,11 +1,47 @@
 import type { StreakWeek } from '#lib/streak.js';
-import { buildToday, type TodayData } from '#lib/today.js';
+import {
+	buildToday,
+	type HelpOutFacts,
+	helpOutItem,
+	sortHelpOut,
+	type TodayData,
+} from '#lib/today.js';
 
 // Fixed data for specs and stories (stories are Chromatic snapshots, so no
 // dates or randomness). Mirrors the Figma frame: Leo with two personal chores
 // and rotations.
 
 const leo = { id: 'leo', name: 'Leo' };
+
+// Other members' open chores (SB-75): Mia's personal chore and Dad's turn.
+export const helpOutFacts: HelpOutFacts[] = [
+	{
+		kind: 'personal',
+		choreId: 'mia-trash',
+		title: 'Take Out the Trash',
+		points: 10,
+		ownerId: 'mia',
+		ownerName: 'Mia',
+		frequency: 'daily',
+		dueTime: '20:00:00',
+		dueLabel: null,
+		due: null,
+		stages: { done: 0, total: 0 },
+	},
+	{
+		kind: 'rotation',
+		choreId: 'dad-gutters',
+		title: 'Clear the Gutters',
+		points: 25,
+		ownerId: 'dad',
+		ownerName: 'Dad',
+		frequency: 'weekly',
+		dueTime: null,
+		dueLabel: null,
+		due: { weekday: 1, state: 'overdue' },
+		stages: { done: 0, total: 0 },
+	},
+];
 
 // The Figma frame's week: Oct 5–11, 6 of 10 done, 85 pts. Only the totals
 // show on Today, so the days are left as the Streak tab would build them.
@@ -39,6 +75,7 @@ export const todayData: TodayData = buildToday({
 			due: null,
 			stages: { done: 0, total: 0 },
 			completed: false,
+			doneByName: null,
 		},
 		{
 			choreId: 'room',
@@ -50,6 +87,7 @@ export const todayData: TodayData = buildToday({
 			due: null,
 			stages: { done: 1, total: 3 },
 			completed: false,
+			doneByName: null,
 		},
 	],
 	rotations: [
@@ -89,6 +127,12 @@ export const todayData: TodayData = buildToday({
 	],
 });
 
+// SB-75: the same day with Mia's and Dad's open chores under "Help out".
+export const helpOutToday: TodayData = {
+	...todayData,
+	helpOut: sortHelpOut(helpOutFacts.map(helpOutItem)),
+};
+
 export const emptyToday: TodayData = buildToday({
 	member: leo,
 	points: 0,
@@ -117,6 +161,7 @@ export const weeklyDueToday: TodayData = buildToday({
 			due: { weekday: 4, state: 'today' },
 			stages: { done: 0, total: 0 },
 			completed: false,
+			doneByName: null,
 		},
 		{
 			choreId: 'plants',
@@ -128,6 +173,7 @@ export const weeklyDueToday: TodayData = buildToday({
 			due: { weekday: 1, state: 'overdue' },
 			stages: { done: 0, total: 0 },
 			completed: false,
+			doneByName: null,
 		},
 		{
 			choreId: 'car',
@@ -139,6 +185,7 @@ export const weeklyDueToday: TodayData = buildToday({
 			due: { weekday: 6, state: 'upcoming' },
 			stages: { done: 0, total: 0 },
 			completed: false,
+			doneByName: null,
 		},
 	],
 	rotations: [
