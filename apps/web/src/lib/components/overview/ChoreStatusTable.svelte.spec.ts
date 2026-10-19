@@ -1,3 +1,5 @@
+// Tailwind, so the layout test below measures real styles.
+import '../../../routes/layout.css';
 import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
@@ -86,5 +88,28 @@ describe('ChoreStatusTable.svelte', () => {
 			.element(page.getByText('No chores are due today.'))
 			.toBeVisible();
 		await expect.element(page.getByText('0 open items')).toBeVisible();
+	});
+
+	// The layout follows the card's width, not the viewport's: a narrow card on a
+	// wide screen must stack instead of spilling a 5-column table out of the card.
+	it('stacks in a narrow card on a wide screen and uses the table when there is room', async () => {
+		await page.viewport(1440, 900);
+		const { container } = render(ChoreStatusTable, { rows: overviewRows });
+		const table = container.querySelector('table') as HTMLTableElement;
+		const head = container.querySelector('thead') as HTMLElement;
+		const scroll = container.querySelector(
+			'[data-slot="chore-status-scroll"]',
+		) as HTMLElement;
+
+		container.style.width = '400px';
+		await vi.waitFor(() => expect(getComputedStyle(head).display).toBe('none'));
+		expect(table.getBoundingClientRect().width).toBeLessThanOrEqual(
+			scroll.getBoundingClientRect().width,
+		);
+
+		container.style.width = '1000px';
+		await vi.waitFor(() =>
+			expect(getComputedStyle(head).display).toBe('table-header-group'),
+		);
 	});
 });

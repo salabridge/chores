@@ -35,6 +35,13 @@
 
 <Story name="Empty" args={{ rows: [] }} />
 
+<!-- Full width, so the Visual test shows the table layout next to the stacked one. -->
+<Story
+	name="Wide"
+	args={{ actions }}
+	parameters={{ layout: 'fullscreen' }}
+/>
+
 <Story
 	name="Visual test"
 	tags={['visual-test', '!autodocs']}
