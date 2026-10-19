@@ -9,7 +9,7 @@
 		component: TabIcon,
 		tags: ['autodocs'],
 		argTypes: {
-			icon: { control: 'inline-radio', options: ['home', 'gift', 'flame'] },
+			icon: { control: 'inline-radio', options: ['home', 'gift', 'flame', 'grid', 'user'] },
 		},
 		args: { icon: 'home' },
 	});
@@ -20,6 +20,10 @@
 <Story name="Gift" args={{ icon: 'gift' }} />
 
 <Story name="Flame" args={{ icon: 'flame' }} />
+
+<Story name="Grid" args={{ icon: 'grid' }} />
+
+<Story name="User" args={{ icon: 'user' }} />
 
 <Story name="Header size" args={{ icon: 'home', size: 20 }} />
 

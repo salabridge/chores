@@ -1,9 +1,17 @@
 <script lang="ts">
 	import TabIcon from './TabIcon.svelte';
-	import { isTabActive, tabs } from './tabs.ts';
+	import { isTabActive, tabsFor } from './tabs.ts';
 
-	let { pathname, class: className }: { pathname: string; class?: string } =
-		$props();
+	let {
+		pathname,
+		parent = false,
+		class: className,
+	}: {
+		pathname: string;
+		/** A parent acting as themselves also gets the Overview and Account tabs. */
+		parent?: boolean;
+		class?: string;
+	} = $props();
 </script>
 
 <nav
@@ -13,8 +21,14 @@
 		className,
 	]}
 >
-	<ul class="flex h-[72px] items-center justify-between px-32">
-		{#each tabs as tab (tab.href)}
+	<!-- Five tabs only fit the 402px column with the narrower gutter. -->
+	<ul
+		class={[
+			'flex h-[72px] items-center justify-between',
+			parent ? 'px-8' : 'px-32',
+		]}
+	>
+		{#each tabsFor(parent) as tab (tab.href)}
 			{@const active = isTabActive(pathname, tab.href)}
 			<li>
 				<a

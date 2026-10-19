@@ -20,6 +20,16 @@ describe('ParentSidebar.svelte', () => {
 			.toHaveAttribute('href', '/rotations');
 	});
 
+	it("links out to the parent's own Today screen and account", async () => {
+		render(ParentSidebar, { pathname: '/overview' });
+		await expect
+			.element(page.getByRole('link', { name: 'My Today' }))
+			.toHaveAttribute('href', '/today');
+		await expect
+			.element(page.getByRole('link', { name: 'Account' }))
+			.toHaveAttribute('href', '/account');
+	});
+
 	it('marks Chores active on the list but not on Create & Assign', async () => {
 		const chores = () =>
 			page.getByRole('link', { name: 'Chores', exact: true });

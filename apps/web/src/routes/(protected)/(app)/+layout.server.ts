@@ -1,5 +1,6 @@
 import { memberPointsBalance } from '#lib/server/member-stats.js';
 import { pinStore } from '#lib/server/pin-store.js';
+import { parentGuard } from '#lib/server/profile-state.js';
 import { getProfileState } from '#lib/server/profiles.js';
 import { isAvatarColor } from '#lib/setup.js';
 import type { LayoutServerLoad } from './$types';
@@ -13,6 +14,11 @@ export const load: LayoutServerLoad = async () => {
 		state ? memberPointsBalance(state.member.id) : null,
 	]);
 	return {
+		/**
+		 * True for a parent acting as themselves: the nav adds Overview and
+		 * Account, the `(parent)` pages hooks.server.ts lets them open.
+		 */
+		isParent: state !== null && parentGuard(state) === 'allow',
 		/** The managed kid this device is acting as, or null. */
 		activeKid:
 			state?.mode === 'kid'

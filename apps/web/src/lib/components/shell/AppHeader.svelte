@@ -4,15 +4,23 @@
 	import PointsPill from '#lib/components/ui/PointsPill.svelte';
 	import type { AvatarColor } from '#lib/setup.js';
 	import TabIcon from './TabIcon.svelte';
-	import { isTabActive, tabs } from './tabs.ts';
+	import { isTabActive, tabsFor } from './tabs.ts';
 
 	interface Props extends HTMLAttributes<HTMLElement> {
 		pathname: string;
 		/** The acting member; without one (no household yet) only the nav shows. */
 		member?: { name: string; points: number; tone?: AvatarColor } | null;
+		/** A parent acting as themselves also gets the Overview and Account tabs. */
+		parent?: boolean;
 	}
 
-	let { pathname, member = null, class: className, ...rest }: Props = $props();
+	let {
+		pathname,
+		member = null,
+		parent = false,
+		class: className,
+		...rest
+	}: Props = $props();
 </script>
 
 <!--
@@ -39,8 +47,8 @@
 	</div>
 
 	<nav aria-label="Main">
-		<ul class="flex w-[384px] items-center gap-8">
-			{#each tabs as tab (tab.href)}
+		<ul class={['flex items-center gap-8', parent ? 'w-[600px]' : 'w-[384px]']}>
+			{#each tabsFor(parent) as tab (tab.href)}
 				{@const active = isTabActive(pathname, tab.href)}
 				<li class="flex-1">
 					<a

@@ -25,6 +25,7 @@ beforeEach(() => vi.resetAllMocks());
 const leo = {
 	id: 'kid1',
 	householdId: 'h1',
+	role: 'kid',
 	displayName: 'Leo',
 	avatarColor: 'green',
 };
@@ -34,11 +35,23 @@ describe('member shell load', () => {
 		mocks.getProfileState.mockResolvedValue({ mode: 'self', member: leo });
 		mocks.memberPointsBalance.mockResolvedValue(140);
 		await expect(load({} as never)).resolves.toEqual({
+			isParent: false,
 			activeKid: null,
 			shellMember: { name: 'Leo', points: 140, tone: 'green' },
 		});
 		expect(mocks.memberPointsBalance).toHaveBeenCalledWith('kid1');
 		expect(mocks.pinGet).not.toHaveBeenCalled();
+	});
+
+	it('gives a parent acting as themselves the parent tabs', async () => {
+		const mom = { ...leo, id: 'parent1', displayName: 'Mom', role: 'owner' };
+		mocks.getProfileState.mockResolvedValue({
+			mode: 'self',
+			member: mom,
+			actor: mom,
+		});
+		mocks.memberPointsBalance.mockResolvedValue(0);
+		await expect(load({} as never)).resolves.toMatchObject({ isParent: true });
 	});
 
 	it('reads the parent PIN state in kid mode', async () => {
@@ -50,6 +63,7 @@ describe('member shell load', () => {
 		mocks.memberPointsBalance.mockResolvedValue(15);
 		mocks.pinGet.mockResolvedValue({ lockedAt: new Date() });
 		await expect(load({} as never)).resolves.toEqual({
+			isParent: false,
 			activeKid: { id: 'kid1', name: 'Leo', pinLocked: true },
 			shellMember: { name: 'Leo', points: 15, tone: 'green' },
 		});
@@ -59,6 +73,7 @@ describe('member shell load', () => {
 	it('has no header member without a household', async () => {
 		mocks.getProfileState.mockResolvedValue(null);
 		await expect(load({} as never)).resolves.toEqual({
+			isParent: false,
 			activeKid: null,
 			shellMember: null,
 		});
