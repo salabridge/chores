@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { isUuid } from '#lib/rewards.js';
+import { listRecentGifts } from '#lib/server/gifts.js';
 import { requireProfile } from '#lib/server/guards.js';
 import { claimReward, RewardError } from '#lib/server/rewards.js';
 import { loadRewardsShop } from '#lib/server/rewards-shop.js';
@@ -7,7 +8,10 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
 	const { member } = await requireProfile();
-	const shop = await loadRewardsShop(member);
+	const [shop, gifts] = await Promise.all([
+		loadRewardsShop(member),
+		listRecentGifts(member),
+	]);
 
 	// "Claim" links to ?confirm=<id>, so the confirmation step works without
 	// JavaScript. Only a reward that can be claimed right now is confirmed.
@@ -20,6 +24,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	return {
 		shop,
+		gifts,
 		confirming: confirming ?? null,
 		claimedTitle: claimed?.title ?? null,
 	};

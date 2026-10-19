@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
 	return {
 		RewardError,
 		claimReward: vi.fn(),
+		listRecentGifts: vi.fn(),
 		loadRewardsShop: vi.fn(),
 		requireProfile: vi.fn(),
 	};
@@ -22,6 +23,9 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('#lib/server/guards.js', () => ({
 	requireProfile: mocks.requireProfile,
+}));
+vi.mock('#lib/server/gifts.js', () => ({
+	listRecentGifts: mocks.listRecentGifts,
 }));
 vi.mock('#lib/server/rewards.js', () => ({
 	claimReward: mocks.claimReward,
@@ -130,11 +134,15 @@ describe('load', () => {
 			url: new URL(`http://x/rewards${search}`),
 		} as never) as Promise<{
 			shop: unknown;
+			gifts: unknown;
 			confirming: { id: string } | null;
 			claimedTitle: string | null;
 		}>;
 
-	beforeEach(() => mocks.loadRewardsShop.mockResolvedValue(shop));
+	beforeEach(() => {
+		mocks.loadRewardsShop.mockResolvedValue(shop);
+		mocks.listRecentGifts.mockResolvedValue([]);
+	});
 
 	it('loads the shop for the acting member', async () => {
 		const data = await run('');
@@ -142,6 +150,14 @@ describe('load', () => {
 		expect(data.shop).toBe(shop);
 		expect(data.confirming).toBeNull();
 		expect(data.claimedTitle).toBeNull();
+	});
+
+	it('loads recent bonus points for the acting member', async () => {
+		const gifts = [{ id: 'g1', points: 20, reason: 'Chores', fromName: 'Mom' }];
+		mocks.listRecentGifts.mockResolvedValue(gifts);
+		const data = await run('');
+		expect(mocks.listRecentGifts).toHaveBeenCalledWith(member);
+		expect(data.gifts).toBe(gifts);
 	});
 
 	it('confirms a reward that can be claimed now', async () => {

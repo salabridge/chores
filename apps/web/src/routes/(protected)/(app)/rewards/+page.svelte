@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import BonusPointsCard from '#lib/components/rewards/BonusPointsCard.svelte';
 	import ClaimConfirm from '#lib/components/rewards/ClaimConfirm.svelte';
 	import HouseholdContribution from '#lib/components/rewards/HouseholdContribution.svelte';
 	import MilestoneCard from '#lib/components/rewards/MilestoneCard.svelte';
@@ -50,6 +51,10 @@
 			<Callout tone="success" role="status">
 				You claimed {data.claimedTitle}.
 			</Callout>
+		{/if}
+
+		{#if data.gifts.length > 0}
+			<BonusPointsCard gifts={data.gifts} />
 		{/if}
 
 		<HouseholdContribution

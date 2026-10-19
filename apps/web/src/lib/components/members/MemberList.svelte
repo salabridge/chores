@@ -8,11 +8,13 @@
 		memberLabel,
 	} from '#lib/members.js';
 	import EditMemberAvatarForm from './EditMemberAvatarForm.svelte';
+	import GiftPointsForm from './GiftPointsForm.svelte';
 
 	let {
 		members,
 		actor,
 		onchanged,
+		ongifted,
 	}: {
 		/** Everyone in the household, already in display order. */
 		members: HouseholdMember[];
@@ -20,9 +22,14 @@
 		actor?: { id: string; role: HouseholdRole };
 		/** A member's avatar was saved. */
 		onchanged?: () => void;
+		/** Bonus points were given to a kid. */
+		ongifted?: (memberId: string, points: number) => void;
 	} = $props();
 
 	let editing = $state<string | null>(null);
+	let gifting = $state<string | null>(null);
+	/** The last gift, for the confirmation under that kid's name. */
+	let gifted = $state<{ id: string; points: number } | null>(null);
 </script>
 
 <ul class="flex flex-col gap-8" aria-label="Household members">
@@ -46,18 +53,50 @@
 							: ''}
 					</p>
 				</div>
-				{#if actor && canEditMemberAvatar(actor, member) && editing !== member.id}
-					<SecondaryButton
-						type="button"
-						variant="tinted"
-						tone="neutral"
-						aria-label={`Edit ${member.displayName}'s avatar`}
-						onclick={() => (editing = member.id)}
-					>
-						Edit avatar
-					</SecondaryButton>
-				{/if}
+				<div class="flex shrink-0 flex-wrap justify-end gap-8">
+					{#if actor && member.role === 'kid' && gifting !== member.id}
+						<SecondaryButton
+							type="button"
+							variant="tinted"
+							tone="orange"
+							aria-label={`Give ${member.displayName} bonus points`}
+							onclick={() => {
+								gifting = member.id;
+								gifted = null;
+							}}
+						>
+							Give bonus points
+						</SecondaryButton>
+					{/if}
+					{#if actor && canEditMemberAvatar(actor, member) && editing !== member.id}
+						<SecondaryButton
+							type="button"
+							variant="tinted"
+							tone="neutral"
+							aria-label={`Edit ${member.displayName}'s avatar`}
+							onclick={() => (editing = member.id)}
+						>
+							Edit avatar
+						</SecondaryButton>
+					{/if}
+				</div>
 			</div>
+			{#if gifted?.id === member.id}
+				<p role="status" class="text-[13px] text-text-green">
+					Gave {member.displayName} {gifted.points} bonus {gifted.points === 1 ? 'point' : 'points'}.
+				</p>
+			{/if}
+			{#if gifting === member.id}
+				<GiftPointsForm
+					{member}
+					oncancel={() => (gifting = null)}
+					onsaved={(points) => {
+						gifting = null;
+						gifted = { id: member.id, points };
+						ongifted?.(member.id, points);
+					}}
+				/>
+			{/if}
 			{#if editing === member.id}
 				<EditMemberAvatarForm
 					{member}
