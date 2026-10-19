@@ -36,6 +36,7 @@ export const todayData: TodayData = buildToday({
 			frequency: 'daily',
 			dueTime: '20:00:00',
 			dueLabel: null,
+			due: null,
 			stages: { done: 0, total: 0 },
 			completed: false,
 		},
@@ -46,6 +47,7 @@ export const todayData: TodayData = buildToday({
 			frequency: 'daily',
 			dueTime: null,
 			dueLabel: null,
+			due: null,
 			stages: { done: 1, total: 3 },
 			completed: false,
 		},
@@ -60,6 +62,7 @@ export const todayData: TodayData = buildToday({
 			stages: { done: 0, total: 0 },
 			completed: true,
 			completedByName: 'Mia',
+			due: null,
 		},
 		{
 			choreId: 'toilet',
@@ -70,6 +73,7 @@ export const todayData: TodayData = buildToday({
 			stages: { done: 0, total: 0 },
 			completed: false,
 			completedByName: null,
+			due: null,
 		},
 		{
 			choreId: 'dishes',
@@ -80,6 +84,7 @@ export const todayData: TodayData = buildToday({
 			stages: { done: 0, total: 0 },
 			completed: false,
 			completedByName: null,
+			due: null,
 		},
 	],
 });
@@ -91,4 +96,73 @@ export const emptyToday: TodayData = buildToday({
 	week: week(0, 0, 0),
 	personal: [],
 	rotations: [],
+});
+
+// SB-71: weekly chores with a due day, seen on a Thursday. One due today, one
+// overdue (due Monday), and two later this week: a personal chore and a
+// rotation that is Leo's turn.
+export const weeklyDueToday: TodayData = buildToday({
+	member: leo,
+	points: 140,
+	streak: { days: 5, exceptions: 0 },
+	week: week(6, 10, 85),
+	personal: [
+		{
+			choreId: 'bins',
+			title: 'Take the Bins Out',
+			points: 10,
+			frequency: 'weekly',
+			dueTime: '19:00:00',
+			dueLabel: null,
+			due: { weekday: 4, state: 'today' },
+			stages: { done: 0, total: 0 },
+			completed: false,
+		},
+		{
+			choreId: 'plants',
+			title: 'Water the Plants',
+			points: 5,
+			frequency: 'weekly',
+			dueTime: null,
+			dueLabel: null,
+			due: { weekday: 1, state: 'overdue' },
+			stages: { done: 0, total: 0 },
+			completed: false,
+		},
+		{
+			choreId: 'car',
+			title: 'Wash the Car',
+			points: 20,
+			frequency: 'weekly',
+			dueTime: null,
+			dueLabel: 'before lunch',
+			due: { weekday: 6, state: 'upcoming' },
+			stages: { done: 0, total: 0 },
+			completed: false,
+		},
+	],
+	rotations: [
+		{
+			choreId: 'lawn',
+			title: 'Mow the Lawn',
+			points: 15,
+			turnMemberId: 'leo',
+			turnMemberName: 'Leo',
+			stages: { done: 0, total: 0 },
+			completed: false,
+			completedByName: null,
+			due: { weekday: 7, state: 'upcoming' },
+		},
+		{
+			choreId: 'dishes',
+			title: 'Run Dishwasher',
+			points: 10,
+			turnMemberId: 'mia',
+			turnMemberName: 'Mia',
+			stages: { done: 0, total: 0 },
+			completed: false,
+			completedByName: null,
+			due: null,
+		},
+	],
 });

@@ -67,6 +67,52 @@ describe('ChoreSetupForm.svelte', () => {
 		await expect.element(page.getByText('Weekends • 20 pts')).toBeVisible();
 	});
 
+	it('offers a due day only for weekly chores, defaulting to Any day', async () => {
+		setup();
+		expect(page.getByTestId('due-day').elements()).toHaveLength(0);
+		await page.getByRole('radio', { name: 'Weekly' }).click();
+		await expect
+			.element(page.getByRole('radio', { name: 'Any day' }))
+			.toBeChecked();
+		await page.getByRole('radio', { name: 'Thu' }).click();
+		await expect.element(page.getByText('Weekly · Thu • 10 pts')).toBeVisible();
+	});
+
+	it('submits the due day of a weekly chore', async () => {
+		const onsubmit = setup();
+		await page.getByLabelText('Chore Title').fill('Take the bins out');
+		await page.getByRole('radio', { name: 'Leo' }).click();
+		await page.getByRole('radio', { name: 'Weekly' }).click();
+		await page.getByRole('radio', { name: 'Thu' }).click();
+		await page.getByRole('button', { name: 'Create Chore' }).click();
+		await vi.waitFor(() => expect(onsubmit).toHaveBeenCalledOnce());
+		expect(onsubmit.mock.calls[0][0]).toMatchObject({
+			frequency: 'weekly',
+			dueWeekday: 4,
+		});
+	});
+
+	it('clears the due day when the frequency changes away from weekly', async () => {
+		const onsubmit = setup();
+		await page.getByLabelText('Chore Title').fill('Take the bins out');
+		await page.getByRole('radio', { name: 'Leo' }).click();
+		await page.getByRole('radio', { name: 'Weekly' }).click();
+		await page.getByRole('radio', { name: 'Thu' }).click();
+		await page.getByRole('radio', { name: 'Daily' }).click();
+		expect(page.getByTestId('due-day').elements()).toHaveLength(0);
+		await page.getByRole('button', { name: 'Create Chore' }).click();
+		await vi.waitFor(() => expect(onsubmit).toHaveBeenCalledOnce());
+		expect(onsubmit.mock.calls[0][0]).toMatchObject({
+			frequency: 'daily',
+			dueWeekday: null,
+		});
+		// Back to weekly starts from Any day again.
+		await page.getByRole('radio', { name: 'Weekly' }).click();
+		await expect
+			.element(page.getByRole('radio', { name: 'Any day' }))
+			.toBeChecked();
+	});
+
 	it('requires a stage once stages are on, with no points input', async () => {
 		setup();
 		await page.getByRole('radio', { name: 'Use Stages' }).click();
@@ -203,6 +249,17 @@ describe('ChoreSetupForm.svelte', () => {
 			await expect
 				.element(page.getByTestId('frequency-locked'))
 				.toHaveTextContent('already done for this period');
+		});
+
+		it('loads and changes the due day of a weekly chore', async () => {
+			const onsubmit = edit(saved({ frequency: 'weekly', dueWeekday: 4 }));
+			await expect
+				.element(page.getByRole('radio', { name: 'Thu' }))
+				.toBeChecked();
+			await page.getByRole('radio', { name: 'Any day' }).click();
+			await page.getByRole('button', { name: 'Save Changes' }).click();
+			await vi.waitFor(() => expect(onsubmit).toHaveBeenCalledOnce());
+			expect(onsubmit.mock.calls[0][0]).toMatchObject({ dueWeekday: null });
 		});
 
 		it('keeps frequency editable otherwise', async () => {

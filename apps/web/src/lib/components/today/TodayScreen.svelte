@@ -15,6 +15,7 @@
 		type TodayData,
 		type TodayItem,
 	} from '#lib/today.js';
+	import LaterThisWeek from './LaterThisWeek.svelte';
 
 	let { data }: { data: TodayData } = $props();
 
@@ -168,4 +169,7 @@
 			"You aren't part of any household rotations today.",
 		)}
 	</div>
+
+	<!-- Weekly chores due on a later day (SB-71); renders nothing when there are none. -->
+	<LaterThisWeek items={data.later} />
 </div>

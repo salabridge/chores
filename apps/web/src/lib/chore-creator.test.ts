@@ -4,6 +4,7 @@ import {
 	type ChoreDraft,
 	choreToDraft,
 	createInputError,
+	dueWeekdayFor,
 	emptyDraft,
 	exampleDraft,
 	frequencySummary,
@@ -106,6 +107,19 @@ describe('summaries', () => {
 		);
 	});
 
+	it('names the due day of a weekly chore', () => {
+		expect(
+			frequencySummary({ frequency: 'weekly', dueWeekday: 4, points: 10 }),
+		).toBe('Weekly · Thu • 10 pts');
+		expect(
+			frequencySummary({ frequency: 'weekly', dueWeekday: null, points: 10 }),
+		).toBe('Weekly • 10 pts');
+		// A day left over from before switching frequency isn't shown.
+		expect(
+			frequencySummary({ frequency: 'daily', dueWeekday: 4, points: 10 }),
+		).toBe('Daily • 10 pts');
+	});
+
 	it('mentions the single award when stages are on', () => {
 		expect(pointsHint({ frequency: 'daily', useStages: true })).toContain(
 			'once, after the last stage',
@@ -148,10 +162,28 @@ describe('toCreateInput', () => {
 			note: null,
 			kind: 'personal',
 			frequency: 'daily',
+			dueWeekday: null,
 			points: 10,
 			assigneeId: 'leo',
 			stages: [],
 		});
+	});
+
+	it('sends the due day only for a weekly chore', () => {
+		expect(
+			toCreateInput(valid({ frequency: 'weekly', dueWeekday: 4 })).dueWeekday,
+		).toBe(4);
+		expect(
+			toCreateInput(valid({ frequency: 'weekly', dueWeekday: null }))
+				.dueWeekday,
+		).toBeNull();
+		// Switching a weekly chore to daily or weekends clears it.
+		expect(
+			toCreateInput(valid({ frequency: 'daily', dueWeekday: 4 })).dueWeekday,
+		).toBeNull();
+		expect(
+			toCreateInput(valid({ frequency: 'weekends', dueWeekday: 6 })).dueWeekday,
+		).toBeNull();
 	});
 
 	it('keeps stage order and hints, and clears the assignee for rotations', () => {
@@ -191,6 +223,31 @@ describe('createInputError', () => {
 		).toBeTruthy();
 		expect(createInputError({ ...input(), points: -1 })).toBeTruthy();
 	});
+
+	it('accepts a due day from 1 to 7 and rejects anything else', () => {
+		const weekly = { ...input(), frequency: 'weekly' as const };
+		expect(createInputError({ ...weekly, dueWeekday: 1 })).toBeNull();
+		expect(createInputError({ ...weekly, dueWeekday: 7 })).toBeNull();
+		expect(createInputError({ ...weekly, dueWeekday: 0 as never })).toBe(
+			'Choose a day of the week, or Any day.',
+		);
+		expect(
+			createInputError({ ...weekly, dueWeekday: 8 as never }),
+		).toBeTruthy();
+		expect(
+			createInputError({ ...weekly, dueWeekday: '4' as never }),
+		).toBeTruthy();
+	});
+});
+
+describe('dueWeekdayFor', () => {
+	it('keeps a valid day only on weekly chores', () => {
+		expect(dueWeekdayFor('weekly', 4)).toBe(4);
+		expect(dueWeekdayFor('weekly', null)).toBeNull();
+		expect(dueWeekdayFor('weekly', 9)).toBeNull();
+		expect(dueWeekdayFor('daily', 4)).toBeNull();
+		expect(dueWeekdayFor('weekends', 7)).toBeNull();
+	});
 });
 
 describe('choreToDraft / toUpdateInput', () => {
@@ -199,6 +256,7 @@ describe('choreToDraft / toUpdateInput', () => {
 		description: null,
 		type: 'personal' as const,
 		frequency: 'weekly' as const,
+		dueWeekday: 4,
 		points: 15,
 		assignedMemberId: 'leo',
 		stages: [
@@ -215,6 +273,7 @@ describe('choreToDraft / toUpdateInput', () => {
 			kind: 'personal',
 			useStages: true,
 			frequency: 'weekly',
+			dueWeekday: 4,
 			points: 15,
 			assigneeId: 'leo',
 		});

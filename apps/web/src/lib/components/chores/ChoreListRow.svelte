@@ -3,10 +3,10 @@
 		type ChoreListItem,
 		type ChoreListMember,
 		duplicateLinks,
-		frequencyLabel,
 		loopTakers,
 		stageLabel,
 	} from '#lib/chores-list.js';
+	import { scheduleLabel } from '#lib/weekdays.js';
 	import Badge from '../ui/Badge.svelte';
 	import PointsPill from '../ui/PointsPill.svelte';
 	import SecondaryButton from '../ui/SecondaryButton.svelte';
@@ -67,7 +67,7 @@
 			{#if theirTurn}<Badge tone="active-turn">Their turn</Badge>{/if}
 		</div>
 		<p class="flex flex-wrap items-center gap-x-8 gap-y-4 text-[13px] text-text-secondary">
-			<span>{frequencyLabel[chore.frequency]}</span>
+			<span>{scheduleLabel(chore.frequency, chore.dueWeekday)}</span>
 			<span aria-hidden="true">·</span>
 			<PointsPill points={chore.points} />
 			<span aria-hidden="true">·</span>

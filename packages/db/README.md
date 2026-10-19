@@ -32,7 +32,7 @@ const db = drizzle(process.env.DATABASE_URL!, { schema });
 | `@chore/db/schema` | `schema/schema.ts`       | Same as above                     |
 | `@chore/db/auth`   | `schema/auth-schema.ts`  | Only the Neon Auth tables         |
 | `@chore/db/rls`    | `src/authenticated-db.ts`| `createAuthenticatedDb()` (RLS), member/parent helpers, invite tokens, `advanceRotation()`/`getRotationTurns()` |
-| `@chore/db/recurrence` | `src/recurrence.ts`  | `chorePeriodStart()` and other period math for recurring chores |
+| `@chore/db/recurrence` | `src/recurrence.ts`  | `chorePeriodStart()`, `choreDueDate()` and other period math for recurring chores |
 | `@chore/db/rewards` | `src/rewards.ts`       | Reward rules: `rewardStatuses()`, `milestoneProgress()`, `claimDenial()` |
 | `@chore/db/rotation` | `src/rotation.ts`      | Turn-order math for rotation chores (`nextEligibleMember()`, `rotationTurns()`, `validateRotation()`) |
 | `@chore/db/streaks` | `src/streaks.ts`        | Streak math (`personalStreak()`, `familyStreak()`, `resolveDueChores()`) |
@@ -163,6 +163,13 @@ often. It has no per-day state; that lives on its instances (see
 - `due_time` (optional, `time`, household-local, e.g. `20:00` for "by 8:00
   PM") and `due_label` (optional free text, e.g. "after dinner"). The UI shows
   the label if there is one, otherwise the time.
+- `due_weekday` (optional, `smallint`, SB-71): the day of the week a `weekly`
+  chore is due, ISO numbering (1 = Monday ... 7 = Sunday). NULL means any day
+  that week. Check constraints allow 1–7 and only on `weekly` chores, so
+  changing a chore to `daily` or `weekends` has to clear it (the web app does).
+  It works with `due_time` ("Thursday by 7:00 PM"). The period is still the
+  ISO week (see **Recurrence**), so instances, rotation turns and streaks
+  ignore it; `choreDueDate()` gives the day itself.
 - `description` is the **Parent Note** in the UI. It keeps its column name.
 - `due_at` and `completed_at` are legacy one-off fields from before
   recurrence. Nothing uses them; SB-26 should drop them.
@@ -224,6 +231,12 @@ if (periodStart) {
 		.onConflictDoNothing();
 }
 ```
+
+A weekly chore with a `due_weekday` still has one period for the whole week.
+`choreDueDate(frequency, periodStart, dueWeekday)` gives the date it's due in
+that period (`periodStart + dueWeekday - 1`), or null without one, and
+`dueDayState(today, dueDate)` says whether that's `upcoming`, `today` or
+`overdue`. An overdue weekly chore can still be completed until the week ends.
 
 We considered computing everything from completions instead (no instance
 table; "done this period" means "a completion exists with a timestamp in this

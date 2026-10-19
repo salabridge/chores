@@ -14,6 +14,7 @@ import type { BatchItem } from 'drizzle-orm/batch';
 import {
 	type CreateChoreInput,
 	createInputError,
+	dueWeekdayFor,
 	type EditableChore,
 	FREQUENCY_LOCKED_MESSAGE,
 	STALE_CHORE_MESSAGE,
@@ -139,6 +140,7 @@ export async function createPersonalChore(
 		type: 'personal',
 		points: input.points,
 		frequency: input.frequency,
+		dueWeekday: dueWeekdayFor(input.frequency, input.dueWeekday),
 		assignedMemberId: assignee.id,
 		createdBy: actor.userId,
 	});
@@ -209,6 +211,7 @@ export async function createRotationChore(
 		type: 'rotation',
 		points: chore.points,
 		frequency: chore.frequency,
+		dueWeekday: dueWeekdayFor(chore.frequency, chore.dueWeekday),
 		assignedMemberId: null,
 		createdBy: actor.userId,
 	});
@@ -302,6 +305,7 @@ export async function loadEditableChore(
 		description: chore.description,
 		type: chore.type,
 		frequency: chore.frequency,
+		dueWeekday: chore.dueWeekday,
 		points: chore.points,
 		assignedMemberId: chore.assignedMemberId,
 		updatedAt: chore.updatedAt,
@@ -449,6 +453,8 @@ export async function updateChoreFromInput(
 				description: input.note?.trim() || null,
 				points: input.points,
 				frequency: input.frequency,
+				// Only weekly chores keep a due day; switching away clears it.
+				dueWeekday: dueWeekdayFor(input.frequency, input.dueWeekday),
 				assignedMemberId: assigneeId,
 				updatedAt: stamp,
 			})

@@ -44,6 +44,33 @@
 
 <Story name="Household rotation" {template} args={{ draft: exampleDraft() }} />
 
+<Story
+	name="Weekly, any day"
+	{template}
+	args={{
+		draft: {
+			...emptyDraft(),
+			title: 'Wash the car',
+			frequency: 'weekly',
+			assigneeId: 'leo',
+		},
+	}}
+/>
+
+<Story
+	name="Weekly, due Thursday"
+	{template}
+	args={{
+		draft: {
+			...emptyDraft(),
+			title: 'Take the bins out',
+			frequency: 'weekly',
+			dueWeekday: 4,
+			assigneeId: 'leo',
+		},
+	}}
+/>
+
 <Story name="Saving" {template} args={{ draft: exampleDraft(), pending: true }} />
 
 <Story

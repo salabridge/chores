@@ -25,6 +25,9 @@ describe('PersonalChoreDetail.svelte', () => {
 			.toBeVisible();
 		await expect.element(page.getByText('15 Points Reward')).toBeVisible();
 		await expect
+			.element(page.getByTestId('chore-schedule'))
+			.toHaveTextContent('Daily');
+		await expect
 			.element(page.getByText(/Break your room clean into three quick stages/))
 			.toBeVisible();
 		await expect

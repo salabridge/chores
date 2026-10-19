@@ -4,7 +4,7 @@
 		responsiveVisualTestParameters,
 		VisualTestGrid,
 	} from '#lib/visual-test/index.js';
-	import { emptyToday, todayData } from './fixtures.js';
+	import { emptyToday, todayData, weeklyDueToday } from './fixtures.js';
 	import * as thisFile from './TodayScreen.stories.svelte';
 	import TodayScreen from './TodayScreen.svelte';
 
@@ -29,6 +29,8 @@
 <Story name="No priority loop" args={{ data: { ...todayData, priority: null } }} />
 
 <Story name="Empty" args={{ data: emptyToday }} />
+
+<Story name="Weekly chores with a due day" args={{ data: weeklyDueToday }} />
 
 <Story
 	name="Visual test"

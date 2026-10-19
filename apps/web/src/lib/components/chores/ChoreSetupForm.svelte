@@ -19,6 +19,7 @@
 		validateDraft,
 	} from '#lib/chore-creator.js';
 	import { memberTone } from '#lib/rotation-loops.js';
+	import { type IsoWeekday, WEEKDAYS } from '#lib/weekdays.js';
 	import Badge from '../ui/Badge.svelte';
 	import Callout from '../ui/Callout.svelte';
 	import ChoiceChips from '../ui/ChoiceChips.svelte';
@@ -109,6 +110,23 @@
 		} finally {
 			submitting = false;
 		}
+	}
+
+	/** "Any day" is the default, and what a weekly chore without a day saves as. */
+	const ANY_DAY = 'any';
+	const dueDayOptions = [
+		{ value: ANY_DAY, label: 'Any day' },
+		...WEEKDAYS.map((d) => ({ value: d.value, label: d.short })),
+	];
+
+	function setFrequency(value: string | number | undefined) {
+		draft.frequency = value as Frequency;
+		// Only weekly chores have a due day, so switching away clears it.
+		if (draft.frequency !== 'weekly') draft.dueWeekday = null;
+	}
+
+	function setDueDay(value: string | number | undefined) {
+		draft.dueWeekday = value === ANY_DAY ? null : (Number(value) as IsoWeekday);
 	}
 
 	function setKind(kind: string) {
@@ -271,7 +289,7 @@
 				label="Frequency"
 				disabled={frequencyLocked}
 				options={FREQUENCIES.map((value) => ({ value, label: frequencyLabel(value) }))}
-				bind:value={() => draft.frequency, (v) => (draft.frequency = v as Frequency)}
+				bind:value={() => draft.frequency, setFrequency}
 			/>
 			{#if frequencyLocked}
 				<p class="text-[13px] text-text-secondary" data-testid="frequency-locked">
@@ -279,6 +297,19 @@
 				</p>
 			{/if}
 		</div>
+		{#if draft.frequency === 'weekly'}
+			<div class="flex flex-col gap-8" data-testid="due-day">
+				<span class="text-[13px] font-semibold text-text-primary">Due on</span>
+				<ChoiceChips
+					label="Due on"
+					options={dueDayOptions}
+					bind:value={() => draft.dueWeekday ?? ANY_DAY, setDueDay}
+				/>
+				<p class="text-[13px] text-text-secondary">
+					It can still be done any day that week. Kids see it as due on this day.
+				</p>
+			</div>
+		{/if}
 		<div class="flex flex-col gap-8">
 			<span class="text-[13px] font-semibold text-text-primary">Reward Points</span>
 			<ChoiceChips

@@ -3,6 +3,7 @@
 // file is bundled into the client.
 
 import { type RotationSlot, rotationHandoffChain } from '@chore/db/rotation';
+import { isIsoWeekday, weekdayShort } from './weekdays.ts';
 
 export type ChoreStatus = 'active-turn' | 'staged' | 'todo' | 'completed';
 
@@ -206,6 +207,8 @@ export function handoffText(input: {
 	dueTime: string | null;
 	dueLabel: string | null;
 	frequency: 'daily' | 'weekly' | 'weekends';
+	/** A weekly chore's due day (SB-71), or null/absent. */
+	dueWeekday?: number | null;
 }): string {
 	if (!input.dueToday) {
 		// Neither due nor done: it doesn't occur today, so this period is still ahead.
@@ -219,8 +222,13 @@ export function handoffText(input: {
 		}[input.frequency];
 		return `Next handoff ${next}`;
 	}
+	const day = weeklyDueDay(input);
+	if (day && input.dueTime)
+		return `Next handoff ${day} at ${formatTime(input.dueTime)}`;
+	if (day && input.dueLabel) return `Next handoff ${day}, ${input.dueLabel}`;
 	if (input.dueTime) return `Next handoff at ${formatTime(input.dueTime)}`;
 	if (input.dueLabel) return `Next handoff ${input.dueLabel}`;
+	if (day) return `Next handoff ${day}`;
 	if (input.frequency === 'weekly') return 'Next handoff this week';
 	if (input.frequency === 'weekends') return 'Next handoff this weekend';
 	return 'Next handoff today';
@@ -340,17 +348,33 @@ export function dueText(input: {
 	dueLabel: string | null;
 	dueTime: string | null;
 	frequency: 'daily' | 'weekly' | 'weekends';
+	/** A weekly chore's due day (SB-71), or null/absent. */
+	dueWeekday?: number | null;
 }): string {
 	if (input.status === 'completed') return 'done';
 	const stages = input.stageProgress;
 	if (stages && stages.total > 0) {
 		return `stage ${Math.min(stages.done + 1, stages.total)} of ${stages.total}`;
 	}
+	const day = weeklyDueDay(input);
+	if (day && input.dueLabel) return `${day}, ${input.dueLabel}`;
+	if (day && input.dueTime) return `${day} by ${formatTime(input.dueTime)}`;
+	if (day) return `due ${day}`;
 	if (input.dueLabel) return input.dueLabel;
 	if (input.dueTime) return `by ${formatTime(input.dueTime)}`;
 	if (input.frequency === 'weekly') return 'due this week';
 	if (input.frequency === 'weekends') return 'due this weekend';
 	return 'due today';
+}
+
+/** "Thu" for a weekly chore with a due day (SB-71), otherwise null. */
+function weeklyDueDay(input: {
+	frequency: 'daily' | 'weekly' | 'weekends';
+	dueWeekday?: number | null;
+}): string | null {
+	return input.frequency === 'weekly' && isIsoWeekday(input.dueWeekday)
+		? weekdayShort(input.dueWeekday)
+		: null;
 }
 
 /** "20:00:00" -> "8:00 PM". */

@@ -4,6 +4,7 @@
 		| 'todo'
 		| 'my-turn'
 		| 'completed'
+		| 'overdue'
 		| 'active-turn'
 		| 'staged'
 		| 'claimed'
@@ -39,6 +40,11 @@
 		completed: {
 			label: 'Completed',
 			classes: 'bg-surface-accent-green-subtle text-text-green font-semibold',
+		},
+		/** A weekly chore past its due day (SB-71); it can still be done this week. */
+		overdue: {
+			label: 'Overdue',
+			classes: 'bg-surface-accent-red-subtle text-text-red font-semibold',
 		},
 		'active-turn': {
 			label: 'Active Turn',

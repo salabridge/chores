@@ -84,6 +84,9 @@
 				</svg>
 				{detail.points} Points Reward
 			</p>
+			<p class="text-[13px] font-semibold text-text-secondary" data-testid="chore-schedule">
+				{detail.schedule}
+			</p>
 		</div>
 		<p class="text-[14px] text-text-secondary">{introText(detail)}</p>
 	</div>

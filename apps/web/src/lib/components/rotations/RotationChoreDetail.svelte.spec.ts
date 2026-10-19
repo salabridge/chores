@@ -22,6 +22,9 @@ describe('RotationChoreDetail.svelte', () => {
 			.toBeVisible();
 		await expect.element(page.getByText('20 Points Reward')).toBeVisible();
 		await expect
+			.element(page.getByTestId('chore-schedule'))
+			.toHaveTextContent('Weekly · Thu');
+		await expect
 			.element(page.getByText('The Kids Shared Bathroom Rotation Loop'))
 			.toBeVisible();
 		await expect.element(page.getByText('Done Last')).toBeVisible();

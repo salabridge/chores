@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { emptyToday, todayData } from './fixtures.ts';
+import { emptyToday, todayData, weeklyDueToday } from './fixtures.ts';
 import TodayScreen from './TodayScreen.svelte';
 
 describe('TodayScreen.svelte', () => {
@@ -89,5 +89,33 @@ describe('TodayScreen.svelte', () => {
 		await expect
 			.element(page.getByText('Priority loop first'))
 			.not.toBeInTheDocument();
+	});
+	it('shows weekly chores due today and overdue, and folds the rest away (SB-71)', async () => {
+		render(TodayScreen, { data: weeklyDueToday });
+		await expect.element(page.getByText('Due today by 7:00 PM')).toBeVisible();
+		await expect.element(page.getByText('Was due Mon')).toBeVisible();
+		await expect.element(page.getByText('Overdue')).toBeVisible();
+		// Later this week starts collapsed and isn't counted as due today.
+		const later = page.getByTestId('later-this-week');
+		await expect.element(later).not.toHaveAttribute('open');
+		await expect
+			.element(page.getByText('2 weekly chores due on a later day'))
+			.toBeVisible();
+		await expect
+			.element(page.getByText('2 chores', { exact: true }))
+			.toBeVisible();
+		await expect.element(page.getByText('15 pts total')).toBeVisible();
+		await page.getByText('Later this week').click();
+		await expect
+			.element(page.getByText('Due Sat · before lunch'))
+			.toBeVisible();
+		await expect
+			.element(page.getByText('Household rotation • Due Sun'))
+			.toBeVisible();
+	});
+
+	it('has no Later this week group without upcoming chores', async () => {
+		render(TodayScreen, { data: todayData });
+		expect(page.getByTestId('later-this-week').elements()).toHaveLength(0);
 	});
 });

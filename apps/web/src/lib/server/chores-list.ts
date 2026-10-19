@@ -33,6 +33,7 @@ export async function loadChoresList(householdId: string): Promise<ChoresList> {
 				title: chores.title,
 				type: chores.type,
 				frequency: chores.frequency,
+				dueWeekday: chores.dueWeekday,
 				points: chores.points,
 				assignedMemberId: chores.assignedMemberId,
 				archivedAt: chores.archivedAt,

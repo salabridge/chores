@@ -80,6 +80,53 @@ export function previousPeriodStart(
 	}
 }
 
+/** An ISO day of the week: 1 = Monday ... 7 = Sunday (`chores.due_weekday`). */
+export type IsoWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+/** Whether `value` is an ISO day of the week (an integer from 1 to 7). */
+export function isIsoWeekday(value: unknown): value is IsoWeekday {
+	return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 7;
+}
+
+/** The ISO day of the week of a `YYYY-MM-DD` date. */
+export function isoWeekday(date: string): IsoWeekday {
+	return (((parse(date).getUTCDay() + 6) % 7) + 1) as IsoWeekday;
+}
+
+/**
+ * The local date a chore is due in the period starting at `periodStart`, or
+ * `null` when it has no particular day (SB-71). Only a `weekly` chore with a
+ * `due_weekday` has one: `periodStart` (the Monday) plus `dueWeekday - 1`.
+ *
+ * The period is still the whole ISO week: a chore due Thursday can be done
+ * any day that week, and streaks and rotation turns don't look at this.
+ */
+export function choreDueDate(
+	frequency: ChoreFrequency,
+	periodStart: string,
+	dueWeekday: number | null | undefined,
+): string | null {
+	if (frequency !== 'weekly' || dueWeekday == null) return null;
+	if (!isIsoWeekday(dueWeekday)) {
+		throw new RangeError(`Expected a weekday from 1 to 7, got ${dueWeekday}`);
+	}
+	return addDays(periodStart, dueWeekday - 1);
+}
+
+/**
+ * How `today` relates to a chore's due date: `upcoming` before it, `today`
+ * on it, `overdue` after it (still in the period, so still completable).
+ */
+export type DueDayState = 'upcoming' | 'today' | 'overdue';
+
+export function dueDayState(today: string, dueDate: string): DueDayState {
+	// YYYY-MM-DD strings sort as dates; parse() validates both.
+	parse(today);
+	parse(dueDate);
+	if (today < dueDate) return 'upcoming';
+	return today === dueDate ? 'today' : 'overdue';
+}
+
 /** The local calendar date (`YYYY-MM-DD`) at `at` in an IANA time zone. */
 export function localDate(timeZone: string, at: Date = new Date()): string {
 	// en-CA formats dates as YYYY-MM-DD.

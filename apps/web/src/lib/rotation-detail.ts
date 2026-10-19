@@ -24,6 +24,8 @@ export interface RotationDetail {
 	title: string;
 	description: string | null;
 	points: number;
+	/** How often it repeats: "Daily", "Weekly · Thu" (SB-71). */
+	schedule: string;
 	scope: RotationScope;
 	scopeLabel: string | null;
 	/** Every member in turn order, excluded ones included. */

@@ -2,10 +2,22 @@
 // components and the tests share. No server imports here: this file is bundled
 // into the client.
 
+import { choreDueDate, dueDayState } from '@chore/db/recurrence';
 import { formatTime, plural } from './overview.ts';
 import type { StreakWeek } from './streak.ts';
+import {
+	type DueDayState,
+	dueDayText,
+	type IsoWeekday,
+	isIsoWeekday,
+} from './weekdays.ts';
 
-export type TodayStatus = 'in-progress' | 'todo' | 'my-turn' | 'completed';
+export type TodayStatus =
+	| 'in-progress'
+	| 'todo'
+	| 'my-turn'
+	| 'completed'
+	| 'overdue';
 
 export type TodayVariant = 'personal' | 'shared' | 'highlighted' | 'completed';
 
@@ -55,11 +67,41 @@ export interface TodayData {
 	priority: TodayPriority | null;
 	personal: TodayItem[];
 	rotations: TodayItem[];
+	/**
+	 * Weekly chores due later this week (SB-71), personal and rotations
+	 * together, by day. Not counted in the summary: they aren't due today.
+	 */
+	later: TodayItem[];
 	/** The Weekly Progress card (SB-68): the same week the Streak tab shows. */
 	week: StreakWeek;
 }
 
 type Frequency = 'daily' | 'weekly' | 'weekends';
+
+/**
+ * The day a weekly chore is due this week (SB-71) and how today relates to
+ * it. Null for chores without one, which are due any time in their period.
+ */
+export interface DueDay {
+	weekday: IsoWeekday;
+	state: DueDayState;
+}
+
+/**
+ * The due day of a chore in the period starting `periodStart`, seen from
+ * `today` (both household-local dates), or null when it has none.
+ */
+export function dueDayFor(
+	chore: { frequency: Frequency; dueWeekday: number | null },
+	periodStart: string,
+	today: string,
+): DueDay | null {
+	if (!isIsoWeekday(chore.dueWeekday)) return null;
+	const dueDate = choreDueDate(chore.frequency, periodStart, chore.dueWeekday);
+	return dueDate
+		? { weekday: chore.dueWeekday, state: dueDayState(today, dueDate) }
+		: null;
+}
 
 /** A personal chore due today to the viewer, as the server found it. */
 export interface PersonalFacts {
@@ -69,6 +111,8 @@ export interface PersonalFacts {
 	frequency: Frequency;
 	dueTime: string | null;
 	dueLabel: string | null;
+	/** A weekly chore's due day (SB-71); null when it has none. */
+	due: DueDay | null;
 	stages: { done: number; total: number };
 	completed: boolean;
 }
@@ -85,19 +129,22 @@ export interface RotationFacts {
 	completed: boolean;
 	/** Name of the member who finished this period's turn. */
 	completedByName: string | null;
+	/** A weekly chore's due day (SB-71); null when it has none. */
+	due: DueDay | null;
 }
 
 export const choreHref = (choreId: string) => `/chores/${choreId}`;
 
 const RANK: Record<TodayStatus, number> = {
-	'in-progress': 0,
-	'my-turn': 1,
-	todo: 1,
-	completed: 2,
+	overdue: 0,
+	'in-progress': 1,
+	'my-turn': 2,
+	todo: 2,
+	completed: 3,
 };
 
 /**
- * In progress first, then to do, then completed. Within a group a rotation
+ * Overdue first, then in progress, then to do, then completed. Within a group a rotation
  * that is the viewer's turn comes first, then bigger point values, then
  * alphabetical, so the order doesn't depend on how the rows came back.
  */
@@ -112,9 +159,21 @@ export function sortTodayItems(items: readonly TodayItem[]): TodayItem[] {
 	);
 }
 
+/** "Due Thu", "Was due Thu", or null without a due day. */
+const dueDayPart = (due: DueDay | null) =>
+	due ? dueDayText(due.state, due.weekday) : null;
+
+const isOverdue = (due: DueDay | null) => due?.state === 'overdue';
+
 function dueText(
-	f: Pick<PersonalFacts, 'dueLabel' | 'dueTime' | 'frequency'>,
+	f: Pick<PersonalFacts, 'dueLabel' | 'dueTime' | 'frequency' | 'due'>,
 ): string {
+	const day = dueDayPart(f.due);
+	if (day) {
+		if (f.dueLabel) return `${day} · ${f.dueLabel}`;
+		if (f.dueTime) return `${day} by ${formatTime(f.dueTime)}`;
+		return day;
+	}
 	if (f.dueLabel) return `Due ${f.dueLabel}`;
 	if (f.dueTime) return `Due by ${formatTime(f.dueTime)}`;
 	if (f.frequency === 'weekly') return 'Due this week';
@@ -128,16 +187,19 @@ const hasStarted = (stages: { done: number; total: number }) =>
 const currentStage = (stages: { done: number; total: number }) =>
 	Math.min(stages.done + 1, stages.total);
 
-/** "Stage 2 of 3 • Continue where you left off", "Due by 8:00 PM", ... */
+/** "Stage 2 of 3 • Continue where you left off", "Due by 8:00 PM", "Due Thu", ... */
 export function personalSubtitle(
 	f: Pick<
 		PersonalFacts,
-		'completed' | 'stages' | 'dueLabel' | 'dueTime' | 'frequency'
+		'completed' | 'stages' | 'dueLabel' | 'dueTime' | 'frequency' | 'due'
 	>,
 ): string {
 	if (f.completed) return 'Done for today';
 	if (hasStarted(f.stages)) {
-		return `Stage ${currentStage(f.stages)} of ${f.stages.total} • Continue where you left off`;
+		const tail = isOverdue(f.due)
+			? dueDayPart(f.due)
+			: 'Continue where you left off';
+		return `Stage ${currentStage(f.stages)} of ${f.stages.total} • ${tail}`;
 	}
 	return dueText(f);
 }
@@ -152,7 +214,9 @@ export function personalItem(f: PersonalFacts): TodayItem {
 			? 'completed'
 			: hasStarted(f.stages)
 				? 'in-progress'
-				: 'todo',
+				: isOverdue(f.due)
+					? 'overdue'
+					: 'todo',
 		variant: f.completed ? 'completed' : 'personal',
 		myTurn: false,
 		href: choreHref(f.choreId),
@@ -177,24 +241,33 @@ export function rotationItem(f: RotationFacts, viewerId: string): TodayItem {
 			myTurn: false,
 		};
 	}
+	const day = dueDayPart(f.due);
 	if (f.turnMemberId === viewerId) {
 		const started = hasStarted(f.stages);
+		const stage = `Household rotation • Stage ${currentStage(f.stages)} of ${f.stages.total}`;
 		return {
 			...base,
 			subtitle: started
-				? `Household rotation • Stage ${currentStage(f.stages)} of ${f.stages.total}`
-				: 'Household rotation • Open the loop details',
+				? isOverdue(f.due)
+					? `${stage} • ${day}`
+					: stage
+				: `Household rotation • ${day ?? 'Open the loop details'}`,
 			points: f.points,
-			status: started ? 'in-progress' : 'my-turn',
+			status: started
+				? 'in-progress'
+				: isOverdue(f.due)
+					? 'overdue'
+					: 'my-turn',
 			variant: 'highlighted',
 			myTurn: true,
 		};
 	}
+	const turn = f.turnMemberName
+		? `Shared rotation • ${f.turnMemberName} has the turn`
+		: 'Shared rotation • Nobody has the turn';
 	return {
 		...base,
-		subtitle: f.turnMemberName
-			? `Shared rotation • ${f.turnMemberName} has the turn`
-			: 'Shared rotation • Nobody has the turn',
+		subtitle: day ? `${turn} • ${day}` : turn,
 		points: f.points,
 		status: null,
 		variant: 'shared',
@@ -235,6 +308,14 @@ export function summarize(
 	};
 }
 
+/**
+ * A weekly chore that isn't due until a later day this week and isn't done
+ * yet. It goes in the collapsed "Later this week" group instead of today's
+ * lists (SB-71). One done early stays in today's list as completed.
+ */
+const isLater = (f: { due: DueDay | null; completed: boolean }) =>
+	f.due?.state === 'upcoming' && !f.completed;
+
 /** Everything the screen needs, from the facts the server loaded. */
 export function buildToday(input: {
 	member: { id: string; name: string };
@@ -244,10 +325,26 @@ export function buildToday(input: {
 	personal: readonly PersonalFacts[];
 	rotations: readonly RotationFacts[];
 }): TodayData {
-	const personal = sortTodayItems(input.personal.map(personalItem));
-	const rotations = sortTodayItems(
-		input.rotations.map((r) => rotationItem(r, input.member.id)),
+	const personal = sortTodayItems(
+		input.personal.filter((f) => !isLater(f)).map(personalItem),
 	);
+	const rotations = sortTodayItems(
+		input.rotations
+			.filter((f) => !isLater(f))
+			.map((r) => rotationItem(r, input.member.id)),
+	);
+	// By day, then title, personal and rotations mixed.
+	const later = [
+		...input.personal
+			.filter(isLater)
+			.map((f) => ({ day: f.due?.weekday ?? 0, item: personalItem(f) })),
+		...input.rotations.filter(isLater).map((f) => ({
+			day: f.due?.weekday ?? 0,
+			item: rotationItem(f, input.member.id),
+		})),
+	]
+		.sort((a, b) => a.day - b.day || a.item.title.localeCompare(b.item.title))
+		.map(({ item }) => item);
 	return {
 		member: input.member,
 		points: input.points,
@@ -256,6 +353,7 @@ export function buildToday(input: {
 		priority: pickPriority(rotations),
 		personal,
 		rotations,
+		later,
 		week: input.week,
 	};
 }

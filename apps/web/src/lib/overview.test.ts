@@ -134,6 +134,18 @@ describe('dueText / formatTime', () => {
 		expect(dueText({ ...base, status: 'completed' })).toBe('done');
 	});
 
+	it('names the due day of a weekly chore (SB-71)', () => {
+		const weekly = { ...base, frequency: 'weekly' as const, dueWeekday: 4 };
+		expect(dueText(weekly)).toBe('due Thu');
+		expect(dueText({ ...weekly, dueTime: '19:00:00' })).toBe('Thu by 7:00 PM');
+		expect(dueText({ ...weekly, dueLabel: 'after dinner' })).toBe(
+			'Thu, after dinner',
+		);
+		expect(dueText({ ...weekly, dueWeekday: null })).toBe('due this week');
+		// Only weekly chores have a day.
+		expect(dueText({ ...base, dueWeekday: 4 })).toBe('due today');
+	});
+
 	it('formats clock times', () => {
 		expect(formatTime('00:05:00')).toBe('12:05 AM');
 		expect(formatTime('12:00:00')).toBe('12:00 PM');
@@ -262,6 +274,17 @@ describe('handoffText', () => {
 		expect(handoffText(base)).toBe('Next handoff today');
 		expect(handoffText({ ...base, frequency: 'weekly' })).toBe(
 			'Next handoff this week',
+		);
+	});
+
+	it('names the due day of a weekly rotation (SB-71)', () => {
+		const weekly = { ...base, frequency: 'weekly' as const, dueWeekday: 4 };
+		expect(handoffText(weekly)).toBe('Next handoff Thu');
+		expect(handoffText({ ...weekly, dueTime: '19:00:00' })).toBe(
+			'Next handoff Thu at 7:00 PM',
+		);
+		expect(handoffText({ ...weekly, dueLabel: 'after dinner' })).toBe(
+			'Next handoff Thu, after dinner',
 		);
 	});
 

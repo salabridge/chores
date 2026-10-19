@@ -29,6 +29,11 @@ describe('ChoreListRow.svelte', () => {
 			.toHaveTextContent('Leo (turn), Mia');
 	});
 
+	it('names the due day of a weekly chore', async () => {
+		render(ChoreListRow, { ...props, chore: toilet });
+		await expect.element(page.getByText('Weekly · Thu')).toBeVisible();
+	});
+
 	it('marks the member in the individual grouping', async () => {
 		render(ChoreListRow, {
 			...props,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	buildToday,
+	dueDayFor,
 	type PersonalFacts,
 	pickPriority,
 	type RotationFacts,
@@ -16,6 +17,7 @@ const personal = (over: Partial<PersonalFacts> = {}): PersonalFacts => ({
 	frequency: 'daily',
 	dueTime: null,
 	dueLabel: null,
+	due: null,
 	stages: { done: 0, total: 0 },
 	completed: false,
 	...over,
@@ -30,6 +32,7 @@ const rotation = (over: Partial<RotationFacts> = {}): RotationFacts => ({
 	stages: { done: 0, total: 0 },
 	completed: false,
 	completedByName: null,
+	due: null,
 	...over,
 });
 
@@ -242,5 +245,150 @@ describe('streak copy', () => {
 			"You're all caught up today! Includes 1 exception.",
 		);
 		expect(streakNote({ days: 0, exceptions: 0 }, 0)).toBeNull();
+	});
+});
+
+describe('weekly chores with a due day (SB-71)', () => {
+	const thu = (state: 'upcoming' | 'today' | 'overdue') => ({
+		weekday: 4 as const,
+		state,
+	});
+
+	it('works out the due state in the week of periodStart', () => {
+		const chore = { frequency: 'weekly' as const, dueWeekday: 4 };
+		// The week of Monday 2026-10-12; Thursday is the 15th.
+		expect(dueDayFor(chore, '2026-10-12', '2026-10-13')).toEqual(
+			thu('upcoming'),
+		);
+		expect(dueDayFor(chore, '2026-10-12', '2026-10-15')).toEqual(thu('today'));
+		expect(dueDayFor(chore, '2026-10-12', '2026-10-17')).toEqual(
+			thu('overdue'),
+		);
+		expect(
+			dueDayFor({ ...chore, dueWeekday: null }, '2026-10-12', '2026-10-13'),
+		).toBeNull();
+		expect(
+			dueDayFor(
+				{ frequency: 'daily', dueWeekday: 4 },
+				'2026-10-13',
+				'2026-10-13',
+			),
+		).toBeNull();
+	});
+
+	it('says when it is due, with the time or label', () => {
+		const data = build({
+			personal: [
+				personal({
+					choreId: 'today',
+					frequency: 'weekly',
+					dueTime: '19:00:00',
+					due: thu('today'),
+				}),
+				personal({
+					choreId: 'late',
+					frequency: 'weekly',
+					dueLabel: 'after dinner',
+					due: thu('overdue'),
+				}),
+			],
+		});
+		const byId = Object.fromEntries(data.personal.map((i) => [i.choreId, i]));
+		expect(byId.today).toMatchObject({
+			subtitle: 'Due today by 7:00 PM',
+			status: 'todo',
+		});
+		expect(byId.late).toMatchObject({
+			subtitle: 'Was due Thu · after dinner',
+			status: 'overdue',
+		});
+		// Overdue sorts first, and still counts as to do today.
+		expect(data.personal[0].choreId).toBe('late');
+		expect(data.summary.personalCount).toBe(2);
+	});
+
+	it('keeps stage progress on an overdue chore and names the day', () => {
+		const data = build({
+			personal: [
+				personal({
+					frequency: 'weekly',
+					due: thu('overdue'),
+					stages: { done: 1, total: 3 },
+				}),
+			],
+		});
+		expect(data.personal[0]).toMatchObject({
+			subtitle: 'Stage 2 of 3 • Was due Thu',
+			status: 'in-progress',
+		});
+	});
+
+	it('moves upcoming chores to Later this week, out of the summary', () => {
+		const data = build({
+			personal: [
+				personal({ choreId: 'now', points: 5 }),
+				personal({
+					choreId: 'sat',
+					title: 'Wash the car',
+					frequency: 'weekly',
+					points: 20,
+					due: { weekday: 6, state: 'upcoming' },
+				}),
+			],
+			rotations: [
+				rotation({
+					choreId: 'fri',
+					title: 'Mow',
+					due: { weekday: 5, state: 'upcoming' },
+				}),
+			],
+		});
+		expect(data.personal.map((i) => i.choreId)).toEqual(['now']);
+		expect(data.rotations).toEqual([]);
+		expect(data.later.map((i) => [i.choreId, i.subtitle])).toEqual([
+			['fri', 'Household rotation • Due Fri'],
+			['sat', 'Due Sat'],
+		]);
+		expect(data.summary).toMatchObject({
+			personalCount: 1,
+			personalPoints: 5,
+			loopCount: 0,
+			availablePoints: 0,
+		});
+		expect(data.priority).toBeNull();
+	});
+
+	it("keeps a chore done early in today's list as completed", () => {
+		const data = build({
+			personal: [
+				personal({
+					frequency: 'weekly',
+					due: thu('upcoming'),
+					completed: true,
+				}),
+			],
+		});
+		expect(data.later).toEqual([]);
+		expect(data.personal[0].status).toBe('completed');
+	});
+
+	it("marks an overdue rotation turn and shows the day on someone else's turn", () => {
+		const mine = rotationItem(rotation({ due: thu('overdue') }), 'leo');
+		expect(mine).toMatchObject({
+			subtitle: 'Household rotation • Was due Thu',
+			status: 'overdue',
+			myTurn: true,
+		});
+		const theirs = rotationItem(
+			rotation({
+				turnMemberId: 'mia',
+				turnMemberName: 'Mia',
+				due: thu('today'),
+			}),
+			'leo',
+		);
+		expect(theirs.subtitle).toBe(
+			'Shared rotation • Mia has the turn • Due today',
+		);
 	});
 });

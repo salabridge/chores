@@ -14,6 +14,7 @@ const personal: DuplicateSource = {
 	note: 'After dinner',
 	kind: 'personal',
 	frequency: 'weekly',
+	dueWeekday: 4,
 	points: 15,
 	stages: [
 		{ title: 'Load', hint: 'Plates first' },
@@ -42,6 +43,7 @@ describe('duplicateDraft', () => {
 			note: 'After dinner',
 			kind: 'personal',
 			frequency: 'weekly',
+			dueWeekday: 4,
 			points: 15,
 			useStages: true,
 			assigneeId: 'leo',
