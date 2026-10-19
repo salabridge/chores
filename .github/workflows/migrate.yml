@@ -1,33 +1,80 @@
 name: Migrate
 
+# Migrates e2e, then dev, then production. Each job waits for the one before
+# it, so a migration that fails on e2e never reaches dev or production.
+# Production also waits for a required reviewer on its environment.
+#
+# Runs when a push to main adds or changes a migration. Schema edits without a
+# generated migration change nothing in the database, so they don't trigger it.
+# To retry after a failure, re-run the failed jobs from the run's page.
 on:
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: Environment to run migrations against
-        required: true
-        type: choice
-        options:
-          - dev
-          - production
-          - e2e
+  push:
+    branches:
+      - main
+    paths:
+      - packages/db/migrations/**
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.environment }}
+  group: ${{ github.workflow }}
   cancel-in-progress: false
 
 env:
   NODE_VERSION: 24
 
 jobs:
-  migrate:
-    name: Migrate (${{ inputs.environment }})
-    if: github.ref == 'refs/heads/main'
+  migrate-e2e:
+    name: Migrate (e2e)
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: e2e
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter @chore/db
+
+      - name: Migrate
+        run: pnpm --filter @chore/db db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+  migrate-dev:
+    name: Migrate (dev)
+    needs: migrate-e2e
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter @chore/db
+
+      - name: Migrate
+        run: pnpm --filter @chore/db db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+  migrate-production:
+    name: Migrate (production)
+    needs: migrate-dev
+    runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/checkout@v7
 
