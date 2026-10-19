@@ -152,7 +152,8 @@ CREATE OR REPLACE FUNCTION app.accept_household_invite(token text) RETURNS uuid
 -- - each member's points balance, as one `adjustment` ledger row ("Carried
 --   over from <old household>", created_by = the caller) when it isn't 0.
 --   Adjustments aren't `reward_claim` rows, so the 0012 balance trigger
---   doesn't apply, and a negative balance carries over as it was.
+--   doesn't apply, and a negative balance carries over as it was. A balance
+--   outside the integer range is clamped to it rather than failing the merge.
 -- A user with a login who is already in the target is skipped (their target
 -- membership and its points are left alone; the old one is deleted).
 --
@@ -164,6 +165,9 @@ CREATE OR REPLACE FUNCTION app.accept_household_invite(token text) RETURNS uuid
 -- Reward claims go first for the same reason (rewards are RESTRICT to them).
 -- device_profiles.active_member_id of the old members is set NULL by its FK.
 --
+-- Ownership of confirm_household_id is checked before any household lock is
+-- taken (and again once it's held), so naming someone else's household locks
+-- nothing of theirs.
 -- Locks, in this order: the invite row (claim_open_invite), the caller's
 -- accept lock (shared with accept_household_invite, so an accept and a merge
 -- by one user can't interleave), then both household rows in id order (two
@@ -191,6 +195,16 @@ CREATE OR REPLACE FUNCTION app.merge_household_via_invite(token text, confirm_ho
 		IF confirm_household_id = inv.household_id THEN
 			RAISE EXCEPTION 'that is the household the invite is for'
 				USING ERRCODE = '22023', HINT = 'same-household';
+		END IF;
+
+		-- Checked once without locks, so a caller can't lock a household row
+		-- they don't own just by naming it; checked again below under the lock.
+		IF NOT EXISTS (
+			SELECT 1 FROM public.household_members hm
+			WHERE hm.household_id = confirm_household_id AND hm.user_id = uid AND hm.role = 'owner'
+		) THEN
+			RAISE EXCEPTION 'only an owner of the household can move it'
+				USING ERRCODE = '42501', HINT = 'not-owner';
 		END IF;
 
 		PERFORM pg_advisory_xact_lock(hashtext('accept_household_invite:' || uid::text));
@@ -285,7 +299,8 @@ CREATE OR REPLACE FUNCTION app.merge_household_via_invite(token text, confirm_ho
 			IF m.balance <> 0 THEN
 				INSERT INTO public.points_ledger (household_id, member_id, delta, reason, note, created_by)
 				VALUES (
-					inv.household_id, new_member, m.balance::integer, 'adjustment',
+					inv.household_id, new_member,
+					greatest(least(m.balance, 2147483647), -2147483648)::integer, 'adjustment',
 					left('Carried over from ' || old_name, 200), uid
 				);
 			END IF;
