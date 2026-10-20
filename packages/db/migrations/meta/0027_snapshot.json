@@ -1,6 +1,6 @@
 {
-	"id": "f68a8844-ccd9-49be-b2ef-b22f12ab3435",
-	"prevId": "3d03ef20-4a58-453c-8df4-a24142a79b09",
+	"id": "a9e6a223-dfab-494c-8348-251463ee2ea2",
+	"prevId": "4b19fa2a-d256-4af4-b0d9-6443c60fcdb5",
 	"version": "7",
 	"dialect": "postgresql",
 	"tables": {
@@ -2166,6 +2166,12 @@
 					"notNull": true,
 					"default": "now()"
 				},
+				"removed_at": {
+					"name": "removed_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
 				"updated_at": {
 					"name": "updated_at",
 					"type": "timestamp with time zone",
@@ -2262,7 +2268,7 @@
 					"as": "PERMISSIVE",
 					"for": "UPDATE",
 					"to": ["authenticated_backend"],
-					"using": "app.is_household_owner(\"household_members\".\"household_id\")\n\t\t\t\tor (app.is_household_parent(\"household_members\".\"household_id\") and (\"household_members\".\"role\" = 'kid' or \"household_members\".\"user_id\" = (select app.current_user_id())))",
+					"using": "\"household_members\".\"removed_at\" is null and (app.is_household_owner(\"household_members\".\"household_id\")\n\t\t\t\tor (app.is_household_parent(\"household_members\".\"household_id\") and (\"household_members\".\"role\" = 'kid' or \"household_members\".\"user_id\" = (select app.current_user_id()))))",
 					"withCheck": "app.is_household_owner(\"household_members\".\"household_id\")\n\t\t\t\tor (app.is_household_parent(\"household_members\".\"household_id\") and (\"household_members\".\"role\" = 'kid' or (\"household_members\".\"user_id\" = (select app.current_user_id()) and \"household_members\".\"role\" = 'parent')))"
 				},
 				"household_members_delete": {
@@ -2296,7 +2302,11 @@
 				},
 				"household_members_managed_is_kid_check": {
 					"name": "household_members_managed_is_kid_check",
-					"value": "\"household_members\".\"user_id\" is not null or \"household_members\".\"role\" = 'kid'"
+					"value": "\"household_members\".\"user_id\" is not null or \"household_members\".\"role\" = 'kid' or \"household_members\".\"removed_at\" is not null"
+				},
+				"household_members_removed_detached_check": {
+					"name": "household_members_removed_detached_check",
+					"value": "\"household_members\".\"removed_at\" is null or \"household_members\".\"user_id\" is null"
 				}
 			},
 			"isRLSEnabled": false

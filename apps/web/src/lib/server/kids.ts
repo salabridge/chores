@@ -39,7 +39,7 @@ export async function insertManagedKid(
 				and ${setupClause}
 				and (
 					select count(*) from household_members m
-					where m.household_id = h.id and m.role = 'kid'
+					where m.household_id = h.id and m.role = 'kid' and m.removed_at is null
 				) < ${MAX_KIDS}
 			returning id`),
 	]);

@@ -5,7 +5,7 @@ import {
 	pointsLedger,
 } from '@chore/db';
 import { hashInviteToken } from '@chore/db/invites';
-import { and, asc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, type SQL, sql } from 'drizzle-orm';
 import type {
 	CurrentHousehold,
 	InviteProblem,
@@ -134,7 +134,12 @@ export async function loadCurrentHousehold(
 		})
 		.from(householdMembers)
 		.innerJoin(households, eq(households.id, householdMembers.householdId))
-		.where(eq(householdMembers.userId, userId))
+		.where(
+			and(
+				eq(householdMembers.userId, userId),
+				isNull(householdMembers.removedAt),
+			),
+		)
 		.orderBy(asc(householdMembers.joinedAt))
 		.limit(1);
 	if (!membership) return null;
@@ -151,7 +156,13 @@ export async function loadCurrentHousehold(
 				), 0)::int`,
 			})
 			.from(householdMembers)
-			.where(eq(householdMembers.householdId, membership.id))
+			// Removed members (SB-84) don't move with a merge.
+			.where(
+				and(
+					eq(householdMembers.householdId, membership.id),
+					isNull(householdMembers.removedAt),
+				),
+			)
 			.orderBy(asc(householdMembers.joinedAt), asc(householdMembers.id)),
 		db
 			.select({
@@ -281,6 +292,7 @@ export async function leaveHousehold(
 					select 1 from household_members o
 					where o.household_id = m.household_id
 						and o.role = 'owner'
+						and o.removed_at is null
 						and o.id <> m.id
 				))
 			returning m.id`),

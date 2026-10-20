@@ -1,5 +1,5 @@
 import { householdMembers, pointsLedger } from '@chore/db';
-import { and, desc, eq, gte, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, type SQL, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { type GiftInput, type GiftItem, parseGiftInput } from '../gift.ts';
 import { db } from './drizzle.ts';
@@ -61,6 +61,7 @@ export async function giftPoints(
 			and(
 				eq(householdMembers.id, memberId),
 				eq(householdMembers.householdId, actor.householdId),
+				isNull(householdMembers.removedAt),
 			),
 		);
 	if (!target) throw new GiftError('That member was not found.');
@@ -108,8 +109,9 @@ async function selectGifts(
 				eq(pointsLedger.memberId, member.id),
 				eq(pointsLedger.householdId, member.householdId),
 				// Only gifts: not a parent's correction, and not a balance moved in
-				// from another household (SB-76 "Carried over from …", SB-84
-				// "Moved from …"). See `points_adjustment_kind`.
+				// from another household (SB-76 "Carried over from …") or from a
+				// removed duplicate profile (SB-84 "Moved from …"). See
+				// `points_adjustment_kind`.
 				eq(pointsLedger.reason, 'adjustment'),
 				eq(pointsLedger.adjustmentKind, 'gift'),
 				extra,

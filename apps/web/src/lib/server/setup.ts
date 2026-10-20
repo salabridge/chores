@@ -109,6 +109,7 @@ export async function loadSetupData(status: SetupStatus): Promise<SetupData> {
 					eq(householdMembers.householdId, household.id),
 					eq(householdMembers.role, 'kid'),
 					isNull(householdMembers.userId),
+					isNull(householdMembers.removedAt),
 				),
 			)
 			.orderBy(asc(householdMembers.joinedAt), asc(householdMembers.id)),

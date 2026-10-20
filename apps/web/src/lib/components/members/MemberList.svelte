@@ -3,18 +3,22 @@
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import {
 		canEditMemberAvatar,
+		canRemoveMember,
 		type HouseholdMember,
 		type HouseholdRole,
 		memberLabel,
+		pointsMoveTargets,
 	} from '#lib/members.js';
 	import EditMemberAvatarForm from './EditMemberAvatarForm.svelte';
 	import GiftPointsForm from './GiftPointsForm.svelte';
+	import RemoveMemberDialog from './RemoveMemberDialog.svelte';
 
 	let {
 		members,
 		actor,
 		onchanged,
 		ongifted,
+		onremoved,
 	}: {
 		/** Everyone in the household, already in display order. */
 		members: HouseholdMember[];
@@ -24,13 +28,28 @@
 		onchanged?: () => void;
 		/** Bonus points were given to a kid. */
 		ongifted?: (memberId: string, points: number) => void;
+		/** A member was removed from the household (SB-84). */
+		onremoved?: (memberId: string) => void;
 	} = $props();
 
 	let editing = $state<string | null>(null);
 	let gifting = $state<string | null>(null);
 	/** The last gift, for the confirmation under that kid's name. */
 	let gifted = $state<{ id: string; points: number } | null>(null);
+	/** The member the remove dialog is open for. */
+	let removing = $state<HouseholdMember | null>(null);
+	let removeOpen = $state(false);
+	/** The last removal, confirmed above the list (the member has left it). */
+	let removed = $state<{ name: string; movedTo: string | null } | null>(null);
 </script>
+
+{#if removed}
+	<p role="status" class="mb-8 text-[13px] text-text-green">
+		Removed {removed.name} from the household.{removed.movedTo
+			? ` Their points moved to ${removed.movedTo}.`
+			: ''}
+	</p>
+{/if}
 
 <ul class="flex flex-col gap-8" aria-label="Household members">
 	{#each members as member (member.id)}
@@ -66,6 +85,20 @@
 							}}
 						>
 							Give bonus points
+						</SecondaryButton>
+					{/if}
+					{#if actor && canRemoveMember(actor, member)}
+						<SecondaryButton
+							type="button"
+							variant="tinted"
+							tone="red"
+							aria-label={`Remove ${member.displayName} from the household`}
+							onclick={() => {
+								removing = member;
+								removeOpen = true;
+							}}
+						>
+							Remove
 						</SecondaryButton>
 					{/if}
 					{#if actor && canEditMemberAvatar(actor, member) && editing !== member.id}
@@ -110,3 +143,16 @@
 		</li>
 	{/each}
 </ul>
+
+{#if removing}
+	{@const target = removing}
+	<RemoveMemberDialog
+		bind:open={removeOpen}
+		member={target}
+		moveTargets={pointsMoveTargets(members, target)}
+		onremoved={(movedTo) => {
+			removed = { name: target.displayName, movedTo };
+			onremoved?.(target.id);
+		}}
+	/>
+{/if}

@@ -20,15 +20,23 @@ const mocks = vi.hoisted(() => {
 		select: () => select,
 		update: vi.fn((_table: unknown) => ({ set })),
 		set,
-		execute: vi.fn(() => ({ kind: 'execute' })),
+		execute: vi.fn((query: { queryChunks?: unknown[] }) => ({
+			kind: 'execute',
+			sql: JSON.stringify(query.queryChunks ?? query),
+		})),
 		batch: vi.fn(async (_q: unknown[]): Promise<unknown[]> => []),
 	};
 	return { db };
 });
 vi.mock('./drizzle.ts', () => ({ db: mocks.db }));
 
-const { addManagedKid, listHouseholdMembers, MemberError, updateMemberAvatar } =
-	await import('./members.ts');
+const {
+	addManagedKid,
+	listHouseholdMembers,
+	MemberError,
+	removeMember,
+	updateMemberAvatar,
+} = await import('./members.ts');
 
 const kid = {
 	displayName: 'Mia',
@@ -133,5 +141,100 @@ describe('updateMemberAvatar', () => {
 			'That member was not found.',
 		);
 		expect(mocks.db.update).not.toHaveBeenCalled();
+	});
+});
+
+describe('removeMember', () => {
+	const MIA = '11111111-1111-4111-8111-111111111111';
+	const AVA = '22222222-2222-4222-8222-222222222222';
+	const mom = {
+		id: 'mom',
+		householdId: 'h1',
+		userId: 'mom-user',
+		role: 'owner' as const,
+		displayName: 'Mom',
+		avatarColor: null,
+		avatarInitial: null,
+	};
+	const self = { mode: 'self' as const, member: mom, actor: mom };
+	const household = [
+		{ id: MIA, name: 'Mia' },
+		{ id: AVA, name: 'Ava' },
+	];
+	const failure = async (run: () => Promise<unknown>) => {
+		try {
+			await run();
+		} catch (e) {
+			return e;
+		}
+		throw new Error('expected a rejection');
+	};
+
+	it('removes in one batch as the signed-in parent and reports the move', async () => {
+		mocks.db.queue.push(household);
+		mocks.db.batch.mockResolvedValueOnce([[], { rows: [{ moved: 15 }] }]);
+		expect(await removeMember(self, MIA, AVA)).toEqual({
+			name: 'Mia',
+			movedPoints: 15,
+			movedTo: 'Ava',
+		});
+		const queries = mocks.db.batch.mock.calls[0][0] as { sql: string }[];
+		expect(queries[0].sql).toContain('request.jwt.claims');
+		expect(queries[0].sql).toContain('mom-user');
+		expect(queries[1].sql).toContain('app.remove_household_member');
+		expect(queries[1].sql).toContain(MIA);
+		expect(queries[1].sql).toContain(AVA);
+	});
+
+	it('says nothing moved when the balance was 0', async () => {
+		mocks.db.queue.push(household);
+		mocks.db.batch.mockResolvedValueOnce([[], { rows: [{ moved: 0 }] }]);
+		expect(await removeMember(self, MIA, AVA)).toEqual({
+			name: 'Mia',
+			movedPoints: 0,
+			movedTo: null,
+		});
+	});
+
+	it('passes a kid profile as acting_as, so the database refuses it', async () => {
+		const mia = { ...mom, id: MIA, userId: null, role: 'kid' as const };
+		mocks.db.queue.push(household);
+		mocks.db.batch.mockResolvedValueOnce([[], { rows: [{ moved: 0 }] }]);
+		await removeMember({ mode: 'kid', member: mia, actor: mom }, AVA, null);
+		const queries = mocks.db.batch.mock.calls[0][0] as { sql: string }[];
+		expect(queries[1].sql.split(MIA).length).toBe(2);
+	});
+
+	it('never calls the database for someone outside the household', async () => {
+		mocks.db.queue.push(household);
+		const e = await failure(() =>
+			removeMember(self, '33333333-3333-4333-8333-333333333333', null),
+		);
+		expect(e).toBeInstanceOf(MemberError);
+		expect(mocks.db.batch).not.toHaveBeenCalled();
+	});
+
+	it("words the database's refusals by their HINT", async () => {
+		const cases: [string, string][] = [
+			['self', "You can't remove yourself."],
+			['not-owner', 'Only an owner can remove a parent.'],
+			['last-owner', "The household's only owner can't be removed."],
+			['kid-profile', 'A parent has to leave this kid profile first.'],
+			[
+				'invalid-recipient',
+				'Points can only move to another kid in the household.',
+			],
+		];
+		for (const [hint, message] of cases) {
+			mocks.db.queue.push(household);
+			mocks.db.batch.mockRejectedValueOnce(
+				new Error('wrapped', {
+					cause: Object.assign(new Error('pg'), { code: '42501', hint }),
+				}),
+			);
+			const e = await failure(() => removeMember(self, MIA, null));
+			expect(e).toBeInstanceOf(MemberError);
+			expect((e as Error).message).toBe(message);
+		}
 	});
 });

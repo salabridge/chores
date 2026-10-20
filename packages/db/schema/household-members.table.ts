@@ -70,6 +70,16 @@ export const householdMembers = pgTable(
 		joinedAt: timestamp('joined_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),
+		/**
+		 * When a parent removed this member from the household (SB-84). The row
+		 * stays so history (completions, "Done by", the points ledger) keeps
+		 * pointing at it, but a removed member is out of every member list,
+		 * rotation, picker and stat, and the RLS helpers ignore it. Removal also
+		 * clears `user_id`, so the login is detached: the user is in no household
+		 * and lands in setup. Set only by `app.remove_household_member`; there's
+		 * no restoring yet.
+		 */
+		removedAt: timestamp('removed_at', { withTimezone: true }),
 		updatedAt: timestamp('updated_at', { withTimezone: true })
 			.defaultNow()
 			.$onUpdate(() => /* @__PURE__ */ new Date())
@@ -105,10 +115,17 @@ export const householdMembers = pgTable(
 			sql`${t.birthYear} is null or ${t.birthYear} between 1900 and 2200`,
 		),
 		// Only signed-in users can be parents: a parent has to be able to sign
-		// in to act for managed kids.
+		// in to act for managed kids. A removed parent keeps their role for
+		// history but has no login any more.
 		check(
 			'household_members_managed_is_kid_check',
-			sql`${t.userId} is not null or ${t.role} = 'kid'`,
+			sql`${t.userId} is not null or ${t.role} = 'kid' or ${t.removedAt} is not null`,
+		),
+		// A removed member has no login (SB-84), so nothing that resolves the
+		// signed-in user to a member row can ever find a removed one.
+		check(
+			'household_members_removed_detached_check',
+			sql`${t.removedAt} is null or ${t.userId} is null`,
 		),
 		pgPolicy('household_members_select', {
 			for: 'select',
@@ -124,14 +141,15 @@ export const householdMembers = pgTable(
 				or (${isHouseholdParent(t.householdId)} and ${t.role} = 'kid' and ${t.userId} is null)`,
 		}),
 		// Owners change anyone. Parents change kids (who stay kids) and their own
-		// profile (without promoting themselves). Which columns can change at all
+		// profile (without promoting themselves). Removed members can't be
+		// changed (SB-84). Which columns can change at all
 		// is limited by column grants (see the custom migrations): never `id`,
 		// `household_id`, or `user_id`.
 		pgPolicy('household_members_update', {
 			for: 'update',
 			to: backendRole,
-			using: sql`${isHouseholdOwner(t.householdId)}
-				or (${isHouseholdParent(t.householdId)} and (${t.role} = 'kid' or ${t.userId} = ${currentUserId}))`,
+			using: sql`${t.removedAt} is null and (${isHouseholdOwner(t.householdId)}
+				or (${isHouseholdParent(t.householdId)} and (${t.role} = 'kid' or ${t.userId} = ${currentUserId})))`,
 			withCheck: sql`${isHouseholdOwner(t.householdId)}
 				or (${isHouseholdParent(t.householdId)} and (${t.role} = 'kid' or (${t.userId} = ${currentUserId} and ${t.role} = 'parent')))`,
 		}),

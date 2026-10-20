@@ -44,12 +44,20 @@ export class ChoreError extends Error {
 	}
 }
 
-/** Everyone in the household, in the order they joined (the default rotation order). */
+/**
+ * Everyone in the household, in the order they joined (the default rotation
+ * order). Removed members (SB-84) can't be picked.
+ */
 export async function listHouseholdMembers(householdId: string) {
 	return db
 		.select({ id: householdMembers.id, name: householdMembers.displayName })
 		.from(householdMembers)
-		.where(eq(householdMembers.householdId, householdId))
+		.where(
+			and(
+				eq(householdMembers.householdId, householdId),
+				isNull(householdMembers.removedAt),
+			),
+		)
 		.orderBy(asc(householdMembers.joinedAt), asc(householdMembers.id));
 }
 
@@ -123,6 +131,7 @@ export async function createPersonalChore(
 			and(
 				eq(householdMembers.id, String(input.assigneeId)),
 				eq(householdMembers.householdId, actor.householdId),
+				isNull(householdMembers.removedAt),
 			),
 		);
 	if (!assignee) throw new ChoreError('Choose a member of this household.');
@@ -433,6 +442,7 @@ export async function updateChoreFromInput(
 				and(
 					eq(householdMembers.id, String(input.assigneeId)),
 					eq(householdMembers.householdId, actor.householdId),
+					isNull(householdMembers.removedAt),
 				),
 			);
 		if (!assignee) throw new ChoreError('Choose a member of this household.');

@@ -60,6 +60,8 @@ export async function loadToday(
 				and(eq(chores.householdId, householdId), isNull(chores.archivedAt)),
 			),
 		db
+			// Names only, so removed members (SB-84) are kept: "Done by" still
+			// names someone who has since left.
 			.select({ id: householdMembers.id, name: householdMembers.displayName })
 			.from(householdMembers)
 			.where(eq(householdMembers.householdId, householdId)),

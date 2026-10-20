@@ -12,7 +12,7 @@ import { pgEnum } from 'drizzle-orm/pg-core';
  *   household (SB-84, "Moved from …").
  *
  * Before this column, gifts were told apart from carry-overs by the note's
- * prefix; migration 0025 backfilled it from that.
+ * prefix; migration 0027 backfilled it from that.
  */
 export const pointsAdjustmentKind = pgEnum('points_adjustment_kind', [
 	'gift',

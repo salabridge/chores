@@ -8,8 +8,10 @@ ALTER POLICY "points_ledger_insert" ON "points_ledger" TO authenticated_backend 
 				and ("points_ledger"."adjustment_kind" is null or "points_ledger"."adjustment_kind" = 'gift')
 				and "points_ledger"."created_by" = (select app.current_user_id()));--> statement-breakpoint
 
--- SB-83, hand-written from here: the backfill, the merge writing its marker,
--- and app.mark_gifts_seen.
+-- SB-83, hand-written from here: the backfill, the merge and member removal
+-- writing their markers, and app.mark_gifts_seen. (Numbered 0027: it was 0025
+-- in parallel with SB-84's 0026, and has to run after it, since 0026 replaces
+-- both functions.)
 --
 -- Backfill `adjustment_kind` from the notes the old code relied on. The merge
 -- (SB-76) wrote "Carried over from …"; removing a member (SB-84) writes
@@ -25,7 +27,7 @@ UPDATE points_ledger SET adjustment_kind = 'gift'
 	WHERE reason = 'adjustment' AND adjustment_kind IS NULL AND delta > 0;
 --> statement-breakpoint
 
--- The merge (0023) marks its carry-over rows. Unchanged apart from that.
+-- The merge (as in 0026) marks its carry-over rows. Unchanged apart from that.
 CREATE OR REPLACE FUNCTION app.merge_household_via_invite(token text, confirm_household_id uuid)
 	RETURNS uuid
 	LANGUAGE plpgsql VOLATILE SECURITY DEFINER
@@ -86,7 +88,8 @@ CREATE OR REPLACE FUNCTION app.merge_household_via_invite(token text, confirm_ho
 		-- (see new_role below: with a kid invite, that's everyone).
 		SELECT count(*) INTO kid_count
 		FROM public.household_members hm
-		WHERE (hm.household_id = inv.household_id AND hm.role = 'kid')
+		WHERE hm.removed_at IS NULL
+			AND ((hm.household_id = inv.household_id AND hm.role = 'kid')
 			OR (
 				hm.household_id = confirm_household_id
 				AND (hm.role = 'kid' OR inv.role = 'kid')
@@ -94,7 +97,7 @@ CREATE OR REPLACE FUNCTION app.merge_household_via_invite(token text, confirm_ho
 					SELECT 1 FROM public.household_members t
 					WHERE t.household_id = inv.household_id AND t.user_id = hm.user_id
 				)
-			);
+			));
 		IF kid_count > 12 THEN
 			RAISE EXCEPTION 'household is full'
 				USING ERRCODE = 'P0001', HINT = 'household-full';
@@ -105,7 +108,7 @@ CREATE OR REPLACE FUNCTION app.merge_household_via_invite(token text, confirm_ho
 				(SELECT coalesce(sum(l.delta), 0) FROM public.points_ledger l
 				 WHERE l.member_id = hm.id AND l.household_id = hm.household_id) AS balance
 			FROM public.household_members hm
-			WHERE hm.household_id = confirm_household_id
+			WHERE hm.household_id = confirm_household_id AND hm.removed_at IS NULL
 			ORDER BY hm.joined_at, hm.id
 		LOOP
 			IF m.user_id IS NOT NULL AND EXISTS (
@@ -168,6 +171,195 @@ CREATE OR REPLACE FUNCTION app.merge_household_via_invite(token text, confirm_ho
 		DELETE FROM public.households h WHERE h.id = confirm_household_id;
 
 		RETURN caller_member;
+	END
+	$$;
+--> statement-breakpoint
+
+-- Removing a member (as in 0026) marks its moved points. Unchanged apart from
+-- that; CREATE OR REPLACE keeps its grant.
+CREATE OR REPLACE FUNCTION app.remove_household_member(
+	member uuid,
+	move_points_to uuid DEFAULT NULL,
+	acting_as uuid DEFAULT NULL
+) RETURNS integer
+	LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+	SET search_path = pg_catalog, public
+	AS $$
+	DECLARE
+		uid uuid := app.current_user_id();
+		target public.household_members%ROWTYPE;
+		actor public.household_members%ROWTYPE;
+		recipient public.household_members%ROWTYPE;
+		hh_timezone text;
+		today date;
+		balance bigint;
+		moved integer := 0;
+	BEGIN
+		IF uid IS NULL THEN
+			RAISE EXCEPTION 'not signed in'
+				USING ERRCODE = '42501', HINT = 'not-signed-in';
+		END IF;
+
+		-- Unlocked: is the caller in the member's household at all?
+		SELECT * INTO target FROM public.household_members m
+		WHERE m.id = member AND m.removed_at IS NULL;
+		IF NOT FOUND OR NOT app.is_household_member(target.household_id) THEN
+			RAISE EXCEPTION 'member not found'
+				USING ERRCODE = 'P0002', HINT = 'member-not-found';
+		END IF;
+		IF NOT app.is_household_parent(target.household_id) THEN
+			RAISE EXCEPTION 'only a parent can remove a member'
+				USING ERRCODE = '42501', HINT = 'not-parent';
+		END IF;
+
+		SELECT h.timezone INTO hh_timezone FROM public.households h
+		WHERE h.id = target.household_id
+		FOR UPDATE;
+
+		-- Again under the locks: the member and the caller as they are now.
+		SELECT * INTO target FROM public.household_members m
+		WHERE m.id = member AND m.removed_at IS NULL
+		FOR UPDATE;
+		IF NOT FOUND THEN
+			RAISE EXCEPTION 'member not found'
+				USING ERRCODE = 'P0002', HINT = 'member-not-found';
+		END IF;
+		SELECT * INTO actor FROM public.household_members m
+		WHERE m.household_id = target.household_id AND m.user_id = uid
+			AND m.removed_at IS NULL;
+		IF NOT FOUND OR actor.role NOT IN ('owner', 'parent') THEN
+			RAISE EXCEPTION 'only a parent can remove a member'
+				USING ERRCODE = '42501', HINT = 'not-parent';
+		END IF;
+		IF acting_as IS NOT NULL AND acting_as <> actor.id THEN
+			RAISE EXCEPTION 'leave the kid profile to remove a member'
+				USING ERRCODE = '42501', HINT = 'kid-profile';
+		END IF;
+		IF target.id = actor.id THEN
+			RAISE EXCEPTION 'you can''t remove yourself'
+				USING ERRCODE = '22023', HINT = 'self';
+		END IF;
+		IF target.role <> 'kid' AND actor.role <> 'owner' THEN
+			RAISE EXCEPTION 'only an owner can remove a parent'
+				USING ERRCODE = '42501', HINT = 'not-owner';
+		END IF;
+		IF target.role = 'owner' AND NOT EXISTS (
+			SELECT 1 FROM public.household_members o
+			WHERE o.household_id = target.household_id AND o.role = 'owner'
+				AND o.removed_at IS NULL AND o.id <> target.id
+		) THEN
+			RAISE EXCEPTION 'the household''s only owner can''t be removed'
+				USING ERRCODE = '22023', HINT = 'last-owner';
+		END IF;
+
+		IF move_points_to IS NOT NULL THEN
+			SELECT * INTO recipient FROM public.household_members m
+			WHERE m.id = move_points_to AND m.household_id = target.household_id
+				AND m.removed_at IS NULL AND m.role = 'kid' AND m.id <> target.id;
+			IF NOT FOUND OR target.role <> 'kid' THEN
+				RAISE EXCEPTION 'points can only move from a kid to another kid in the household'
+					USING ERRCODE = '22023', HINT = 'invalid-recipient';
+			END IF;
+
+			SELECT coalesce(sum(l.delta), 0) INTO balance FROM public.points_ledger l
+			WHERE l.member_id = target.id AND l.household_id = target.household_id;
+			moved := greatest(least(balance, 2147483647), -2147483648)::integer;
+			IF moved <> 0 THEN
+				-- `transfer`, so the web app's bonus-points list leaves them out
+				-- (it isn't a gift).
+				INSERT INTO public.points_ledger (
+					household_id, member_id, delta, reason, adjustment_kind, note, created_by
+				)
+				VALUES
+					(target.household_id, target.id, -moved, 'adjustment', 'transfer',
+					 left('Moved from ' || target.display_name || ' to ' || recipient.display_name || ' (duplicate profile)', 200),
+					 uid),
+					(target.household_id, recipient.id, moved, 'adjustment', 'transfer',
+					 left('Moved from ' || target.display_name || ' (duplicate profile)', 200),
+					 uid);
+			END IF;
+		END IF;
+
+		-- Pending favours involving them: lock the instances, then decline.
+		PERFORM 1 FROM public.chore_instances ci
+		WHERE ci.id IN (
+			SELECT cc.instance_id FROM public.chore_completions cc
+			WHERE cc.household_id = target.household_id
+				AND cc.approval_status = 'pending'
+				AND (cc.member_id = target.id OR cc.done_by_member_id = target.id)
+		)
+		ORDER BY ci.id
+		FOR UPDATE;
+		DELETE FROM public.chore_stage_progress sp
+		USING public.chore_completions cc
+		WHERE cc.household_id = target.household_id
+			AND cc.approval_status = 'pending'
+			AND (cc.member_id = target.id OR cc.done_by_member_id = target.id)
+			AND sp.instance_id = cc.instance_id
+			AND sp.completed_by_member_id IS NOT DISTINCT FROM cc.done_by_member_id;
+		UPDATE public.chore_completions cc
+		SET approval_status = 'declined', decided_by_member_id = actor.id, decided_at = now()
+		WHERE cc.household_id = target.household_id
+			AND cc.approval_status = 'pending'
+			AND (cc.member_id = target.id OR cc.done_by_member_id = target.id);
+
+		-- Out of every rotation; the 0009 trigger hands their turn on.
+		DELETE FROM public.chore_rotation_members rm
+		WHERE rm.member_id = target.id AND rm.household_id = target.household_id;
+
+		UPDATE public.chores c
+		SET assigned_member_id = NULL, updated_at = now()
+		WHERE c.household_id = target.household_id AND c.assigned_member_id = target.id;
+
+		-- Their open instances from today on: the rotation's turn now, or nobody.
+		today := (now() AT TIME ZONE hh_timezone)::date;
+		PERFORM 1 FROM public.chore_instances ci
+		WHERE ci.household_id = target.household_id AND ci.assigned_member_id = target.id
+		ORDER BY ci.id
+		FOR UPDATE;
+		UPDATE public.chore_instances ci
+		SET assigned_member_id = (
+				SELECT r.current_member_id FROM public.chore_rotations r
+				WHERE r.chore_id = ci.chore_id
+			)
+		FROM public.chores c
+		WHERE c.id = ci.chore_id
+			AND ci.household_id = target.household_id
+			AND ci.assigned_member_id = target.id
+			-- A weekly period starts on Monday, so this week's is at most 6 days back.
+			AND ci.period_start >= CASE WHEN c.frequency = 'weekly' THEN today - 6 ELSE today END
+			AND NOT EXISTS (
+				SELECT 1 FROM public.chore_completions cc
+				WHERE cc.instance_id = ci.id
+					AND cc.reopened_at IS NULL
+					AND cc.approval_status <> 'declined'
+			);
+
+		UPDATE public.chore_reminders cr
+		SET dismissed_at = now()
+		WHERE cr.household_id = target.household_id
+			AND cr.assignee_member_id = target.id
+			AND cr.dismissed_at IS NULL;
+
+		IF target.user_id IS NOT NULL THEN
+			DELETE FROM public.household_invites i
+			WHERE i.household_id = target.household_id
+				AND i.invited_by = target.user_id
+				AND i.accepted_at IS NULL;
+			UPDATE public.device_profiles d
+			SET active_member_id = NULL
+			WHERE d.user_id = target.user_id AND d.active_member_id IS NOT NULL;
+		END IF;
+		UPDATE public.device_profiles d
+		SET active_member_id = NULL
+		WHERE d.active_member_id = target.id;
+		DELETE FROM public.household_member_pins p WHERE p.member_id = target.id;
+
+		UPDATE public.household_members m
+		SET removed_at = now(), user_id = NULL, updated_at = now()
+		WHERE m.id = target.id;
+
+		RETURN moved;
 	END
 	$$;
 --> statement-breakpoint

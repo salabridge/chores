@@ -76,7 +76,14 @@ export async function householdStreaks(
 			tx
 				.select({ id: householdMembers.id })
 				.from(householdMembers)
-				.where(eq(householdMembers.householdId, householdId)),
+				// Removed members (SB-84) have no streak, and their old misses no
+				// longer hold the family streak back.
+				.where(
+					and(
+						eq(householdMembers.householdId, householdId),
+						isNull(householdMembers.removedAt),
+					),
+				),
 			tx
 				.select({
 					id: chores.id,

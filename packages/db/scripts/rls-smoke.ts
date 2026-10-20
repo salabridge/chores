@@ -17,7 +17,8 @@
  * take turns on a rotation chore. Carol and Mia do each other's chores as
  * favours, which wait for the owner's (or a parent's) OK (SB-74, SB-79). Dave
  * signs up and stays out until he moves his own household into Alice's on an
- * invite (SB-76).
+ * invite (SB-76). A duplicate profile of Mia's, Erin (a kid with a login)
+ * and Dave are removed again (SB-84).
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -67,6 +68,7 @@ import {
 	mergeHouseholdViaInvite,
 	NotAFavourError,
 	NotHouseholdParentError,
+	removeHouseholdMember,
 	reopenCompletion,
 	requireHouseholdParent,
 	StageLockedError,
@@ -3039,6 +3041,394 @@ try {
 		giftC.createdAt.getTime(),
 	);
 	ok('stored on her member row, so it stays dismissed on every device');
+
+	console.log('Removing a member (SB-84):');
+	// Mia has a duplicate profile (the SB-76 merge case): 15 points, the turn
+	// on a rotation, a chore of her own with an instance today and yesterday,
+	// a pending favour she did on Mia's profile, a reminder and a device
+	// profile acting as her.
+	const [{ timezone: houseZone }] = await admin
+		.select({ timezone: households.timezone })
+		.from(households)
+		.where(eq(households.id, household.id));
+	const houseToday = localDate(houseZone);
+	const [dupe] = await admin
+		.insert(householdMembers)
+		.values({ householdId: household.id, displayName: 'Mia again' })
+		.returning();
+	await admin.insert(pointsLedger).values({
+		householdId: household.id,
+		memberId: dupe.id,
+		delta: 15,
+		reason: 'adjustment',
+		note: 'Smoke test',
+	});
+	const fish = await authed.withAuth(alice.token, async (tx) => {
+		const [c] = await tx
+			.insert(chores)
+			.values({
+				householdId: household.id,
+				title: 'Feed the fish',
+				type: 'rotation',
+			})
+			.returning();
+		await tx.insert(choreRotations).values({
+			choreId: c.id,
+			householdId: household.id,
+			currentMemberId: dupe.id,
+		});
+		await tx
+			.insert(choreRotationMembers)
+			.values([
+				slot(c.id, dupe.id, 1),
+				slot(c.id, mia.id, 2),
+				slot(c.id, carolMemberId, 3),
+			]);
+		return c;
+	});
+	const [dupeChore, miaSocks] = await admin
+		.insert(chores)
+		.values([
+			{
+				householdId: household.id,
+				title: 'Dupe bed',
+				assignedMemberId: dupe.id,
+			},
+			{
+				householdId: household.id,
+				title: 'Mia socks',
+				assignedMemberId: mia.id,
+			},
+		])
+		.returning();
+	const [fishToday, dupeToday, dupeYesterday, socksToday] = await admin
+		.insert(choreInstances)
+		.values([
+			{
+				householdId: household.id,
+				choreId: fish.id,
+				periodStart: houseToday,
+				assignedMemberId: dupe.id,
+			},
+			{
+				householdId: household.id,
+				choreId: dupeChore.id,
+				periodStart: houseToday,
+				assignedMemberId: dupe.id,
+			},
+			{
+				householdId: household.id,
+				choreId: dupeChore.id,
+				periodStart: addDays(houseToday, -1),
+				assignedMemberId: dupe.id,
+			},
+			{
+				householdId: household.id,
+				choreId: miaSocks.id,
+				periodStart: houseToday,
+				assignedMemberId: mia.id,
+			},
+		])
+		.returning();
+	const dupeFavour = await authed.withAuth(alice.token, (tx) =>
+		completeChore(tx, socksToday.id, { doneBy: dupe.id, actingAs: dupe.id }),
+	);
+	assert.equal(dupeFavour.approvalStatus, 'pending');
+	await admin.insert(choreReminders).values({
+		householdId: household.id,
+		choreId: dupeChore.id,
+		assigneeMemberId: dupe.id,
+	});
+	await admin.insert(deviceProfiles).values({
+		deviceHash: 'device-dupe',
+		userId: alice.id,
+		activeMemberId: dupe.id,
+	});
+
+	// Erin is a kid with her own login; she isn't in the household yet.
+	const erin = await makeUser('erin');
+	created.push(erin.id);
+	await expectRejected(
+		'Erin (not a member) removing Mia again',
+		() =>
+			authed.withAuth(erin.token, (tx) => removeHouseholdMember(tx, dupe.id)),
+		/member not found/,
+	);
+	const erinInvite = createInviteToken();
+	await admin.insert(householdInvites).values({
+		householdId: household.id,
+		email: erin.email,
+		role: 'kid',
+		tokenHash: erinInvite.tokenHash,
+	});
+	const erinMemberId = await authed.withAuth(erin.token, (tx) =>
+		acceptHouseholdInvite(tx, erinInvite.token),
+	);
+
+	await expectRejected(
+		'Carol (kid) removing Mia again',
+		() =>
+			authed.withAuth(carol.token, (tx) => removeHouseholdMember(tx, dupe.id)),
+		/only a parent can remove a member/,
+	);
+	await expectRejected(
+		"Alice removing a member while on Mia's kid profile",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				removeHouseholdMember(tx, dupe.id, { actingAs: mia.id }),
+			),
+		/leave the kid profile/,
+	);
+	await expectRejected(
+		'Alice removing herself',
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				removeHouseholdMember(tx, aliceMember.id),
+			),
+		/can't remove yourself/,
+	);
+	await expectRejected(
+		'Bob (parent) removing Dave (parent)',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				removeHouseholdMember(tx, daveMemberId),
+			),
+		/only an owner can remove a parent/,
+	);
+	await expectRejected(
+		'Bob (parent) removing Alice (owner)',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				removeHouseholdMember(tx, aliceMember.id),
+			),
+		/only an owner can remove a parent/,
+	);
+	await expectRejected(
+		"moving Mia again's points to Bob (not a kid)",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				removeHouseholdMember(tx, dupe.id, { movePointsTo: bobMemberId }),
+			),
+		/points can only move from a kid to another kid/,
+	);
+	await expectRejected(
+		"moving Mia again's points to herself",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				removeHouseholdMember(tx, dupe.id, { movePointsTo: dupe.id }),
+			),
+		/points can only move from a kid to another kid/,
+	);
+	await expectRejected(
+		"moving Dave's (a parent's) points to Mia",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				removeHouseholdMember(tx, daveMemberId, { movePointsTo: mia.id }),
+			),
+		/points can only move from a kid to another kid/,
+	);
+	const [stillThereDupe] = await admin
+		.select()
+		.from(householdMembers)
+		.where(eq(householdMembers.id, dupe.id));
+	assert.equal(stillThereDupe.removedAt, null);
+	ok('a refused removal changes nothing');
+
+	const miaBeforeMove = await balance(mia.id);
+	const movedPoints = await authed.withAuth(bob.token, (tx) =>
+		removeHouseholdMember(tx, dupe.id, { movePointsTo: mia.id }),
+	);
+	assert.equal(movedPoints, 15);
+	assert.equal(await balance(mia.id), miaBeforeMove + 15);
+	assert.equal(await balance(dupe.id), 0);
+	const moveRows = await admin
+		.select()
+		.from(pointsLedger)
+		.where(
+			and(
+				eq(pointsLedger.householdId, household.id),
+				sql`${pointsLedger.note} like 'Moved from %'`,
+			),
+		);
+	assert.deepEqual(
+		moveRows
+			.map((r) => [
+				r.memberId,
+				r.delta,
+				r.reason,
+				r.adjustmentKind,
+				r.note,
+				r.createdBy,
+			])
+			.sort((a, b) => Number(a[1]) - Number(b[1])),
+		[
+			[
+				dupe.id,
+				-15,
+				'adjustment',
+				'transfer',
+				'Moved from Mia again to Mia (duplicate profile)',
+				bob.id,
+			],
+			[
+				mia.id,
+				15,
+				'adjustment',
+				'transfer',
+				'Moved from Mia again (duplicate profile)',
+				bob.id,
+			],
+		],
+	);
+	assert.deepEqual(await unseenGiftIds(mia.id), []);
+	ok(
+		'Bob (parent) removes Mia again, moving her 15 points to Mia (a transfer, not a gift)',
+	);
+
+	const [dupeAfter] = await authed.withAuth(alice.token, (tx) =>
+		tx.select().from(householdMembers).where(eq(householdMembers.id, dupe.id)),
+	);
+	assert.ok(dupeAfter.removedAt);
+	assert.equal(dupeAfter.displayName, 'Mia again');
+	ok('the removed row stays readable for history, with removed_at set');
+
+	const fishTurns = await authed.withAuth(alice.token, (tx) =>
+		getRotationTurns(tx, fish.id),
+	);
+	assert.deepEqual(
+		fishTurns?.members.map((m) => m.memberId),
+		[mia.id, carolMemberId],
+	);
+	assert.equal(fishTurns?.activeTurn?.memberId, mia.id);
+	const instancesAfter = await admin
+		.select()
+		.from(choreInstances)
+		.where(
+			inArray(choreInstances.id, [
+				fishToday.id,
+				dupeToday.id,
+				dupeYesterday.id,
+				socksToday.id,
+			]),
+		);
+	const assigneeOf = (id: string) =>
+		instancesAfter.find((i) => i.id === id)?.assignedMemberId;
+	assert.equal(assigneeOf(fishToday.id), mia.id);
+	assert.equal(assigneeOf(dupeToday.id), null);
+	assert.equal(assigneeOf(dupeYesterday.id), dupe.id);
+	assert.equal(assigneeOf(socksToday.id), mia.id);
+	const [dupeChoreAfter] = await admin
+		.select()
+		.from(chores)
+		.where(eq(chores.id, dupeChore.id));
+	assert.equal(dupeChoreAfter.assignedMemberId, null);
+	ok(
+		"she leaves the rotation (Mia has the turn and today's instance), her chore and today's instance are unassigned, yesterday's keeps her",
+	);
+
+	const [favourAfter] = await admin
+		.select()
+		.from(choreCompletions)
+		.where(eq(choreCompletions.id, dupeFavour.completionId));
+	assert.equal(favourAfter.approvalStatus, 'declined');
+	assert.equal(favourAfter.decidedByMemberId, bobMemberId);
+	const [reminderAfter] = await admin
+		.select()
+		.from(choreReminders)
+		.where(eq(choreReminders.assigneeMemberId, dupe.id));
+	assert.ok(reminderAfter.dismissedAt);
+	const [dupeDevice] = await admin
+		.select()
+		.from(deviceProfiles)
+		.where(eq(deviceProfiles.deviceHash, 'device-dupe'));
+	assert.equal(dupeDevice.activeMemberId, null);
+	ok(
+		'her pending favour is declined, her reminder dismissed, and the device profile falls back to the parent',
+	);
+
+	assert.equal(
+		await authed.withAuth(alice.token, (tx) => canActAsMember(tx, dupe.id)),
+		false,
+	);
+	await expectRejected(
+		'assigning a chore to the removed member',
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				tx
+					.update(chores)
+					.set({ assignedMemberId: dupe.id })
+					.where(eq(chores.id, dupeChore.id)),
+			),
+		RLS_DENIED,
+	);
+	await expectNoRows('renaming the removed member', () =>
+		authed.withAuth(alice.token, (tx) =>
+			tx
+				.update(householdMembers)
+				.set({ displayName: 'Back again' })
+				.where(eq(householdMembers.id, dupe.id))
+				.returning(),
+		),
+	);
+	await expectRejected(
+		'removing her twice',
+		() =>
+			authed.withAuth(alice.token, (tx) => removeHouseholdMember(tx, dupe.id)),
+		/member not found/,
+	);
+
+	// A kid with a login: no points to move.
+	assert.equal(
+		await authed.withAuth(bob.token, (tx) =>
+			removeHouseholdMember(tx, erinMemberId),
+		),
+		0,
+	);
+	const erinSees = await authed.withAuth(erin.token, async (tx) => ({
+		households: await tx.select().from(households),
+		members: await tx.select().from(householdMembers),
+		chores: await tx.select().from(chores),
+		memberId: await currentMemberId(tx, household.id),
+	}));
+	assert.equal(erinSees.households.length, 0);
+	assert.equal(erinSees.members.length, 0);
+	assert.equal(erinSees.chores.length, 0);
+	assert.equal(erinSees.memberId, null);
+	const erinRows = await admin
+		.select()
+		.from(householdMembers)
+		.where(eq(householdMembers.userId, erin.id));
+	assert.equal(erinRows.length, 0);
+	ok(
+		'Bob removes Erin (kid with a login): she loses access at once and has no household (setup next sign-in)',
+	);
+
+	// An owner removes a parent, who can then be invited back.
+	await authed.withAuth(alice.token, (tx) =>
+		removeHouseholdMember(tx, daveMemberId),
+	);
+	assert.equal(
+		await authed.withAuth(dave.token, (tx) =>
+			isHouseholdParent(tx, household.id),
+		),
+		false,
+	);
+	const daveSeesAfter = await authed.withAuth(dave.token, (tx) =>
+		tx.select().from(households),
+	);
+	assert.equal(daveSeesAfter.length, 0);
+	const daveBack = createInviteToken();
+	await admin.insert(householdInvites).values({
+		householdId: household.id,
+		email: dave.email,
+		role: 'parent',
+		tokenHash: daveBack.tokenHash,
+	});
+	const daveAgain = await authed.withAuth(dave.token, (tx) =>
+		acceptHouseholdInvite(tx, daveBack.token),
+	);
+	assert.notEqual(daveAgain, daveMemberId);
+	ok('Alice (owner) removes Dave (parent); he can accept a new invite later');
 
 	console.log('Leaving and removing:');
 	await expectNoRows('Bob removing Alice (owner)', () =>
