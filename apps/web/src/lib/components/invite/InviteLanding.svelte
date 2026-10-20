@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { track } from '#lib/analytics.js';
 	import AuthHeading from '#lib/components/auth/AuthHeading.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import Callout from '#lib/components/ui/Callout.svelte';
@@ -56,6 +57,14 @@
 		`${open.inviterName ?? 'A parent'} invited you to join ${open.householdName} ${
 			open.role === 'parent' ? 'as a parent' : 'with your own login'
 		}. The invite is for ${open.email}.`;
+
+	function accepted(mergedHousehold: boolean) {
+		if (invite.status !== 'open') return;
+		track('invite_accepted', {
+			role: invite.role,
+			merged_household: mergedHousehold,
+		});
+	}
 
 	const id = $props.id();
 	/** What's typed in the merge confirm box. */
@@ -132,7 +141,12 @@
 				</p>
 			</section>
 
-			<form {...mergeHouseholdLink} class="flex flex-col gap-16">
+			<form
+				{...mergeHouseholdLink.enhance(async (form) => {
+					if (await form.submit()) accepted(true);
+				})}
+				class="flex flex-col gap-16"
+			>
 				<FormAlert issues={mergeHouseholdLink.fields.issues()} />
 				<input {...mergeHouseholdLink.fields.token.as('hidden', token)} />
 				<input
@@ -187,7 +201,12 @@
 			{@render signedIn()}
 			{@render switchAccount?.()}
 		{:else}
-			<form {...acceptInviteLink} class="flex flex-col gap-16">
+			<form
+				{...acceptInviteLink.enhance(async (form) => {
+					if (await form.submit()) accepted(false);
+				})}
+				class="flex flex-col gap-16"
+			>
 				<FormAlert issues={acceptInviteLink.fields.issues()} />
 				<input {...acceptInviteLink.fields.token.as('hidden', token)} />
 				<PrimaryButton type="submit" pending={acceptInviteLink.pending > 0}>

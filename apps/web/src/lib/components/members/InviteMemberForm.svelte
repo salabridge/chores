@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { track } from '#lib/analytics.js';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import ChoiceChips from '#lib/components/ui/ChoiceChips.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
@@ -40,6 +41,7 @@
 <div class="flex flex-col gap-16">
 	<form
 		{...inviteMember.enhance(async (form) => {
+			const invitedRole = role === 'parent' ? 'parent' : 'kid';
 			if (await form.submit()) {
 				const result = inviteMember.result;
 				if (result) {
@@ -48,6 +50,7 @@
 						link: result.link,
 						emailed: result.emailed,
 					};
+					track('invite_sent', { role: invitedRole, emailed: result.emailed });
 				}
 				// reset() puts the radios back to their SSR default (kid), so the
 				// chips' state has to follow, or the hidden birth year goes missing.

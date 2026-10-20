@@ -20,6 +20,7 @@ const {
 	scrubEvent,
 	scrubUrl,
 	syncIdentity,
+	track,
 	trackPageview,
 } = await import('./analytics.ts');
 
@@ -28,6 +29,7 @@ describe('with no PUBLIC_POSTHOG_KEY', () => {
 		await initAnalytics(undefined, 'https://us.i.posthog.com');
 		await initAnalytics('', 'https://us.i.posthog.com');
 		await trackPageview('/(protected)/(app)/today');
+		await track('household_created', {});
 		await identify({ role: 'parent', userId: 'u1', householdId: 'h1' });
 		expect(posthog.loaded).toBe(false);
 		expect(posthog.init).not.toHaveBeenCalled();
@@ -184,5 +186,12 @@ describe('with a key', () => {
 
 		await trackPageview(null);
 		expect(posthog.register).toHaveBeenLastCalledWith({ route: '(not found)' });
+	});
+
+	it('captures key events with their properties', async () => {
+		await track('bonus_points_gifted', { points: 5 });
+		expect(posthog.capture).toHaveBeenLastCalledWith('bonus_points_gifted', {
+			points: 5,
+		});
 	});
 });

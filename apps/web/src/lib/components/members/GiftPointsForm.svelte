@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { track } from '#lib/analytics.js';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
@@ -31,7 +32,10 @@
 <form
 	{...form.enhance(async (f) => {
 		const given = Number(points);
-		if (await f.submit()) onsaved?.(given);
+		if (await f.submit()) {
+			track('bonus_points_gifted', { points: given });
+			onsaved?.(given);
+		}
 	})}
 	class="flex flex-col gap-12"
 	aria-label={`Give ${member.displayName} bonus points`}

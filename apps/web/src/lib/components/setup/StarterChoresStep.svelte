@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { track } from '#lib/analytics.js';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
@@ -22,7 +23,16 @@
 		'flex items-center gap-12 rounded-xl border border-border-subtle bg-surface-default p-12 has-focus-visible:outline-2 has-focus-visible:outline-border-orange has-checked:border-border-orange has-checked:bg-surface-accent-orange-subtle';
 </script>
 
-<form {...finishSetupStep} class="flex flex-col gap-24">
+<form
+	{...finishSetupStep.enhance(async (form) => {
+		const skipped = Boolean(finishSetupStep.fields.skip.value());
+		const picked = skipped ? 0 : (finishSetupStep.fields.chores.value()?.length ?? 0);
+		if (await form.submit()) {
+			track('setup_completed', { starter_chores: picked, skipped });
+		}
+	})}
+	class="flex flex-col gap-24"
+>
 	<FormAlert issues={finishSetupStep.fields.issues()} />
 
 	<fieldset class="flex flex-col gap-8">

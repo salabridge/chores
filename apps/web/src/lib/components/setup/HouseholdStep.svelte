@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { track } from '#lib/analytics.js';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
@@ -38,7 +39,12 @@
 
 <form
 	{...saveHouseholdStep.enhance(async (form) => {
-		if (await form.submit()) onsaved?.();
+		// No saved name yet means this save creates the household.
+		const creating = !name;
+		if (await form.submit()) {
+			if (creating) track('household_created', {});
+			onsaved?.();
+		}
 	})}
 	class="flex flex-col gap-16"
 >

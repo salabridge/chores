@@ -111,6 +111,12 @@ previews run like this.
   `afterNavigate`. Each is named by its SvelteKit route id
   (`/(protected)/(app)/chores/[id]`), never the raw path, and every later
   event carries the same id as `route`.
+- A few key events, captured in the browser once the action succeeds:
+  `household_created`, `setup_completed`, `invite_sent`, `invite_accepted`,
+  `chore_created`, `chore_completed`, `reward_redeemed` and
+  `bonus_points_gifted`. `AnalyticsEvents` in `src/lib/analytics.ts` lists
+  each event's properties. `chore_completed` means a completion was recorded,
+  so it includes a favour that still waits for approval.
 - Autocaptured clicks, with no element text or attribute values
   (`mask_all_text`, `mask_all_element_attributes`). Those hold chore names,
   kid names and input values.
@@ -146,3 +152,14 @@ else happens: on sign-out, when a kid profile opens or closes, and when
 another parent signs in. Without the reset, `identify` would merge a kid's
 anonymous history, or another parent's, into whoever signs in next on a
 shared family device.
+
+**Adding an event.**
+
+1. Add the event to `AnalyticsEvents` in `src/lib/analytics.ts`, with its
+   properties. Properties are ids, counts, booleans and enums only. Never add
+   free text such as chore titles, gift reasons or names, which people type.
+2. Call `track('event_name', { ... })` in the browser, after the action has
+   succeeded. That's usually the `enhance` callback, once `submit()` returns
+   true. With analytics off, `track` does nothing, so components can call it
+   in stories and tests.
+3. Add the event to the list above.

@@ -161,6 +161,47 @@ export function initAnalytics(key: string | undefined, host: string) {
 	return client;
 }
 
+/**
+ * Every custom event and its properties. Ids, counts, booleans and enums
+ * only: never free text such as chore titles, gift reasons or names, which
+ * parents and kids type. Add an event here before calling `track` with it.
+ */
+export interface AnalyticsEvents {
+	/** Setup step 1 saved a new household (not an edit of it). */
+	household_created: Record<string, never>;
+	/** Setup finished; `starter_chores` is how many were picked (0 when skipped). */
+	setup_completed: { starter_chores: number; skipped: boolean };
+	invite_sent: { role: 'parent' | 'kid'; emailed: boolean };
+	/** `merged_household`: the invitee moved their own household in. */
+	invite_accepted: { role: 'parent' | 'kid'; merged_household: boolean };
+	chore_created: {
+		kind: 'personal' | 'rotation';
+		stages: number;
+		duplicate: boolean;
+	};
+	/**
+	 * A completion was recorded: the last stage, or a chore without stages.
+	 * Includes a favour that still waits for approval.
+	 */
+	chore_completed: { chore_id: string; kind: 'personal' | 'rotation' };
+	reward_redeemed: { reward_id: string; cost: number };
+	bonus_points_gifted: { points: number };
+}
+
+/** Captures a key event (see `AnalyticsEvents`). Does nothing while analytics is off. */
+export function track<E extends keyof AnalyticsEvents>(
+	event: E,
+	properties: AnalyticsEvents[E],
+) {
+	return client
+		.then((ph) => {
+			ph?.capture(event, properties);
+		})
+		.catch(() => {
+			// Fire-and-forget: a failed SDK load must never break the action.
+		});
+}
+
 /** See `syncIdentity`. */
 export function identify(identity: AnalyticsIdentity) {
 	return client.then((ph) => ph && syncIdentity(ph, identity));

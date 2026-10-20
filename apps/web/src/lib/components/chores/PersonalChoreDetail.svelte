@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { track } from '#lib/analytics.js';
 	import type { MemberOption } from '#lib/chore-creator.js';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import StickyActionBar from '#lib/components/shell/StickyActionBar.svelte';
@@ -134,7 +135,14 @@
 		<form
 			class="flex flex-col gap-12"
 			{...form.enhance(async ({ submit }) => {
-				if (await submit()) await onstagedone?.();
+				// No stages, or the last one: this records the completion.
+				const finishing = !currentStage || currentStage.id === detail.stages.at(-1)?.id;
+				if (await submit()) {
+					if (finishing) {
+						track('chore_completed', { chore_id: detail.choreId, kind: 'personal' });
+					}
+					await onstagedone?.();
+				}
 			})}
 		>
 			<input {...form.fields.choreId.as('hidden', detail.choreId)} />

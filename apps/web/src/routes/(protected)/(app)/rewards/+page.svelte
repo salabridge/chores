@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { track } from '#lib/analytics.js';
 	import BonusPointsCard from '#lib/components/rewards/BonusPointsCard.svelte';
 	import ClaimConfirm from '#lib/components/rewards/ClaimConfirm.svelte';
 	import HouseholdContribution from '#lib/components/rewards/HouseholdContribution.svelte';
@@ -102,7 +103,16 @@
 					use:enhance={() => {
 						// Disabled while sending, so a double tap can't submit twice.
 						claiming = true;
-						return async ({ update }) => {
+						const reward = data.confirming;
+						return async ({ result, update }) => {
+							// A claim that went through redirects to ?claimed=; an expired session redirects to sign-in.
+							if (
+								result.type === 'redirect' &&
+								reward &&
+								result.location.startsWith('/rewards?claimed=')
+							) {
+								track('reward_redeemed', { reward_id: reward.id, cost: reward.cost });
+							}
 							await update();
 							claiming = false;
 						};
