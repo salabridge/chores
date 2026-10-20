@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { isHttpError } from '@sveltejs/kit';
+	import { track } from '#lib/analytics.js';
 	import {
 		CHORE_FORM_ID,
 		type ChoreDraft,
@@ -66,6 +67,11 @@
 		} catch (e) {
 			throw failure(e);
 		}
+		track('chore_created', {
+			kind: 'rotation',
+			stages: draft.stages.length,
+			duplicate: duplicate !== null,
+		});
 		await invalidateAll();
 		await goto('/overview');
 	}
@@ -81,6 +87,11 @@
 		} catch (e) {
 			throw failure(e);
 		}
+		track('chore_created', {
+			kind: 'personal',
+			stages: valid.stages.length,
+			duplicate: duplicate !== null,
+		});
 		await invalidateAll();
 		await goto('/overview');
 	}

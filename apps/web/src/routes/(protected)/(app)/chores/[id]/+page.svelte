@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { isHttpError } from '@sveltejs/kit';
+	import { track } from '#lib/analytics.js';
 	import { completionHref } from '#lib/chore-completion.js';
 	import { duplicateHref } from '#lib/chore-duplicate.js';
 	import PersonalChoreDetail from '#lib/components/chores/PersonalChoreDetail.svelte';
@@ -33,6 +34,9 @@
 			await invalidateAll();
 			throw new Error(messageOf(e, 'Could not complete this turn. Try again.'));
 		}
+		if (result.completionId) {
+			track('chore_completed', { chore_id: id, kind: 'rotation' });
+		}
 		// A completion id means the points are in the ledger; the done screen reads them.
 		await (result.completionId && celebrates(doneBy)
 			? goto(completionHref(id, result.completionId))
@@ -46,6 +50,9 @@
 		} catch (e) {
 			await invalidateAll();
 			throw new Error(messageOf(e, 'Could not save this stage. Try again.'));
+		}
+		if (result.choreCompleted && result.completionId) {
+			track('chore_completed', { chore_id: id, kind: 'rotation' });
 		}
 		if (result.choreCompleted && result.completionId && celebrates(doneBy)) {
 			await goto(completionHref(id, result.completionId));
