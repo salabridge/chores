@@ -75,7 +75,6 @@ describe('member shell load', () => {
 			shellMember: { name: 'Leo', points: 15, tone: 'green' },
 		});
 		expect(mocks.pinGet).toHaveBeenCalledWith('parent1');
-		expect(mocks.listUnseenGifts).not.toHaveBeenCalled();
 	});
 
 	it('has no header member without a household', async () => {
@@ -117,5 +116,22 @@ describe('member shell load', () => {
 			unseenGifts: [],
 		});
 		expect(mocks.listUnseenGifts).not.toHaveBeenCalled();
+	});
+
+	it("gives a managed kid's profile that kid's unseen gifts", async () => {
+		const mom = { ...leo, id: 'parent1', userId: 'u-mom', role: 'owner' };
+		const gifts = [{ id: 'g1', points: 20 }];
+		mocks.getProfileState.mockResolvedValue({
+			mode: 'kid',
+			member: leo,
+			actor: mom,
+		});
+		mocks.memberPointsBalance.mockResolvedValue(0);
+		mocks.pinGet.mockResolvedValue(null);
+		mocks.listUnseenGifts.mockResolvedValue(gifts);
+		await expect(load({} as never)).resolves.toMatchObject({
+			unseenGifts: gifts,
+		});
+		expect(mocks.listUnseenGifts).toHaveBeenCalledWith(leo);
 	});
 });

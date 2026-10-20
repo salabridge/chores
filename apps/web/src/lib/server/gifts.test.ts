@@ -176,18 +176,33 @@ const kidSelf = {
 const GIFT_A = '0b6f1d1e-6a1c-4c2a-9f1e-2b8d3c4e5f60';
 const GIFT_B = '1c7f2e2f-7b2d-4d3b-8f2f-3c9e4d5f6a71';
 
+const otherHouseKid = { ...member('kid', null), householdId: 'h2' };
+const managedKid = {
+	mode: 'kid' as const,
+	member: member('kid', null),
+	actor: mom,
+};
+
 describe('seesGiftMoment', () => {
 	it('is true for a kid on their own login', () => {
 		expect(seesGiftMoment(kidSelf)).toBe(true);
 	});
 
-	it('is false while a parent is on a kid profile', () => {
+	it("is true on a managed kid's profile on a parent's device", () => {
+		expect(seesGiftMoment(managedKid)).toBe(true);
+	});
+
+	it('is false for a profile the parent may not open', () => {
+		// A kid with a login, or one in another household.
 		expect(
-			seesGiftMoment({ mode: 'kid', member: member('kid', null), actor: mom }),
+			seesGiftMoment({ mode: 'kid', member: member('kid'), actor: mom }),
+		).toBe(false);
+		expect(
+			seesGiftMoment({ mode: 'kid', member: otherHouseKid, actor: mom }),
 		).toBe(false);
 	});
 
-	it('is false for a parent and without a household', () => {
+	it('is false for a parent in their own view and without a household', () => {
 		expect(seesGiftMoment({ mode: 'self', member: mom, actor: mom })).toBe(
 			false,
 		);
@@ -225,9 +240,17 @@ describe('markGiftsSeen', () => {
 		expect(mocks.db.execute).toHaveBeenCalledTimes(2);
 	});
 
-	it('refuses a parent on a kid profile without touching the database', async () => {
+	it("marks a managed kid's gifts with the parent's claims", async () => {
+		await markGiftsSeen(managedKid, [GIFT_A]);
+		expect(mocks.db.batch).toHaveBeenCalledOnce();
+		expect(JSON.stringify(mocks.db.execute.mock.calls[0])).toContain(
+			'{\\"sub\\":\\"u-mom\\"}',
+		);
+	});
+
+	it('refuses a profile the parent may not open', async () => {
 		await expect(
-			markGiftsSeen({ mode: 'kid', member: member('kid', null), actor: mom }, [
+			markGiftsSeen({ mode: 'kid', member: otherHouseKid, actor: mom }, [
 				GIFT_A,
 			]),
 		).rejects.toMatchObject({ status: 403 });

@@ -441,10 +441,11 @@ done.
   share one moment. Dismissing it calls `markGiftsSeen(tx, memberId,
   giftIds)` (`app.mark_gifts_seen`), which moves `gifts_seen_at` forward to the
   newest of the gifts the moment showed, never back, so a gift that arrived
-  while it was open stays unseen. Only the member's own login can call it (not
-  a parent, and not a parent's session on a managed kid's profile, where the
-  web app doesn't show the moment); the column has no UPDATE grant, so the
-  function is the only way to change it. We chose one timestamp on the member
+  while it was open stays unseen. It only works for a kid, by someone who can
+  act as them (`app.can_act_as_member`): the kid's own login, or a parent on a
+  managed kid's profile (the shared device). A parent can't mark a kid with
+  their own login, another parent, themselves, or another household's kid.
+  The column has no UPDATE grant, so the function is the only way to change it. We chose one timestamp on the member
   over a `seen_at` on each ledger row because the ledger is append-only (no
   UPDATE grant or policy) and "seen up to here" is all the moment needs. The
   trade-off: a gift whose transaction started before an already-seen gift's
@@ -844,8 +845,9 @@ rolled back with its transaction, and a successful merge (roles, the
 carried-over balance and its ledger row, the old household gone). For the
 bonus points moment (SB-83) it covers gifts being unseen until the kid
 dismisses them, carry-over rows never counting as gifts, the adjustment kind
-checks and insert policy, nobody but the kid's own login (not a parent, nor a
-parent for a managed kid) setting or marking `gifts_seen_at`, another member's
+checks and insert policy, a parent marking a managed kid's gifts seen but not
+those of a kid with a login, their own or another household's kid, nobody
+setting `gifts_seen_at` directly, another member's
 gift ids being ignored, and the marker only moving forward. It also checks the FKs and
 the one-row-per-user constraint. It deletes everything it created when it
 finishes.

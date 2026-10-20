@@ -2951,27 +2951,61 @@ try {
 			authed.withAuth(bob.token, (tx) =>
 				markGiftsSeen(tx, carolMemberId, [giftA.id]),
 			),
-		/only the member can mark their own gifts/,
+		/can mark their gifts as seen/,
 	);
 	await expectRejected(
-		"Alice marking managed kid Mia's gifts seen (kid profiles don't show it)",
+		'Alice (parent) marking her own gifts seen through the kid path',
 		() =>
 			authed.withAuth(alice.token, (tx) =>
-				markGiftsSeen(tx, mia.id, [miaGift.id]),
+				markGiftsSeen(tx, aliceMember.id, [giftA.id]),
 			),
-		/only the member can mark their own gifts/,
+		/can mark their gifts as seen/,
 	);
+	await expectRejected(
+		"Alice marking Carol's (a kid with her own login) gifts seen",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				markGiftsSeen(tx, carolMemberId, [giftA.id]),
+			),
+		/can mark their gifts as seen/,
+	);
+	// A managed kid in another household (Dave's new one).
+	const [ivyHome] = await admin
+		.insert(households)
+		.values({
+			name: 'Smoke test Ivy home',
+			createdBy: dave.id,
+			setupCompletedAt: new Date(),
+		})
+		.returning();
+	const [ivy] = await admin
+		.insert(householdMembers)
+		.values({ householdId: ivyHome.id, displayName: 'Ivy' })
+		.returning();
+	await expectRejected(
+		"Bob marking a managed kid's gifts seen in another household",
+		() => authed.withAuth(bob.token, (tx) => markGiftsSeen(tx, ivy.id, [])),
+		/can mark their gifts as seen/,
+	);
+	await admin.delete(households).where(eq(households.id, ivyHome.id));
 	await expectRejected(
 		"Carol marking Mia's gifts seen",
 		() =>
 			authed.withAuth(carol.token, (tx) =>
 				markGiftsSeen(tx, mia.id, [miaGift.id]),
 			),
-		/only the member can mark their own gifts/,
+		/can mark their gifts as seen/,
 	);
 	assert.equal(await giftSeenAt(carolMemberId), null);
 	assert.equal(await giftSeenAt(mia.id), null);
 	ok('nobody else can mark them seen, and nothing changed');
+
+	const miaSeen = await authed.withAuth(alice.token, (tx) =>
+		markGiftsSeen(tx, mia.id, [miaGift.id]),
+	);
+	assert.equal(miaSeen?.getTime(), miaGift.createdAt.getTime());
+	assert.deepEqual(await unseenGiftIds(mia.id), []);
+	ok("Alice on managed kid Mia's profile marks Mia's gifts seen");
 
 	assert.equal(
 		await authed.withAuth(carol.token, (tx) =>

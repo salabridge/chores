@@ -165,7 +165,8 @@ export async function listUnseenGifts(
 /**
  * Marks the gifts the moment showed as seen, when the kid dismisses it, so it
  * doesn't come back on this or any other device. Runs as the signed-in user
- * (`app.mark_gifts_seen` checks it's the member's own login) and only moves
+ * (`app.mark_gifts_seen` checks they can act as the kid: their own login, or
+ * a parent on a managed kid's profile) and only moves
  * the marker up to the newest of `giftIds`, so a gift that arrived while the
  * moment was open still gets its own.
  */
@@ -173,7 +174,10 @@ export async function markGiftsSeen(
 	state: ProfileState,
 	giftIds: unknown,
 ): Promise<void> {
-	if (!seesGiftMoment(state) || !state.member.userId) {
+	// The signed-in user: the kid themselves, or the parent whose device is
+	// on the kid's profile.
+	const userId = state.actor.userId;
+	if (!seesGiftMoment(state) || !userId) {
 		throw new GiftError('Only the kid who got the points can do this.', 403);
 	}
 	if (
@@ -184,7 +188,7 @@ export async function markGiftsSeen(
 	) {
 		throw new GiftError('Those gifts were not found.');
 	}
-	const claims = JSON.stringify({ sub: state.member.userId });
+	const claims = JSON.stringify({ sub: userId });
 	const ids = sql.join(
 		giftIds.map((id: string) => sql`${id}`),
 		sql`, `,

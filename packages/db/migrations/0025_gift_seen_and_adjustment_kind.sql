@@ -178,9 +178,11 @@ CREATE OR REPLACE FUNCTION app.merge_household_via_invite(token text, confirm_ho
 -- the shown ids (rather than "now") means a gift that arrives while the moment
 -- is open stays unseen. Ids that aren't this member's gifts are ignored.
 --
--- Only the member's own login may do it: not a parent, and not a parent's
--- session acting as a managed kid (the moment isn't shown on kid profiles).
--- The column has no UPDATE grant, so this is the only way to change it.
+-- Only for a kid, and only by someone who can act as them
+-- (app.can_act_as_member): the kid's own login, or a parent of a managed kid
+-- (the shared device on the kid's profile). Never a parent for a kid with
+-- their own login, for another parent or for themselves. The column has no
+-- UPDATE grant, so this is the only way to change it.
 -- Returns the new `gifts_seen_at` (NULL if nothing has been seen yet).
 CREATE OR REPLACE FUNCTION app.mark_gifts_seen(member_id uuid, gift_ids uuid[])
 	RETURNS timestamptz
@@ -198,10 +200,12 @@ CREATE OR REPLACE FUNCTION app.mark_gifts_seen(member_id uuid, gift_ids uuid[])
 
 		-- Locks the row, so two devices dismissing at once take turns.
 		PERFORM 1 FROM public.household_members hm
-			WHERE hm.id = mark_gifts_seen.member_id AND hm.user_id = uid
+			WHERE hm.id = mark_gifts_seen.member_id
+				AND hm.role = 'kid'
+				AND app.can_act_as_member(hm.id)
 			FOR UPDATE;
 		IF NOT FOUND THEN
-			RAISE EXCEPTION 'only the member can mark their own gifts as seen'
+			RAISE EXCEPTION 'only the kid (or a parent on their profile) can mark their gifts as seen'
 				USING ERRCODE = '42501';
 		END IF;
 

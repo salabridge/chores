@@ -13,7 +13,7 @@ export const load: LayoutServerLoad = async () => {
 		// The desktop header's balance (SB-68). Form actions re-run this load,
 		// so it stays current after a completion or a claim.
 		state ? memberPointsBalance(state.member.id) : null,
-		// SB-83: a kid's own login only, never a parent on a kid profile.
+		// SB-83: a kid on their own login, or the managed kid whose profile is open.
 		state && seesGiftMoment(state) ? listUnseenGifts(state.member) : [],
 	]);
 	return {
@@ -33,7 +33,7 @@ export const load: LayoutServerLoad = async () => {
 				: null,
 		/**
 		 * Gifts for the one-time "You got bonus points!" moment (SB-83), newest
-		 * first. Empty unless a kid is signed in as themselves.
+		 * first. Empty for a parent in their own view.
 		 */
 		unseenGifts,
 		/** Who the desktop header greets, or null without a household. */
