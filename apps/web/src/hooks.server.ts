@@ -1,11 +1,15 @@
 import type { Handle } from '@sveltejs/kit';
 import { error, redirect } from '@sveltejs/kit';
 import { fetchSession, hasSessionCookie, signInUrl } from '#lib/server/auth.js';
+import { isIngestPath, proxyToPostHog } from '#lib/server/posthog-proxy.js';
 import { parentGuard } from '#lib/server/profile-state.js';
 import { getProfileState, getSetupStatus } from '#lib/server/profiles.js';
 import { SETUP_ROUTE_ID, setupRedirect } from '#lib/setup.js';
 
 export const handle: Handle = async ({ event, resolve }) => {
+	// Analytics (SB-85) goes straight to PostHog, before any session lookup.
+	if (isIngestPath(event.url.pathname)) return proxyToPostHog(event);
+
 	event.locals.user = null;
 	event.locals.session = null;
 

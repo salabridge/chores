@@ -11,7 +11,9 @@
 				"NEON_AUTH_URL",
 				"APP_ORIGIN",
 				"RESEND_API_KEY",
-				"INVITE_EMAIL_FROM"
+				"INVITE_EMAIL_FROM",
+				"PUBLIC_POSTHOG_KEY",
+				"PUBLIC_POSTHOG_HOST"
 			]
 		},
 		"test:ci": {
@@ -37,6 +39,8 @@
 				"APP_ORIGIN",
 				"RESEND_API_KEY",
 				"INVITE_EMAIL_FROM",
+				"PUBLIC_POSTHOG_KEY",
+				"PUBLIC_POSTHOG_HOST",
 				"FIGMA_API_TOKEN",
 				"FIGMA_FILE_KEY"
 			]

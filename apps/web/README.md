@@ -96,3 +96,53 @@ duplicate what the session already does. With the refresh approach, revoking
 the session anywhere ends kid mode on that device, and going to the sign-in
 screen is the accepted outcome. If a device stays off for longer than the
 session lifetime, the parent signs in again and lands back on the same kid.
+
+## Analytics (PostHog)
+
+Product analytics go to PostHog Cloud (US), from the browser only
+(`src/lib/analytics.ts`). It's off unless `PUBLIC_POSTHOG_KEY` is set, and it's
+set in Vercel for production only. Without the key, `posthog-js` is never
+imported, nothing is sent, and `/ingest` returns 404. Local dev, e2e and
+previews run like this.
+
+**What we track.**
+
+- One `$pageview` per navigation, captured in the root layout's
+  `afterNavigate`. Each is named by its SvelteKit route id
+  (`/(protected)/(app)/chores/[id]`), never the raw path, and every later
+  event carries the same id as `route`.
+- Autocaptured clicks, with no element text or attribute values
+  (`mask_all_text`, `mask_all_element_attributes`). Those hold chore names,
+  kid names and input values.
+
+Session replay, surveys, feature flags and exception capture are all off.
+
+**First-party proxy.** The SDK sends to `/ingest` on our own origin, so ad
+blockers don't drop events. `hooks.server.ts` forwards those requests to
+PostHog (`src/lib/server/posthog-proxy.ts`) before it looks up the session.
+It never forwards cookies or auth headers, and it passes the client IP for
+geolocation. The service worker must never cache `/ingest`.
+
+**URLs.** `before_send` (`scrubEvent`) runs on every event. It drops query
+strings and hashes from every URL, because `redirectTo` can carry an invite
+link. It replaces `/invite/<token>` with `/invite/[token]`. It also drops the
+page title, because a chore page's title is the chore's name.
+
+**Who is identified (kids use this app).** The root layout's server load works
+out the identity (`analyticsIdentity` in `src/lib/server/profile-state.ts`),
+and `syncIdentity` applies it:
+
+- **A parent or owner in their own view** is identified by their Neon Auth
+  user id and grouped by household (group type `household`). Their email and
+  name are never sent.
+- **A kid**, whether on their own login or as a managed kid's profile on a
+  parent's device, is never identified. The only thing sent about them is
+  `role: kid`, and kids get no person profile (`person_profiles:
+  'identified_only'`).
+- **Signed out, or signed in before setup:** anonymous.
+
+Whenever the person on the device changes, the SDK is reset before anything
+else happens: on sign-out, when a kid profile opens or closes, and when
+another parent signs in. Without the reset, `identify` would merge a kid's
+anonymous history, or another parent's, into whoever signs in next on a
+shared family device.

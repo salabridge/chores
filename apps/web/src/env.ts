@@ -33,4 +33,19 @@ export const variables = defineEnvVars({
 		description:
 			'From address for invite emails, on a domain verified in Resend, e.g. "ChoreLoop <invites@mail.example.com>".',
 	},
+	PUBLIC_POSTHOG_KEY: {
+		public: true,
+		schema: optional,
+		description:
+			'PostHog project API key (phc_…). Unset (local dev, e2e, previews) turns analytics off: the SDK never loads and nothing is sent.',
+	},
+	PUBLIC_POSTHOG_HOST: {
+		public: true,
+		// Unset or empty means PostHog Cloud US; normalized to an origin.
+		schema: type('string | undefined').pipe((v) =>
+			v ? new URL(v).origin : 'https://us.i.posthog.com',
+		),
+		description:
+			'PostHog ingestion host the /ingest proxy forwards to, e.g. https://us.i.posthog.com (the default).',
+	},
 });

@@ -49,6 +49,7 @@
 		"@neondatabase/serverless": "^1.1.0",
 		"arktype": "^2.2.5",
 		"better-auth": "^1.7.5",
-		"drizzle-orm": "catalog:"
+		"drizzle-orm": "catalog:",
+		"posthog-js": "1.438.8"
 	}
 }

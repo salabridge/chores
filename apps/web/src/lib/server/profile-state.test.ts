@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	analyticsIdentity,
 	canOpenKidProfile,
 	type MemberSummary,
 	parentGuard,
@@ -92,5 +93,32 @@ describe('parentGuard', () => {
 			'not-a-parent',
 		);
 		expect(parentGuard(null)).toBe('allow');
+	});
+});
+
+describe('analyticsIdentity', () => {
+	it('identifies a parent or owner in their own view, by user id and household', () => {
+		expect(analyticsIdentity(resolveProfile([parent], null))).toEqual({
+			role: 'parent',
+			userId: 'u1',
+			householdId: 'h1',
+		});
+		expect(analyticsIdentity(resolveProfile([owner], null))).toMatchObject({
+			role: 'parent',
+			userId: 'u2',
+		});
+	});
+
+	it('keeps kids anonymous: their own login and a kid profile on a parent device', () => {
+		expect(analyticsIdentity(resolveProfile([invitedKid], null))).toEqual({
+			role: 'kid',
+		});
+		expect(analyticsIdentity(resolveProfile([parent], kid))).toEqual({
+			role: 'kid',
+		});
+	});
+
+	it('is null when signed out or before setup', () => {
+		expect(analyticsIdentity(null)).toBeNull();
 	});
 });
