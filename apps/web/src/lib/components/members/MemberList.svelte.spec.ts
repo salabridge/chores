@@ -8,7 +8,11 @@ vi.mock('#lib/members.remote.js', async () => {
 		'../../../../.storybook/mocks/profiles-remote.ts'
 	);
 	const remote = await import('../../../../.storybook/mocks/members-remote.ts');
-	return { ...remote, giftPoints: submittable(remote.giftPoints) };
+	return {
+		...remote,
+		giftPoints: submittable(remote.giftPoints),
+		removeMember: submittable(remote.removeMember),
+	};
 });
 
 import { members } from './fixtures.ts';
@@ -108,5 +112,57 @@ describe('MemberList.svelte', () => {
 	it('renders one item per member', async () => {
 		render(MemberList, { members });
 		expect(page.getByRole('listitem').elements()).toHaveLength(members.length);
+	});
+
+	it('lets an owner remove everyone but themselves', async () => {
+		render(MemberList, { members, actor: { id: 'm1', role: 'owner' } });
+		expect(
+			page
+				.getByRole('button', { name: /^Remove .* from the household$/ })
+				.elements(),
+		).toHaveLength(members.length - 1);
+		expect(
+			page
+				.getByRole('button', { name: 'Remove Jim from the household' })
+				.elements(),
+		).toHaveLength(0);
+	});
+
+	it('lets a parent remove kids only', async () => {
+		render(MemberList, { members, actor: { id: 'm2', role: 'parent' } });
+		const kids = members.filter((m) => m.role === 'kid');
+		expect(
+			page
+				.getByRole('button', { name: /^Remove .* from the household$/ })
+				.elements(),
+		).toHaveLength(kids.length);
+		expect(
+			page
+				.getByRole('button', { name: 'Remove Jim from the household' })
+				.elements(),
+		).toHaveLength(0);
+	});
+
+	it('confirms in a dialog, offering the other kids for the points', async () => {
+		const onremoved = vi.fn();
+		render(MemberList, {
+			members,
+			actor: { id: 'm1', role: 'owner' },
+			onremoved,
+		});
+		await page
+			.getByRole('button', { name: 'Remove Mia from the household' })
+			.click();
+		await expect
+			.element(page.getByRole('heading', { name: 'Remove Mia?' }))
+			.toBeVisible();
+		await page.getByLabelText('Move their points to…').selectOptions('Ava');
+		await page.getByRole('button', { name: 'Remove Mia', exact: true }).click();
+		await vi.waitFor(() => expect(onremoved).toHaveBeenCalledWith('m3'));
+		await expect
+			.element(page.getByRole('status'))
+			.toHaveTextContent(
+				'Removed Mia from the household. Their points moved to Ava.',
+			);
 	});
 });

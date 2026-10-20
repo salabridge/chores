@@ -126,7 +126,8 @@ export async function createInvite(
 							and accepted_at is null and expires_at > now()) < ${MAX_PENDING_INVITES}
 					and (${input.role}::text <> 'kid' or (
 						(select count(*) from household_members
-							where household_id = ${actor.householdId} and role = 'kid')
+							where household_id = ${actor.householdId} and role = 'kid'
+								and removed_at is null)
 						+ (select count(*) from household_invites
 							where household_id = ${actor.householdId} and role = 'kid'
 								and accepted_at is null and expires_at > now())

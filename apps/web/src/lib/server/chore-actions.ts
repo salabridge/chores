@@ -247,6 +247,7 @@ export async function remindChore(
 			and(
 				eq(householdMembers.id, plan.holderId),
 				eq(householdMembers.householdId, householdId),
+				isNull(householdMembers.removedAt),
 			),
 		);
 	if (!assignee) throw new ChoreActionError('That member was not found.', 404);

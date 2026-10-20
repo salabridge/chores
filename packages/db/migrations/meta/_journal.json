@@ -176,6 +176,13 @@
 			"when": 1792372555668,
 			"tag": "0024_chore_completions_favour_approval",
 			"breakpoints": true
+		},
+		{
+			"idx": 25,
+			"version": "7",
+			"when": 1792485841115,
+			"tag": "0026_remove_household_member",
+			"breakpoints": true
 		}
 	]
 }

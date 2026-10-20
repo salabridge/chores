@@ -54,3 +54,30 @@ export function sortMembers<T extends { role: HouseholdRole }>(
 ): T[] {
 	return [...members].sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role]);
 }
+
+/**
+ * Whether `actor` (a parent in their own view) may remove `target` from the
+ * household (SB-84). Mirrors `app.remove_household_member`: parents remove
+ * kids, only owners remove parents and owners, and nobody removes themselves.
+ * (The last owner is covered too: removing an owner takes another owner.)
+ */
+export function canRemoveMember(
+	actor: { id: string; role: HouseholdRole },
+	target: { id: string; role: HouseholdRole },
+): boolean {
+	if (target.id === actor.id) return false;
+	if (actor.role === 'owner') return true;
+	if (actor.role === 'parent') return target.role === 'kid';
+	return false;
+}
+
+/**
+ * The kids a removed kid's points can move to ("Move their points to…"): every
+ * other kid in the household. None for a parent, who has no points to spend.
+ */
+export function pointsMoveTargets<
+	T extends { id: string; role: HouseholdRole },
+>(members: readonly T[], target: { id: string; role: HouseholdRole }): T[] {
+	if (target.role !== 'kid') return [];
+	return members.filter((m) => m.role === 'kid' && m.id !== target.id);
+}

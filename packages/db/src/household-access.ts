@@ -104,3 +104,40 @@ export async function mergeHouseholdViaInvite(
 	if (!id) throw new Error('merge_household_via_invite returned no member id');
 	return id;
 }
+
+export interface RemoveMemberOptions {
+	/**
+	 * Another current kid in the household to move the removed kid's whole
+	 * points balance to ("Move their points to…", for a duplicate profile).
+	 */
+	movePointsTo?: string | null;
+	/** The profile open on the device, as for the favour helpers; must be the caller's own member. */
+	actingAs?: string | null;
+}
+
+/**
+ * Removes a member from their household (`app.remove_household_member`,
+ * SB-84) and returns how many points moved (0 when none). The row is kept,
+ * with `removed_at` set and its login detached, so history still points at it;
+ * the member leaves every rotation, their open chores from today on are
+ * reassigned or unassigned, and pending favours, reminders, invites, PINs and
+ * device profiles involving them are cleared. See "Removing a member" in
+ * ../README.md.
+ *
+ * Parents remove kids, only owners remove parents, and nobody removes
+ * themselves or the last owner. Refusals carry a stable HINT (`not-parent`,
+ * `kid-profile`, `self`, `not-owner`, `last-owner`, `invalid-recipient`,
+ * `member-not-found`).
+ */
+export async function removeHouseholdMember(
+	tx: AuthenticatedTx,
+	memberId: string,
+	options: RemoveMemberOptions = {},
+): Promise<number> {
+	const movePointsTo = options.movePointsTo ?? null;
+	const actingAs = options.actingAs ?? null;
+	const { rows } = await tx.execute<{ moved: number }>(
+		sql`select app.remove_household_member(${memberId}::uuid, ${movePointsTo}::uuid, ${actingAs}::uuid) as moved`,
+	);
+	return rows[0]?.moved ?? 0;
+}

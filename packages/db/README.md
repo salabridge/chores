@@ -167,6 +167,73 @@ Bringing chores and rewards across, and telling the inviter, are follow-ups.
 web app does it on the server for a non-owner who wants to accept an invite
 instead, and refuses to remove a household's only owner.
 
+### Removing a member (SB-84)
+
+A parent removes someone from the household with
+`removeHouseholdMember(tx, memberId, { movePointsTo, actingAs })`
+(`app.remove_household_member`, migration `0026`); the web app's Members
+screen calls it ("Remove from household").
+
+- **Who.** Owners and parents, in their own view: `actingAs` (the profile open
+  on the device, as for the favour helpers) must be NULL or their own member
+  (`kid-profile`). Parents remove kids, managed or with a login; only owners
+  remove parents and owners (`not-owner`). Nobody removes themselves (`self`)
+  or the last owner (`last-owner`; ownership has to move first, which isn't
+  built). A kid gets `not-parent`; a member outside the caller's household,
+  or one already removed, gets `member-not-found`. Each refusal has a stable
+  HINT, as in `0020`.
+- **Soft remove.** The row stays, with `removed_at` set and `user_id` cleared.
+  History keeps pointing at it: completions, "Done by", stage progress, skips
+  and the points ledger render as before, because nothing is deleted or
+  re-pointed. A hard delete was rejected because several FKs into
+  `household_members` deliberately don't cascade (completions since `0019`,
+  the ledger, favours' doer and decider) and history must not be lost.
+- **The login is detached.** With `user_id` NULL the user is in no household:
+  every RLS helper stops matching them in the same transaction, and they land
+  in setup on their next sign-in, like a new user. They can be invited back
+  (to a new member row). `household_members_removed_detached_check` makes a
+  removed row with a login impossible, and the managed-is-kid check allows a
+  removed parent to keep their role for history.
+- **Filtered everywhere.** The `app.*` helpers ignore removed rows, so nothing
+  new can be assigned to a removed member (`is_member_id_in`) and nobody can
+  act as a removed managed kid (`can_act_as_member`). The update policy refuses
+  removed rows, and only the function sets `removed_at` (no column grant). The
+  12-kid cap (`accept_household_invite`, `merge_household_via_invite`, the web
+  app's add-kid and invite checks) doesn't count removed kids, and a merge
+  doesn't bring them along. `householdStreaks()` leaves them out. Member reads
+  that list people (member lists, pickers, rotations, stats) must filter on
+  `removed_at is null`; reads that only turn an id into a name keep them, so a
+  past "Done by Mia" still says Mia.
+- **Open work.** They leave every rotation (their `chore_rotation_members`
+  rows are deleted; if they held the turn, the 0009 hand-off passes it on,
+  and the commit-time check treats them like someone who left, so a loop left
+  with one eligible member is allowed). Their personal chores are unassigned,
+  and their chore instances from today (household-local) on with no open
+  completion go to the rotation's current turn, or to nobody for a personal
+  chore. Past instances keep them. Pending favours where they're the owner or
+  the doer are declined (by the caller, as `decide_favour` declines), their
+  undismissed reminders are dismissed, open invites they sent are revoked,
+  their PIN is deleted, and device profiles acting as them (or belonging to
+  their login) fall back to the parent's view.
+- **Points ("Move their points to…").** For a duplicate profile (a kid who
+  came in with an SB-76 merge and already had a profile), `movePointsTo` names
+  another current kid in the household. The removed kid's whole balance moves
+  as a pair of `adjustment` rows, both `created_by` the caller: a debit on them
+  ("Moved from Mia to Leo (duplicate profile)") and a credit on the other kid
+  ("Moved from Mia (duplicate profile)"). Nothing is written for a zero
+  balance. Without it the balance stays on the removed member's ledger. Both
+  notes start "Moved from ", which the web app's bonus-points list leaves out
+  like "Carried over from " (`NOT_A_GIFT_NOTE_PREFIXES` in
+  `apps/web/src/lib/server/gifts.ts`). Neither counts toward weekly goals or
+  streaks (adjustments never do).
+- **Locks.** The member's household is checked without locks first, so a
+  caller can't lock a household they aren't a parent in. Then the household
+  row (FOR UPDATE), the member row, and the instances it changes in id order
+  before their completions, in the same order as completing and deciding.
+
+Restoring a removed member, merging two profiles' completion history, and
+transferring ownership are follow-ups.
+
 **Setup** (`households.setup_completed_at`, SB-56): NULL while the creator is in the
 web app's first-run setup flow (`/setup`); set when they finish. Households that
 existed when column `0016` landed were backfilled as finished, and a partial
@@ -668,7 +735,7 @@ role. Access follows household membership and role:
 | Table                   | Read                  | Write                                                                                   |
 | ----------------------- | --------------------- | --------------------------------------------------------------------------------------- |
 | `households`            | members (and creator) | anyone can create one (and becomes owner); owners update/delete                         |
-| `household_members`     | members               | owners add/change/remove anyone; parents add managed kids and change/remove kids and edit their own profile; anyone can leave |
+| `household_members`     | members (removed rows too, for history) | owners add/change/remove anyone; parents add managed kids and change/remove kids and edit their own profile; anyone can leave; removed rows can't be changed; removing (SB-84) goes through `app.remove_household_member` |
 | `household_member_pins` | the parent themselves | the parent themselves                                                                   |
 | `household_invites`     | parents               | parents invite kids, owners invite parents; delete to revoke; accept via `app.accept_household_invite` (or `app.merge_household_via_invite`) |
 | `chores`                | members               | parents; `assigned_member_id` must be a member of the same household                    |
@@ -698,7 +765,7 @@ await db.withAuth(token, async (tx) => {
 });
 ```
 
-| SQL helper (`app.*`)          | TS helper                | True when / returns                                                  |
+| SQL helper (`app.*`)          | TS helper                | True when / returns (removed members never count, SB-84)             |
 | ----------------------------- | ------------------------ | -------------------------------------------------------------------- |
 | `is_household_member(h)`      |                          | the user is a member of `h`                                          |
 | `is_household_parent(h)`      | `isHouseholdParent`      | the user is an owner or parent in `h`                                |
@@ -744,6 +811,12 @@ favour as `pending` (drop and create again, since their arguments change),
 plus `app.decide_favour`, `app.escalate_favour` and the internal
 `app.favour_actor`, and `app.reopen_chore_completion` refuses anything not
 approved.
+`0026_remove_household_member.sql` (SB-84) is generated for `removed_at`, the
+relaxed managed-is-kid check, the removed-detached check and the update
+policy, then hand-written: the `app.*` member helpers, `check_chore_rotation`,
+`accept_household_invite` and `merge_household_via_invite` again with removed
+members filtered out, and `app.remove_household_member`. (It's numbered 0026
+because SB-83 was taking 0025 in parallel.)
 
 **Two connection strings** (see `.env.example`):
 
@@ -808,7 +881,16 @@ once. For merging a household on invite
 accept (SB-76) it covers a non-owner, the wrong email, someone else's
 household id, the invite's own household, the combined kid limit, a merge
 rolled back with its transaction, and a successful merge (roles, the
-carried-over balance and its ledger row, the old household gone). It also checks the FKs and
+carried-over balance and its ledger row, the old household gone). For
+removing a member (SB-84) it covers a non-member, a kid, a parent on a kid
+profile, self-removal, a parent removing a parent or the owner and bad points
+recipients all being refused; a parent removing a duplicate managed profile
+and moving its points (the ledger pair, the rotation turn handed on, today's
+instances reassigned or unassigned and yesterday's kept, the pending favour
+declined, the reminder dismissed, the device profile cleared, the row still
+readable but no longer assignable, editable or removable); a kid with a login
+losing access at once; and an owner removing a parent who can then be invited
+back. It also checks the FKs and
 the one-row-per-user constraint. It deletes everything it created when it
 finishes.
 
