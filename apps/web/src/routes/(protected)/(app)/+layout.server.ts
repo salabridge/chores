@@ -1,17 +1,20 @@
+import { listUnseenGifts } from '#lib/server/gifts.js';
 import { memberPointsBalance } from '#lib/server/member-stats.js';
 import { pinStore } from '#lib/server/pin-store.js';
-import { parentGuard } from '#lib/server/profile-state.js';
+import { parentGuard, seesGiftMoment } from '#lib/server/profile-state.js';
 import { getProfileState } from '#lib/server/profiles.js';
 import { isAvatarColor } from '#lib/setup.js';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async () => {
 	const state = await getProfileState();
-	const [pin, points] = await Promise.all([
+	const [pin, points, unseenGifts] = await Promise.all([
 		state?.mode === 'kid' ? pinStore.get(state.actor.id) : null,
 		// The desktop header's balance (SB-68). Form actions re-run this load,
 		// so it stays current after a completion or a claim.
 		state ? memberPointsBalance(state.member.id) : null,
+		// SB-83: a kid's own login only, never a parent on a kid profile.
+		state && seesGiftMoment(state) ? listUnseenGifts(state.member) : [],
 	]);
 	return {
 		/**
@@ -28,6 +31,11 @@ export const load: LayoutServerLoad = async () => {
 						pinLocked: pin?.lockedAt != null,
 					}
 				: null,
+		/**
+		 * Gifts for the one-time "You got bonus points!" moment (SB-83), newest
+		 * first. Empty unless a kid is signed in as themselves.
+		 */
+		unseenGifts,
 		/** Who the desktop header greets, or null without a household. */
 		shellMember:
 			state && points !== null

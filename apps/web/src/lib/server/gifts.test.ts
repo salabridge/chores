@@ -19,12 +19,21 @@ const mocks = vi.hoisted(() => {
 		select: () => select,
 		insert: vi.fn((_table: unknown) => ({ values })),
 		values,
+		execute: vi.fn((query: unknown) => query),
+		batch: vi.fn(async (_queries: unknown[]) => [] as unknown[]),
 	};
 	return { db };
 });
 vi.mock('./drizzle.ts', () => ({ db: mocks.db }));
 
-const { GiftError, giftPoints, listRecentGifts } = await import('./gifts.ts');
+const {
+	GiftError,
+	giftPoints,
+	listRecentGifts,
+	listUnseenGifts,
+	markGiftsSeen,
+} = await import('./gifts.ts');
+const { seesGiftMoment } = await import('./profile-state.ts');
 
 const actor = (role: 'owner' | 'parent' | 'kid') => ({
 	householdId: 'h1',
@@ -37,6 +46,9 @@ beforeEach(() => {
 	mocks.db.queue.length = 0;
 	mocks.db.insert.mockClear();
 	mocks.db.values.mockClear();
+	mocks.db.execute.mockClear();
+	mocks.db.batch.mockReset();
+	mocks.db.batch.mockResolvedValue([]);
 });
 
 describe('giftPoints', () => {
@@ -51,6 +63,7 @@ describe('giftPoints', () => {
 				memberId: 'k1',
 				delta: 20,
 				reason: 'adjustment',
+				adjustmentKind: 'gift',
 				note: 'Helped Grandma with groceries',
 				createdBy: 'u1',
 			});
@@ -139,5 +152,114 @@ describe('listRecentGifts', () => {
 				createdAt: '2026-10-12T12:00:00.000Z',
 			},
 		]);
+	});
+});
+
+const member = (
+	role: 'owner' | 'parent' | 'kid',
+	userId: string | null = 'u-kid',
+) => ({
+	id: 'k1',
+	householdId: 'h1',
+	userId,
+	role,
+	displayName: 'Leo',
+	avatarColor: null,
+	avatarInitial: null,
+});
+const mom = { ...member('owner', 'u-mom'), id: 'p1', displayName: 'Mom' };
+const kidSelf = {
+	mode: 'self' as const,
+	member: member('kid'),
+	actor: member('kid'),
+};
+const GIFT_A = '0b6f1d1e-6a1c-4c2a-9f1e-2b8d3c4e5f60';
+const GIFT_B = '1c7f2e2f-7b2d-4d3b-8f2f-3c9e4d5f6a71';
+
+describe('seesGiftMoment', () => {
+	it('is true for a kid on their own login', () => {
+		expect(seesGiftMoment(kidSelf)).toBe(true);
+	});
+
+	it('is false while a parent is on a kid profile', () => {
+		expect(
+			seesGiftMoment({ mode: 'kid', member: member('kid', null), actor: mom }),
+		).toBe(false);
+	});
+
+	it('is false for a parent and without a household', () => {
+		expect(seesGiftMoment({ mode: 'self', member: mom, actor: mom })).toBe(
+			false,
+		);
+		expect(seesGiftMoment(null)).toBe(false);
+	});
+});
+
+describe('listUnseenGifts', () => {
+	it('shapes the rows like the Rewards card', async () => {
+		mocks.db.queue.push([
+			{
+				id: 'g1',
+				points: 20,
+				reason: 'Helped Grandma with groceries',
+				fromName: 'Mom',
+				createdAt: new Date('2026-10-14T12:00:00Z'),
+			},
+		]);
+		expect(await listUnseenGifts({ id: 'k1', householdId: 'h1' })).toEqual([
+			{
+				id: 'g1',
+				points: 20,
+				reason: 'Helped Grandma with groceries',
+				fromName: 'Mom',
+				createdAt: '2026-10-14T12:00:00.000Z',
+			},
+		]);
+	});
+});
+
+describe('markGiftsSeen', () => {
+	it('marks them as the kid, in one batch with their claims', async () => {
+		await markGiftsSeen(kidSelf, [GIFT_A, GIFT_B]);
+		expect(mocks.db.batch).toHaveBeenCalledOnce();
+		expect(mocks.db.execute).toHaveBeenCalledTimes(2);
+	});
+
+	it('refuses a parent on a kid profile without touching the database', async () => {
+		await expect(
+			markGiftsSeen({ mode: 'kid', member: member('kid', null), actor: mom }, [
+				GIFT_A,
+			]),
+		).rejects.toMatchObject({ status: 403 });
+		expect(mocks.db.batch).not.toHaveBeenCalled();
+	});
+
+	it('refuses a parent in their own view', async () => {
+		await expect(
+			markGiftsSeen({ mode: 'self', member: mom, actor: mom }, [GIFT_A]),
+		).rejects.toBeInstanceOf(GiftError);
+		expect(mocks.db.batch).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		[[]],
+		['not-a-list'],
+		[['nope']],
+		[[GIFT_A, 42]],
+		[Array.from({ length: 21 }, () => GIFT_A)],
+	])('rejects %j before touching the database', async (ids) => {
+		await expect(markGiftsSeen(kidSelf, ids)).rejects.toMatchObject({
+			status: 400,
+		});
+		expect(mocks.db.batch).not.toHaveBeenCalled();
+	});
+
+	it("turns the database's refusal into a 403", async () => {
+		mocks.db.batch.mockRejectedValue(
+			Object.assign(new Error('only the member'), { code: '42501' }),
+		);
+		await expect(markGiftsSeen(kidSelf, [GIFT_A])).rejects.toMatchObject({
+			status: 403,
+		});
 	});
 });

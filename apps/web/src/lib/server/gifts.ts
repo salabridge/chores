@@ -1,9 +1,15 @@
 import { householdMembers, pointsLedger } from '@chore/db';
-import { and, desc, eq, gt, gte, notLike } from 'drizzle-orm';
+import { and, desc, eq, gte, type SQL, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { type GiftInput, type GiftItem, parseGiftInput } from '../gift.ts';
 import { db } from './drizzle.ts';
-import { isParentRole, type MemberSummary } from './profile-state.ts';
+import {
+	isParentRole,
+	type MemberSummary,
+	type ProfileState,
+	seesGiftMoment,
+} from './profile-state.ts';
+import { sqlState, UUID } from './rotation-detail.ts';
 
 // Bonus points (SB-78). A parent gifts points for something that isn't a chore
 // (a report card, helping a neighbour) by appending one `adjustment` ledger
@@ -16,15 +22,21 @@ import { isParentRole, type MemberSummary } from './profile-state.ts';
 
 /** A problem with the request, worded for the form. */
 export class GiftError extends Error {
-	constructor(message: string) {
+	readonly status: 400 | 403;
+
+	// No parameter properties: Node's type stripping doesn't support them.
+	constructor(message: string, status: 400 | 403 = 400) {
 		super(message);
 		this.name = 'GiftError';
+		this.status = status;
 	}
 }
 
 /** Gifts older than this drop off the kid's Rewards screen. */
 const RECENT_GIFT_DAYS = 30;
 const RECENT_GIFT_LIMIT = 10;
+/** The most gifts one "You got bonus points!" moment lists (SB-83). */
+const UNSEEN_GIFT_LIMIT = 20;
 
 /**
  * Gives `memberId` bonus points. `actor` is the signed-in parent's own member
@@ -60,6 +72,7 @@ export async function giftPoints(
 		memberId: target.id,
 		delta: parsed.value.points,
 		reason: 'adjustment',
+		adjustmentKind: 'gift',
 		note: parsed.value.reason,
 		createdBy: actor.userId,
 	});
@@ -68,17 +81,12 @@ export async function giftPoints(
 
 const giver = alias(householdMembers, 'giver');
 
-/**
- * The bonus points `member` got recently, newest first, for their Rewards
- * screen: positive adjustments. The "Carried over from …" rows a household
- * merge writes (SB-76) are adjustments too but aren't a present, so they're
- * left out by their note.
- */
-export async function listRecentGifts(
+/** `member`'s gifts matching `extra`, newest first, with who gave them. */
+async function selectGifts(
 	member: { id: string; householdId: string },
-	now: Date = new Date(),
+	extra: SQL | undefined,
+	limit: number,
 ): Promise<GiftItem[]> {
-	const since = new Date(now.getTime() - RECENT_GIFT_DAYS * 86_400_000);
 	const rows = await db
 		.select({
 			id: pointsLedger.id,
@@ -99,14 +107,16 @@ export async function listRecentGifts(
 			and(
 				eq(pointsLedger.memberId, member.id),
 				eq(pointsLedger.householdId, member.householdId),
+				// Only gifts: not a parent's correction, and not a balance moved in
+				// from another household (SB-76 "Carried over from …", SB-84
+				// "Moved from …"). See `points_adjustment_kind`.
 				eq(pointsLedger.reason, 'adjustment'),
-				gt(pointsLedger.delta, 0),
-				notLike(pointsLedger.note, 'Carried over from %'),
-				gte(pointsLedger.createdAt, since),
+				eq(pointsLedger.adjustmentKind, 'gift'),
+				extra,
 			),
 		)
 		.orderBy(desc(pointsLedger.createdAt), desc(pointsLedger.id))
-		.limit(RECENT_GIFT_LIMIT);
+		.limit(limit);
 	return rows.map((r) => ({
 		id: r.id,
 		points: r.points,
@@ -114,4 +124,82 @@ export async function listRecentGifts(
 		fromName: r.fromName,
 		createdAt: r.createdAt.toISOString(),
 	}));
+}
+
+/** The bonus points `member` got recently, newest first, for their Rewards screen. */
+export async function listRecentGifts(
+	member: { id: string; householdId: string },
+	now: Date = new Date(),
+): Promise<GiftItem[]> {
+	const since = new Date(now.getTime() - RECENT_GIFT_DAYS * 86_400_000);
+	return selectGifts(
+		member,
+		gte(pointsLedger.createdAt, since),
+		RECENT_GIFT_LIMIT,
+	);
+}
+
+/**
+ * The gifts `member` hasn't dismissed the moment for yet, newest first: those
+ * after their `gifts_seen_at`, from the last 30 days (older ones would be
+ * stale news; they're still on the Rewards screen's card until then).
+ */
+export async function listUnseenGifts(
+	member: { id: string; householdId: string },
+	now: Date = new Date(),
+): Promise<GiftItem[]> {
+	const since = new Date(now.getTime() - RECENT_GIFT_DAYS * 86_400_000);
+	return selectGifts(
+		member,
+		and(
+			gte(pointsLedger.createdAt, since),
+			sql`${pointsLedger.createdAt} > coalesce((
+				select ${householdMembers.giftsSeenAt} from ${householdMembers}
+				where ${householdMembers.id} = ${member.id}
+			), '-infinity')`,
+		),
+		UNSEEN_GIFT_LIMIT,
+	);
+}
+
+/**
+ * Marks the gifts the moment showed as seen, when the kid dismisses it, so it
+ * doesn't come back on this or any other device. Runs as the signed-in user
+ * (`app.mark_gifts_seen` checks it's the member's own login) and only moves
+ * the marker up to the newest of `giftIds`, so a gift that arrived while the
+ * moment was open still gets its own.
+ */
+export async function markGiftsSeen(
+	state: ProfileState,
+	giftIds: unknown,
+): Promise<void> {
+	if (!seesGiftMoment(state) || !state.member.userId) {
+		throw new GiftError('Only the kid who got the points can do this.', 403);
+	}
+	if (
+		!Array.isArray(giftIds) ||
+		giftIds.length === 0 ||
+		giftIds.length > UNSEEN_GIFT_LIMIT ||
+		!giftIds.every((id) => typeof id === 'string' && UUID.test(id))
+	) {
+		throw new GiftError('Those gifts were not found.');
+	}
+	const claims = JSON.stringify({ sub: state.member.userId });
+	const ids = sql.join(
+		giftIds.map((id: string) => sql`${id}`),
+		sql`, `,
+	);
+	try {
+		await db.batch([
+			db.execute(sql`select set_config('request.jwt.claims', ${claims}, true)`),
+			db.execute(
+				sql`select app.mark_gifts_seen(${state.member.id}::uuid, array[${ids}]::uuid[])`,
+			),
+		]);
+	} catch (err) {
+		if (sqlState(err) === '42501') {
+			throw new GiftError('Only the kid who got the points can do this.', 403);
+		}
+		throw err;
+	}
 }

@@ -74,3 +74,26 @@ export function giftLine(
 	if (gift.fromName) parts.push(`from ${gift.fromName}`);
 	return parts.join(' · ');
 }
+
+/**
+ * One gift in the "You got bonus points!" moment (SB-83):
+ * "+20 from Mom · Helped Grandma with groceries".
+ */
+export function giftMomentLine(
+	gift: Pick<GiftItem, 'points' | 'reason' | 'fromName'>,
+) {
+	const amount = gift.fromName
+		? `+${gift.points} from ${gift.fromName}`
+		: `+${gift.points}`;
+	return `${amount} · ${gift.reason}`;
+}
+
+/** All the points in the moment, for its big "+25 pts". */
+export function giftMomentTotal(gifts: readonly Pick<GiftItem, 'points'>[]) {
+	return gifts.reduce((sum, g) => sum + g.points, 0);
+}
+
+/** "Here are your 2 gifts." under the heading, or nothing for one. */
+export function giftMomentSummary(gifts: readonly unknown[]) {
+	return gifts.length > 1 ? `Here are your ${gifts.length} gifts.` : null;
+}

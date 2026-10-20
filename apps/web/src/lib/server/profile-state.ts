@@ -83,3 +83,17 @@ export function parentGuard(state: ProfileState | null): ParentGuardResult {
 	if (state.mode === 'kid') return 'kid-profile-active';
 	return isParentRole(state.member.role) ? 'allow' : 'not-a-parent';
 }
+
+/**
+ * Whether `state` gets the "You got bonus points!" moment (SB-83): a kid on
+ * their own login. Not a parent, and not a parent's session on a kid profile
+ * (SB-83 rules that out; `app.mark_gifts_seen` refuses it too).
+ */
+export function seesGiftMoment(state: ProfileState | null) {
+	return (
+		state !== null &&
+		state.mode === 'self' &&
+		state.member.role === 'kid' &&
+		state.member.userId !== null
+	);
+}
