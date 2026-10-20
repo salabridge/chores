@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
 	getProfileState: vi.fn(),
 	memberPointsBalance: vi.fn(),
 	pinGet: vi.fn(),
+	listUnseenGifts: vi.fn(),
 }));
 
 vi.mock('#lib/server/profiles.js', () => ({
@@ -13,6 +14,9 @@ vi.mock('#lib/server/profiles.js', () => ({
 }));
 vi.mock('#lib/server/member-stats.js', () => ({
 	memberPointsBalance: mocks.memberPointsBalance,
+}));
+vi.mock('#lib/server/gifts.js', () => ({
+	listUnseenGifts: mocks.listUnseenGifts,
 }));
 vi.mock('#lib/server/pin-store.js', () => ({
 	pinStore: { get: mocks.pinGet },
@@ -24,6 +28,7 @@ beforeEach(() => vi.resetAllMocks());
 
 const leo = {
 	id: 'kid1',
+	userId: null,
 	householdId: 'h1',
 	role: 'kid',
 	displayName: 'Leo',
@@ -37,6 +42,7 @@ describe('member shell load', () => {
 		await expect(load({} as never)).resolves.toEqual({
 			isParent: false,
 			activeKid: null,
+			unseenGifts: [],
 			shellMember: { name: 'Leo', points: 140, tone: 'green' },
 		});
 		expect(mocks.memberPointsBalance).toHaveBeenCalledWith('kid1');
@@ -65,6 +71,7 @@ describe('member shell load', () => {
 		await expect(load({} as never)).resolves.toEqual({
 			isParent: false,
 			activeKid: { id: 'kid1', name: 'Leo', pinLocked: true },
+			unseenGifts: [],
 			shellMember: { name: 'Leo', points: 15, tone: 'green' },
 		});
 		expect(mocks.pinGet).toHaveBeenCalledWith('parent1');
@@ -75,8 +82,56 @@ describe('member shell load', () => {
 		await expect(load({} as never)).resolves.toEqual({
 			isParent: false,
 			activeKid: null,
+			unseenGifts: [],
 			shellMember: null,
 		});
 		expect(mocks.memberPointsBalance).not.toHaveBeenCalled();
+	});
+
+	it('gives a kid on their own login their unseen gifts (SB-83)', async () => {
+		const carol = { ...leo, userId: 'u-carol' };
+		const gifts = [{ id: 'g1', points: 20 }];
+		mocks.getProfileState.mockResolvedValue({
+			mode: 'self',
+			member: carol,
+			actor: carol,
+		});
+		mocks.memberPointsBalance.mockResolvedValue(0);
+		mocks.listUnseenGifts.mockResolvedValue(gifts);
+		await expect(load({} as never)).resolves.toMatchObject({
+			unseenGifts: gifts,
+		});
+		expect(mocks.listUnseenGifts).toHaveBeenCalledWith(carol);
+	});
+
+	it('never reads gifts for a parent', async () => {
+		const mom = { ...leo, id: 'parent1', userId: 'u-mom', role: 'owner' };
+		mocks.getProfileState.mockResolvedValue({
+			mode: 'self',
+			member: mom,
+			actor: mom,
+		});
+		mocks.memberPointsBalance.mockResolvedValue(0);
+		await expect(load({} as never)).resolves.toMatchObject({
+			unseenGifts: [],
+		});
+		expect(mocks.listUnseenGifts).not.toHaveBeenCalled();
+	});
+
+	it("gives a managed kid's profile that kid's unseen gifts", async () => {
+		const mom = { ...leo, id: 'parent1', userId: 'u-mom', role: 'owner' };
+		const gifts = [{ id: 'g1', points: 20 }];
+		mocks.getProfileState.mockResolvedValue({
+			mode: 'kid',
+			member: leo,
+			actor: mom,
+		});
+		mocks.memberPointsBalance.mockResolvedValue(0);
+		mocks.pinGet.mockResolvedValue(null);
+		mocks.listUnseenGifts.mockResolvedValue(gifts);
+		await expect(load({} as never)).resolves.toMatchObject({
+			unseenGifts: gifts,
+		});
+		expect(mocks.listUnseenGifts).toHaveBeenCalledWith(leo);
 	});
 });

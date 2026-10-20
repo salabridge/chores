@@ -1,7 +1,9 @@
 <script lang="ts">
+	import GiftMoment from '#lib/components/rewards/GiftMoment.svelte';
 	import AppHeader from '#lib/components/shell/AppHeader.svelte';
 	import BottomNav from '#lib/components/shell/BottomNav.svelte';
 	import KidModeBar from '#lib/components/shell/KidModeBar.svelte';
+	import { markGiftsSeen } from '#lib/gifts.remote.js';
 	import { page } from '$app/state';
 
 	let { children, data } = $props();
@@ -13,6 +15,29 @@
 	// A route with a desktop design returns `{ wide: true }` to leave the
 	// phone column from lg; its content then caps at the mock's 1312px.
 	const wide = $derived(page.data.wide === true);
+
+	// The one-time "You got bonus points!" moment (SB-83). The gifts are marked
+	// seen on the server when the kid dismisses it, not when it renders. Ids
+	// dismissed here stay hidden even if a load re-runs before that lands; if
+	// it fails, the moment simply comes back on the next app open.
+	let dismissedGiftIds = $state<string[]>([]);
+	let markingSeen = $state(false);
+	const unseenGifts = $derived(
+		data.unseenGifts.filter((g) => !dismissedGiftIds.includes(g.id)),
+	);
+
+	async function dismissGifts() {
+		const giftIds = unseenGifts.map((g) => g.id);
+		markingSeen = true;
+		try {
+			await markGiftsSeen({ giftIds });
+		} catch {
+			// Shown again next time; nothing for the kid to do now.
+		} finally {
+			markingSeen = false;
+			dismissedGiftIds = [...dismissedGiftIds, ...giftIds];
+		}
+	}
 </script>
 
 <!--
@@ -29,6 +54,13 @@
 			: '[--shell-nav-height:0px]',
 	]}
 >
+	{#if unseenGifts.length > 0}
+		<GiftMoment
+			gifts={unseenGifts}
+			pending={markingSeen}
+			ondismiss={dismissGifts}
+		/>
+	{/if}
 	{#if data.activeKid}
 		<KidModeBar name={data.activeKid.name} locked={data.activeKid.pinLocked} />
 	{/if}

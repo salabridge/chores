@@ -19,13 +19,21 @@ const mocks = vi.hoisted(() => {
 		select: () => select,
 		insert: vi.fn((_table: unknown) => ({ values })),
 		values,
+		execute: vi.fn((query: unknown) => query),
+		batch: vi.fn(async (_queries: unknown[]) => [] as unknown[]),
 	};
 	return { db };
 });
 vi.mock('./drizzle.ts', () => ({ db: mocks.db }));
 
-const { GiftError, giftPoints, listRecentGifts, NOT_A_GIFT_NOTE_PREFIXES } =
-	await import('./gifts.ts');
+const {
+	GiftError,
+	giftPoints,
+	listRecentGifts,
+	listUnseenGifts,
+	markGiftsSeen,
+} = await import('./gifts.ts');
+const { seesGiftMoment } = await import('./profile-state.ts');
 
 const actor = (role: 'owner' | 'parent' | 'kid') => ({
 	householdId: 'h1',
@@ -38,6 +46,9 @@ beforeEach(() => {
 	mocks.db.queue.length = 0;
 	mocks.db.insert.mockClear();
 	mocks.db.values.mockClear();
+	mocks.db.execute.mockClear();
+	mocks.db.batch.mockReset();
+	mocks.db.batch.mockResolvedValue([]);
 });
 
 describe('giftPoints', () => {
@@ -52,6 +63,7 @@ describe('giftPoints', () => {
 				memberId: 'k1',
 				delta: 20,
 				reason: 'adjustment',
+				adjustmentKind: 'gift',
 				note: 'Helped Grandma with groceries',
 				createdBy: 'u1',
 			});
@@ -143,15 +155,134 @@ describe('listRecentGifts', () => {
 	});
 });
 
-describe('NOT_A_GIFT_NOTE_PREFIXES', () => {
-	it('matches the notes the database writes for a merge and a points move', () => {
-		const notGift = (note: string) =>
-			NOT_A_GIFT_NOTE_PREFIXES.some((p) => note.startsWith(p));
-		// app.merge_household_via_invite (SB-76)
-		expect(notGift('Carried over from The Smiths')).toBe(true);
-		// app.remove_household_member (SB-84), the credit and the debit
-		expect(notGift('Moved from Mia (duplicate profile)')).toBe(true);
-		expect(notGift('Moved from Mia to Ava (duplicate profile)')).toBe(true);
-		expect(notGift('Helped Grandma with groceries')).toBe(false);
+const member = (
+	role: 'owner' | 'parent' | 'kid',
+	userId: string | null = 'u-kid',
+) => ({
+	id: 'k1',
+	householdId: 'h1',
+	userId,
+	role,
+	displayName: 'Leo',
+	avatarColor: null,
+	avatarInitial: null,
+});
+const mom = { ...member('owner', 'u-mom'), id: 'p1', displayName: 'Mom' };
+const kidSelf = {
+	mode: 'self' as const,
+	member: member('kid'),
+	actor: member('kid'),
+};
+const GIFT_A = '0b6f1d1e-6a1c-4c2a-9f1e-2b8d3c4e5f60';
+const GIFT_B = '1c7f2e2f-7b2d-4d3b-8f2f-3c9e4d5f6a71';
+
+const otherHouseKid = { ...member('kid', null), householdId: 'h2' };
+const managedKid = {
+	mode: 'kid' as const,
+	member: member('kid', null),
+	actor: mom,
+};
+
+describe('seesGiftMoment', () => {
+	it('is true for a kid on their own login', () => {
+		expect(seesGiftMoment(kidSelf)).toBe(true);
+	});
+
+	it("is true on a managed kid's profile on a parent's device", () => {
+		expect(seesGiftMoment(managedKid)).toBe(true);
+	});
+
+	it('is false for a profile the parent may not open', () => {
+		// A kid with a login, or one in another household.
+		expect(
+			seesGiftMoment({ mode: 'kid', member: member('kid'), actor: mom }),
+		).toBe(false);
+		expect(
+			seesGiftMoment({ mode: 'kid', member: otherHouseKid, actor: mom }),
+		).toBe(false);
+	});
+
+	it('is false for a parent in their own view and without a household', () => {
+		expect(seesGiftMoment({ mode: 'self', member: mom, actor: mom })).toBe(
+			false,
+		);
+		expect(seesGiftMoment(null)).toBe(false);
+	});
+});
+
+describe('listUnseenGifts', () => {
+	it('shapes the rows like the Rewards card', async () => {
+		mocks.db.queue.push([
+			{
+				id: 'g1',
+				points: 20,
+				reason: 'Helped Grandma with groceries',
+				fromName: 'Mom',
+				createdAt: new Date('2026-10-14T12:00:00Z'),
+			},
+		]);
+		expect(await listUnseenGifts({ id: 'k1', householdId: 'h1' })).toEqual([
+			{
+				id: 'g1',
+				points: 20,
+				reason: 'Helped Grandma with groceries',
+				fromName: 'Mom',
+				createdAt: '2026-10-14T12:00:00.000Z',
+			},
+		]);
+	});
+});
+
+describe('markGiftsSeen', () => {
+	it('marks them as the kid, in one batch with their claims', async () => {
+		await markGiftsSeen(kidSelf, [GIFT_A, GIFT_B]);
+		expect(mocks.db.batch).toHaveBeenCalledOnce();
+		expect(mocks.db.execute).toHaveBeenCalledTimes(2);
+	});
+
+	it("marks a managed kid's gifts with the parent's claims", async () => {
+		await markGiftsSeen(managedKid, [GIFT_A]);
+		expect(mocks.db.batch).toHaveBeenCalledOnce();
+		expect(JSON.stringify(mocks.db.execute.mock.calls[0])).toContain(
+			'{\\"sub\\":\\"u-mom\\"}',
+		);
+	});
+
+	it('refuses a profile the parent may not open', async () => {
+		await expect(
+			markGiftsSeen({ mode: 'kid', member: otherHouseKid, actor: mom }, [
+				GIFT_A,
+			]),
+		).rejects.toMatchObject({ status: 403 });
+		expect(mocks.db.batch).not.toHaveBeenCalled();
+	});
+
+	it('refuses a parent in their own view', async () => {
+		await expect(
+			markGiftsSeen({ mode: 'self', member: mom, actor: mom }, [GIFT_A]),
+		).rejects.toBeInstanceOf(GiftError);
+		expect(mocks.db.batch).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		[[]],
+		['not-a-list'],
+		[['nope']],
+		[[GIFT_A, 42]],
+		[Array.from({ length: 21 }, () => GIFT_A)],
+	])('rejects %j before touching the database', async (ids) => {
+		await expect(markGiftsSeen(kidSelf, ids)).rejects.toMatchObject({
+			status: 400,
+		});
+		expect(mocks.db.batch).not.toHaveBeenCalled();
+	});
+
+	it("turns the database's refusal into a 403", async () => {
+		mocks.db.batch.mockRejectedValue(
+			Object.assign(new Error('only the member'), { code: '42501' }),
+		);
+		await expect(markGiftsSeen(kidSelf, [GIFT_A])).rejects.toMatchObject({
+			status: 403,
+		});
 	});
 });

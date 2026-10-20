@@ -15,6 +15,7 @@ import { user } from './auth-schema.ts';
 import { choreCompletions } from './chore-completions.table.ts';
 import { householdMembers } from './household-members.table.ts';
 import { households } from './households.table.ts';
+import { pointsAdjustmentKind } from './points-adjustment-kind.ts';
 import { pointsReason } from './points-reason.ts';
 import { rewardClaims } from './reward-claims.table.ts';
 import {
@@ -37,6 +38,8 @@ import {
  * - `reward_claim` rows point at their `reward_claims` row (`reward_claim_id`)
  *   and are written together with it (SB-27).
  * - `adjustment` rows are a parent's manual correction, with a `note`.
+ *   `adjustment_kind` says which ones are gifts (SB-78) and which are
+ *   balances moved between households (SB-76, SB-84).
  *
  * Completion and reversal rows are written by the SECURITY DEFINER functions
  * (custom migration 0011); parents can insert adjustments directly.
@@ -64,6 +67,11 @@ export const pointsLedger = pgTable(
 		rewardClaimId: uuid('reward_claim_id').references(() => rewardClaims.id, {
 			onDelete: 'set null',
 		}),
+		/**
+		 * For `adjustment` rows: a parent's gift, or a balance moved in from
+		 * another household. NULL for a plain correction and every other reason.
+		 */
+		adjustmentKind: pointsAdjustmentKind('adjustment_kind'),
 		/** Free text, required for adjustments ("Helped with groceries"). */
 		note: text('note'),
 		/** The auth user who caused it (an audit field, not a member reference). */
@@ -99,6 +107,12 @@ export const pointsLedger = pgTable(
 			sql`(${t.note} is null or char_length(${t.note}) <= 200)
 				and (${t.reason} <> 'adjustment' or char_length(btrim(${t.note})) >= 1)`,
 		),
+		// Only adjustments have a kind, and a gift always adds points.
+		check(
+			'points_ledger_adjustment_kind_check',
+			sql`(${t.adjustmentKind} is null or ${t.reason} = 'adjustment')
+				and (${t.adjustmentKind} is distinct from 'gift' or ${t.delta} > 0)`,
+		),
 		// At most one award and one reversal per completion.
 		uniqueIndex('points_ledger_completion_id_completion_key')
 			.on(t.completionId)
@@ -120,13 +134,15 @@ export const pointsLedger = pgTable(
 			to: backendRole,
 			using: isHouseholdMember(t.householdId),
 		}),
-		// Parents can correct a balance by hand. Everything else is written by
-		// the completion functions.
+		// Parents can correct a balance by hand or give a gift. Everything else
+		// is written by the completion functions (and moved balances by the
+		// household functions).
 		pgPolicy('points_ledger_insert', {
 			for: 'insert',
 			to: backendRole,
 			withCheck: sql`${isHouseholdParent(t.householdId)}
 				and ${t.reason} = 'adjustment'
+				and (${t.adjustmentKind} is null or ${t.adjustmentKind} = 'gift')
 				and ${t.createdBy} = ${currentUserId}`,
 		}),
 	],

@@ -183,6 +183,13 @@
 			"when": 1792485841115,
 			"tag": "0026_remove_household_member",
 			"breakpoints": true
+		},
+		{
+			"idx": 26,
+			"version": "7",
+			"when": 1792515841792,
+			"tag": "0027_gift_seen_and_adjustment_kind",
+			"breakpoints": true
 		}
 	]
 }

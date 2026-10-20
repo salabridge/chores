@@ -60,6 +60,13 @@ export const householdMembers = pgTable(
 		 * `points_ledger` (`weeklyPointsProgress()` in ../src/completions.ts).
 		 */
 		weeklyGoalPoints: integer('weekly_goal_points').notNull().default(200),
+		/**
+		 * The newest bonus-point gift this member has dismissed the "You got
+		 * bonus points!" moment for (SB-83). Gifts after it are unseen; NULL
+		 * means none seen yet. Only `app.mark_gifts_seen` changes it, for the
+		 * member's own login.
+		 */
+		giftsSeenAt: timestamp('gifts_seen_at', { withTimezone: true }),
 		joinedAt: timestamp('joined_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),

@@ -222,9 +222,8 @@ screen calls it ("Remove from household").
   ("Moved from Mia to Leo (duplicate profile)") and a credit on the other kid
   ("Moved from Mia (duplicate profile)"). Nothing is written for a zero
   balance. Without it the balance stays on the removed member's ledger. Both
-  notes start "Moved from ", which the web app's bonus-points list leaves out
-  like "Carried over from " (`NOT_A_GIFT_NOTE_PREFIXES` in
-  `apps/web/src/lib/server/gifts.ts`). Neither counts toward weekly goals or
+  rows are `adjustment_kind = 'transfer'` (since `0027`), so the web app's
+  bonus-points list leaves them out. Neither counts toward weekly goals or
   streaks (adjustments never do).
 - **Locks.** The member's household is checked without locks first, so a
   caller can't lock a household they aren't a parent in. Then the household
@@ -489,7 +488,35 @@ done.
   spent on rewards, but it does **not** count toward the weekly goal or
   streaks: `weeklyPointsProgress` and the web app's weekly and household
   totals only sum `completion` and `reversal` rows, and streaks are computed
-  from completions, never from the ledger. No schema change was needed.
+  from completions, never from the ledger. Gift rows carry
+  `adjustment_kind = 'gift'` (see below).
+- **Adjustment kinds** (`points_ledger.adjustment_kind`, enum
+  `points_adjustment_kind`, SB-83): what an `adjustment` row is. `gift` is a
+  parent's bonus points (always positive, a check constraint); `carry_over` is
+  a balance moved in by a household merge (SB-76, note "Carried over from …");
+  `transfer` is a balance moved when a member is removed (SB-84, note "Moved
+  from …"). NULL is a plain correction, and every non-adjustment row (a check
+  constraint). Code that means "gifts" filters on `adjustment_kind = 'gift'`,
+  never on the note. Through RLS a parent may insert only NULL or `gift`; the
+  moved-balance kinds come from the household functions. Migration `0027`
+  backfilled existing rows from their note prefixes (any other positive
+  adjustment became a `gift`).
+- **"You got bonus points!"** (SB-83): a kid sees a one-time moment for gifts
+  they haven't dismissed yet: their `gift` rows newer than
+  `household_members.gifts_seen_at` (NULL: none seen). Several unseen gifts
+  share one moment. Dismissing it calls `markGiftsSeen(tx, memberId,
+  giftIds)` (`app.mark_gifts_seen`), which moves `gifts_seen_at` forward to the
+  newest of the gifts the moment showed, never back, so a gift that arrived
+  while it was open stays unseen. It only works for a kid, by someone who can
+  act as them (`app.can_act_as_member`): the kid's own login, or a parent on a
+  managed kid's profile (the shared device). A parent can't mark a kid with
+  their own login, another parent, themselves, or another household's kid.
+  The column has no UPDATE grant, so the function is the only way to change it. We chose one timestamp on the member
+  over a `seen_at` on each ledger row because the ledger is append-only (no
+  UPDATE grant or policy) and "seen up to here" is all the moment needs. The
+  trade-off: a gift whose transaction started before an already-seen gift's
+  but committed after it would count as seen; gifts are single-statement
+  inserts, so in practice they don't overlap.
 - **Weekly goal**: `household_members.weekly_goal_points` (default 200), set
   per member by a parent. `weeklyPointsProgress(tx, memberId, weekStart)`
   returns earned / goal / remaining / percent for the progress bar, counting
@@ -735,7 +762,7 @@ role. Access follows household membership and role:
 | Table                   | Read                  | Write                                                                                   |
 | ----------------------- | --------------------- | --------------------------------------------------------------------------------------- |
 | `households`            | members (and creator) | anyone can create one (and becomes owner); owners update/delete                         |
-| `household_members`     | members (removed rows too, for history) | owners add/change/remove anyone; parents add managed kids and change/remove kids and edit their own profile; anyone can leave; removed rows can't be changed; removing (SB-84) goes through `app.remove_household_member` |
+| `household_members`     | members (removed rows too, for history) | owners add/change/remove anyone; parents add managed kids and change/remove kids and edit their own profile; anyone can leave; removed rows can't be changed; removing (SB-84) goes through `app.remove_household_member`; `gifts_seen_at` only through `app.mark_gifts_seen` (SB-83) |
 | `household_member_pins` | the parent themselves | the parent themselves                                                                   |
 | `household_invites`     | parents               | parents invite kids, owners invite parents; delete to revoke; accept via `app.accept_household_invite` (or `app.merge_household_via_invite`) |
 | `chores`                | members               | parents; `assigned_member_id` must be a member of the same household                    |
@@ -745,7 +772,7 @@ role. Access follows household membership and role:
 | `chore_rotations`       | members               | parents; the turn moves through `app.advance_chore_rotation` (members for their own turn, parents for anyone) |
 | `chore_rotation_members`| members               | parents                                                                                 |
 | `chore_completions`     | members               | nobody directly; written by `app.complete_chore_instance` / `complete_chore_stage` / `reopen_chore_completion` (a doer other than the assignee: themselves, or anyone in the household for a parent), and `app.decide_favour` / `escalate_favour` for a kid's favour (the assignee or a parent decides, never the doer; only the doer asks a parent) |
-| `points_ledger`         | members               | append-only; parents insert `adjustment` rows, completions and reversals come from the functions above |
+| `points_ledger`         | members               | append-only; parents insert `adjustment` rows (kind NULL or `gift`), completions and reversals come from the functions above |
 | `rewards`               | members               | parents                                                                                 |
 | `reward_claims`         | members               | nobody directly; written by `insertRewardClaim()` with its ledger row                    |
 
@@ -816,7 +843,14 @@ relaxed managed-is-kid check, the removed-detached check and the update
 policy, then hand-written: the `app.*` member helpers, `check_chore_rotation`,
 `accept_household_invite` and `merge_household_via_invite` again with removed
 members filtered out, and `app.remove_household_member`. (It's numbered 0026
-because SB-83 was taking 0025 in parallel.)
+because SB-83 was taking 0025 in parallel; SB-83 then moved to `0027` to run
+after it, so there is no `0025`.)
+`0027_gift_seen_and_adjustment_kind.sql` (SB-83) is generated for
+`household_members.gifts_seen_at`, the `points_adjustment_kind` enum and
+column, its check and the narrowed `points_ledger_insert` policy, then
+hand-written: the backfill from note prefixes, `app.merge_household_via_invite`
+and `app.remove_household_member` again (as in `0026`, except that their
+moved-balance rows are `carry_over` and `transfer`) and `app.mark_gifts_seen`.
 
 **Two connection strings** (see `.env.example`):
 
@@ -890,7 +924,12 @@ instances reassigned or unassigned and yesterday's kept, the pending favour
 declined, the reminder dismissed, the device profile cleared, the row still
 readable but no longer assignable, editable or removable); a kid with a login
 losing access at once; and an owner removing a parent who can then be invited
-back. It also checks the FKs and
+back. For the bonus points moment (SB-83) it covers gifts being unseen until the kid
+dismisses them, carry-over and transfer rows never counting as gifts, the adjustment kind
+checks and insert policy, a parent marking a managed kid's gifts seen but not
+those of a kid with a login, their own or another household's kid, nobody
+setting `gifts_seen_at` directly, another member's
+gift ids being ignored, and the marker only moving forward. It also checks the FKs and
 the one-row-per-user constraint. It deletes everything it created when it
 finishes.
 

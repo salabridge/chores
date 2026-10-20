@@ -83,3 +83,16 @@ export function parentGuard(state: ProfileState | null): ParentGuardResult {
 	if (state.mode === 'kid') return 'kid-profile-active';
 	return isParentRole(state.member.role) ? 'allow' : 'not-a-parent';
 }
+
+/**
+ * Whether `state` gets the "You got bonus points!" moment (SB-83) for
+ * `state.member`'s gifts: a kid on their own login, or the managed kid whose
+ * profile is open on a parent's device. Never a parent in their own view.
+ * `app.mark_gifts_seen` enforces the same.
+ */
+export function seesGiftMoment(state: ProfileState | null) {
+	if (state?.member.role !== 'kid') return false;
+	return state.mode === 'kid'
+		? canOpenKidProfile(state.actor, state.member)
+		: state.member.userId !== null;
+}

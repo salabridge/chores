@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
 	giftLine,
+	giftMomentLine,
+	giftMomentSummary,
+	giftMomentTotal,
 	MAX_GIFT_POINTS,
 	MAX_GIFT_REASON,
 	parseGiftInput,
@@ -80,5 +83,29 @@ describe('giftLine', () => {
 		expect(giftLine({ points: 5, reason: 'Report card', fromName: null })).toBe(
 			'+5 · Report card',
 		);
+	});
+});
+
+describe('the bonus points moment (SB-83)', () => {
+	it('puts the amount and giver before the reason', () => {
+		expect(giftMomentLine({ points: 20, reason, fromName: 'Mom' })).toBe(
+			'+20 from Mom · Helped Grandma with groceries',
+		);
+	});
+
+	it('leaves out a giver who has since left', () => {
+		expect(giftMomentLine({ points: 5, reason, fromName: null })).toBe(
+			'+5 · Helped Grandma with groceries',
+		);
+	});
+
+	it('adds up every unseen gift', () => {
+		expect(giftMomentTotal([{ points: 20 }, { points: 5 }])).toBe(25);
+		expect(giftMomentTotal([])).toBe(0);
+	});
+
+	it('counts the gifts only when there are several', () => {
+		expect(giftMomentSummary([1])).toBeNull();
+		expect(giftMomentSummary([1, 2, 3])).toBe('Here are your 3 gifts.');
 	});
 });
