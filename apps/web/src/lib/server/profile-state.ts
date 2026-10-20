@@ -1,4 +1,5 @@
 import { parentRoles } from '@chore/db';
+import type { AnalyticsIdentity } from '../analytics.ts';
 
 /** The slice of a `household_members` row the profile logic needs. */
 export interface MemberSummary {
@@ -95,4 +96,25 @@ export function seesGiftMoment(state: ProfileState | null) {
 	return state.mode === 'kid'
 		? canOpenKidProfile(state.actor, state.member)
 		: state.member.userId !== null;
+}
+
+/**
+ * Who analytics may know the device as (SB-85). Only a parent in their own
+ * view is identified. A kid's own login and a managed kid's profile on a
+ * parent's device are both `kid`, and nothing else about them is sent. With
+ * no household yet the user stays anonymous until setup makes them a parent.
+ */
+export function analyticsIdentity(
+	state: ProfileState | null,
+): AnalyticsIdentity {
+	if (!state) return null;
+	if (state.mode === 'kid' || !isParentRole(state.member.role)) {
+		return { role: 'kid' };
+	}
+	if (!state.member.userId) return null;
+	return {
+		role: 'parent',
+		userId: state.member.userId,
+		householdId: state.member.householdId,
+	};
 }

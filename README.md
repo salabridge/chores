@@ -60,6 +60,8 @@ load `packages/db/.env`.
 | `APP_ORIGIN`                 | `apps/web`                | The app's public origin, for invite links. Set it in production; unset uses the request's origin. |
 | `RESEND_API_KEY`             | `apps/web`                | Optional. Resend API key for invite emails. Unset skips sending.       |
 | `INVITE_EMAIL_FROM`          | `apps/web`                | Optional. From address for invite emails, on a domain verified in Resend. |
+| `PUBLIC_POSTHOG_KEY`         | `apps/web`                | Optional. PostHog project API key. Unset turns analytics off.          |
+| `PUBLIC_POSTHOG_HOST`        | `apps/web`                | Optional. PostHog ingestion host for the `/ingest` proxy. Defaults to US Cloud. |
 | `FIGMA_API_TOKEN`            | `packages/tokens` build   | Optional. Enterprise-only Figma token; without it the build uses the committed snapshot. |
 | `FIGMA_FILE_KEY`             | `packages/tokens` build   | Optional. Defaults to the Chores Figma file.                           |
 
@@ -92,6 +94,10 @@ The Neon project is `salabridge-chores`. It has two branches: `production`
   from request headers. Without all three, the app skips sending: the parent
   still gets a copy-link box on the Members screen, and the dev server also
   logs the link.
+- **`PUBLIC_POSTHOG_KEY`** and **`PUBLIC_POSTHOG_HOST`:** set the key in Vercel
+  for production only, from PostHog's **Project settings > Project API key**.
+  Leave both unset locally, in e2e and on previews: analytics stays off and
+  nothing is sent. See "Analytics" in [apps/web/README.md](apps/web/README.md).
 - **`FIGMA_API_TOKEN`:** not needed. The tokens build reads the committed
   `packages/tokens/figma-variables.json` snapshot. The token only matters on a
   Figma Enterprise plan, where it switches the build to the live REST API. See

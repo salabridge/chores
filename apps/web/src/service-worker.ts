@@ -43,6 +43,8 @@
 
 //   const url = new URL(event.request.url);
 //   if (url.origin !== self.location.origin) return;
+//   // Analytics (SB-85) always goes to the network, never the cache.
+//   if (url.pathname.startsWith("/ingest")) return;
 
 //   if (event.request.mode === "navigate") {
 //     event.respondWith(
