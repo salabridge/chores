@@ -6,7 +6,7 @@ import {
 	parentRoles,
 } from '@chore/db';
 import type { Cookies } from '@sveltejs/kit';
-import { and, asc, eq, inArray, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { dev } from '$app/env';
 import { getRequestEvent } from '$app/server';
 import type { SetupStatus } from '../setup.ts';
@@ -63,15 +63,23 @@ async function loadMemberships(userId: string): Promise<MemberSummary[]> {
 	return db
 		.select(memberColumns)
 		.from(householdMembers)
-		.where(eq(householdMembers.userId, userId))
+		.where(
+			and(
+				eq(householdMembers.userId, userId),
+				isNull(householdMembers.removedAt),
+			),
+		)
 		.orderBy(asc(householdMembers.joinedAt));
 }
 
+/** A current (not removed, SB-84) member by id. */
 export async function getMember(id: string): Promise<MemberSummary | null> {
 	const [member] = await db
 		.select(memberColumns)
 		.from(householdMembers)
-		.where(eq(householdMembers.id, id));
+		.where(
+			and(eq(householdMembers.id, id), isNull(householdMembers.removedAt)),
+		);
 	return member ?? null;
 }
 
@@ -86,6 +94,7 @@ export async function listManagedKids(
 			and(
 				eq(householdMembers.householdId, householdId),
 				eq(householdMembers.role, 'kid'),
+				isNull(householdMembers.removedAt),
 			),
 		)
 		.orderBy(asc(householdMembers.displayName))
@@ -103,6 +112,7 @@ export async function listParents(
 			and(
 				eq(householdMembers.householdId, householdId),
 				inArray(householdMembers.role, [...parentRoles]),
+				isNull(householdMembers.removedAt),
 			),
 		)
 		.orderBy(asc(householdMembers.joinedAt));
@@ -130,7 +140,11 @@ async function findDeviceProfile(
 		.from(deviceProfiles)
 		.leftJoin(
 			householdMembers,
-			eq(deviceProfiles.activeMemberId, householdMembers.id),
+			// A removed kid (SB-84) is never the active profile.
+			and(
+				eq(deviceProfiles.activeMemberId, householdMembers.id),
+				isNull(householdMembers.removedAt),
+			),
 		)
 		.where(and(eq(deviceProfiles.userId, userId), or(...matches)));
 	// The device's own row wins over one found only through the session.

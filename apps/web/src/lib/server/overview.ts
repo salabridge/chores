@@ -59,7 +59,13 @@ export async function loadHouseholdOverview(
 				and(eq(chores.householdId, householdId), isNull(chores.archivedAt)),
 			),
 		db
-			.select({ id: householdMembers.id, name: householdMembers.displayName })
+			// Removed members (SB-84) too, for the names of what they did today;
+			// the workload below lists only current ones.
+			.select({
+				id: householdMembers.id,
+				name: householdMembers.displayName,
+				removedAt: householdMembers.removedAt,
+			})
 			.from(householdMembers)
 			.where(eq(householdMembers.householdId, householdId)),
 		db
@@ -310,7 +316,7 @@ export async function loadHouseholdOverview(
 	// whoever completed it: a loop's turn has already moved on, and a chore done
 	// as a favour (SB-74) counts for the doer.
 	const workload = buildWorkload(
-		memberRows,
+		memberRows.filter((m) => m.removedAt === null),
 		sorted.flatMap((r) => {
 			const done = r.status === 'completed';
 			const completer = r.instanceId

@@ -1,5 +1,5 @@
 import { householdMembers, pointsLedger } from '@chore/db';
-import { and, desc, eq, gt, gte, notLike } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, isNull, notLike } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { type GiftInput, type GiftItem, parseGiftInput } from '../gift.ts';
 import { db } from './drizzle.ts';
@@ -49,6 +49,7 @@ export async function giftPoints(
 			and(
 				eq(householdMembers.id, memberId),
 				eq(householdMembers.householdId, actor.householdId),
+				isNull(householdMembers.removedAt),
 			),
 		);
 	if (!target) throw new GiftError('That member was not found.');
@@ -69,10 +70,23 @@ export async function giftPoints(
 const giver = alias(householdMembers, 'giver');
 
 /**
+ * Notes of `adjustment` rows the database writes that aren't presents, by
+ * their start: a household merge's "Carried over from …" (SB-76) and a
+ * removed duplicate profile's "Moved from …" (SB-84, both the credit and the
+ * debit). The one place these prefixes are matched; swap it for a marker
+ * column if one is added.
+ */
+export const NOT_A_GIFT_NOTE_PREFIXES = [
+	'Carried over from ',
+	'Moved from ',
+] as const;
+
+/**
  * The bonus points `member` got recently, newest first, for their Rewards
  * screen: positive adjustments. The "Carried over from …" rows a household
- * merge writes (SB-76) are adjustments too but aren't a present, so they're
- * left out by their note.
+ * merge writes (SB-76) and the "Moved from …" rows of a removed duplicate
+ * profile (SB-84) are adjustments too but aren't a present, so they're left
+ * out by their note (`NOT_A_GIFT_NOTE_PREFIXES`).
  */
 export async function listRecentGifts(
 	member: { id: string; householdId: string },
@@ -101,7 +115,9 @@ export async function listRecentGifts(
 				eq(pointsLedger.householdId, member.householdId),
 				eq(pointsLedger.reason, 'adjustment'),
 				gt(pointsLedger.delta, 0),
-				notLike(pointsLedger.note, 'Carried over from %'),
+				...NOT_A_GIFT_NOTE_PREFIXES.map((prefix) =>
+					notLike(pointsLedger.note, `${prefix}%`),
+				),
 				gte(pointsLedger.createdAt, since),
 			),
 		)

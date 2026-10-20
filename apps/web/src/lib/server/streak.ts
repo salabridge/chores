@@ -3,7 +3,7 @@ import { householdStreaks } from '@chore/db/household-streaks';
 import { chorePeriodStart } from '@chore/db/recurrence';
 import type { AuthenticatedTx } from '@chore/db/rls';
 import { SCREEN_STREAK_LOOKBACK_DAYS } from '@chore/db/streaks';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { buildStreakScreen, type StreakScreenData } from '../streak.ts';
 import { db } from './drizzle.ts';
 import { householdClock } from './household-today.ts';
@@ -30,7 +30,13 @@ export async function loadStreakScreen(
 		db
 			.select({ id: householdMembers.id, name: householdMembers.displayName })
 			.from(householdMembers)
-			.where(eq(householdMembers.householdId, householdId)),
+			// Removed members (SB-84) leave the household's streak list.
+			.where(
+				and(
+					eq(householdMembers.householdId, householdId),
+					isNull(householdMembers.removedAt),
+				),
+			),
 		memberPointsBalance(member.id),
 		memberWeekPoints(member.id, householdId, now),
 		householdClock(householdId, now).then(({ today }) =>

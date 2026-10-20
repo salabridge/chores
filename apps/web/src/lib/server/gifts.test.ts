@@ -24,7 +24,8 @@ const mocks = vi.hoisted(() => {
 });
 vi.mock('./drizzle.ts', () => ({ db: mocks.db }));
 
-const { GiftError, giftPoints, listRecentGifts } = await import('./gifts.ts');
+const { GiftError, giftPoints, listRecentGifts, NOT_A_GIFT_NOTE_PREFIXES } =
+	await import('./gifts.ts');
 
 const actor = (role: 'owner' | 'parent' | 'kid') => ({
 	householdId: 'h1',
@@ -139,5 +140,18 @@ describe('listRecentGifts', () => {
 				createdAt: '2026-10-12T12:00:00.000Z',
 			},
 		]);
+	});
+});
+
+describe('NOT_A_GIFT_NOTE_PREFIXES', () => {
+	it('matches the notes the database writes for a merge and a points move', () => {
+		const notGift = (note: string) =>
+			NOT_A_GIFT_NOTE_PREFIXES.some((p) => note.startsWith(p));
+		// app.merge_household_via_invite (SB-76)
+		expect(notGift('Carried over from The Smiths')).toBe(true);
+		// app.remove_household_member (SB-84), the credit and the debit
+		expect(notGift('Moved from Mia (duplicate profile)')).toBe(true);
+		expect(notGift('Moved from Mia to Ava (duplicate profile)')).toBe(true);
+		expect(notGift('Helped Grandma with groceries')).toBe(false);
 	});
 });

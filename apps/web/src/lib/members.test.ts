@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { canEditMemberAvatar, memberLabel, sortMembers } from './members.ts';
+import {
+	canEditMemberAvatar,
+	canRemoveMember,
+	memberLabel,
+	pointsMoveTargets,
+	sortMembers,
+} from './members.ts';
 
 describe('canEditMemberAvatar', () => {
 	const owner = { id: 'o1', role: 'owner' as const };
@@ -48,5 +54,49 @@ describe('sortMembers', () => {
 			{ id: 'p2', role: 'parent' as const },
 		]);
 		expect(sorted.map((m) => m.id)).toEqual(['o1', 'p1', 'p2', 'k1', 'k2']);
+	});
+});
+
+describe('canRemoveMember', () => {
+	const owner = { id: 'o1', role: 'owner' as const };
+	const parent = { id: 'p1', role: 'parent' as const };
+	const kid = { id: 'k1', role: 'kid' as const };
+
+	it('lets an owner remove anyone but themselves', () => {
+		expect(canRemoveMember(owner, kid)).toBe(true);
+		expect(canRemoveMember(owner, parent)).toBe(true);
+		expect(canRemoveMember(owner, { id: 'o2', role: 'owner' })).toBe(true);
+		expect(canRemoveMember(owner, owner)).toBe(false);
+	});
+
+	it('lets a parent remove kids only', () => {
+		expect(canRemoveMember(parent, kid)).toBe(true);
+		expect(canRemoveMember(parent, owner)).toBe(false);
+		expect(canRemoveMember(parent, { id: 'p2', role: 'parent' })).toBe(false);
+		expect(canRemoveMember(parent, parent)).toBe(false);
+	});
+
+	it('never lets a kid remove anyone', () => {
+		expect(canRemoveMember(kid, { id: 'k2', role: 'kid' })).toBe(false);
+	});
+});
+
+describe('pointsMoveTargets', () => {
+	const members = [
+		{ id: 'o1', role: 'owner' as const },
+		{ id: 'k1', role: 'kid' as const },
+		{ id: 'k2', role: 'kid' as const },
+		{ id: 'k3', role: 'kid' as const },
+	];
+
+	it('offers every other kid for a kid', () => {
+		expect(pointsMoveTargets(members, members[1]).map((m) => m.id)).toEqual([
+			'k2',
+			'k3',
+		]);
+	});
+
+	it('offers nobody for a parent', () => {
+		expect(pointsMoveTargets(members, members[0])).toEqual([]);
 	});
 });

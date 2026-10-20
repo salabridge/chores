@@ -6,7 +6,7 @@ import {
 	chores,
 	householdMembers,
 } from '@chore/db';
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { ChoreListItem, ChoreListMember } from '../chores-list.ts';
 import { db } from './drizzle.ts';
 
@@ -67,7 +67,13 @@ export async function loadChoresList(householdId: string): Promise<ChoresList> {
 				role: householdMembers.role,
 			})
 			.from(householdMembers)
-			.where(eq(householdMembers.householdId, householdId)),
+			// Removed members (SB-84) aren't assigned or in a loop any more.
+			.where(
+				and(
+					eq(householdMembers.householdId, householdId),
+					isNull(householdMembers.removedAt),
+				),
+			),
 	]);
 
 	const current = new Map(
