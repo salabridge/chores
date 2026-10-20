@@ -41,8 +41,9 @@ export const variables = defineEnvVars({
 	},
 	PUBLIC_POSTHOG_HOST: {
 		public: true,
-		// Unset or empty means PostHog Cloud US; normalized to an origin.
-		schema: type('string | undefined').pipe((v) =>
+		// Unset means PostHog Cloud US; anything else must be a URL, normalized
+		// to an origin.
+		schema: type('string.url | undefined').pipe((v) =>
 			v ? new URL(v).origin : 'https://us.i.posthog.com',
 		),
 		description:
