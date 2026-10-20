@@ -62,6 +62,7 @@ import {
 	FavourEscalatedError,
 	getRotationTurns,
 	isHouseholdParent,
+	markGiftsSeen,
 	memberPointsBalance,
 	mergeHouseholdViaInvite,
 	NotAFavourError,
@@ -2811,6 +2812,7 @@ try {
 		.where(eq(pointsLedger.memberId, moved[0].id));
 	assert.equal(carried.reason, 'adjustment');
 	assert.equal(carried.note, 'Carried over from Smoke test Dave home');
+	assert.equal(carried.adjustmentKind, 'carry_over');
 	assert.equal(carried.createdBy, dave.id);
 	ok(
 		"Dave moves his household into Alice's: he's a parent, Zoe keeps her 7 points, his household is gone",
@@ -2823,6 +2825,186 @@ try {
 			),
 		/invite already accepted/,
 	);
+
+	console.log('Bonus points moment (SB-83):');
+	const giftSeenAt = async (memberId: string) => {
+		const [row] = await admin
+			.select({ seen: householdMembers.giftsSeenAt })
+			.from(householdMembers)
+			.where(eq(householdMembers.id, memberId));
+		return row?.seen ?? null;
+	};
+	// What the kid's app shows: their gifts after gifts_seen_at.
+	const unseenGiftIds = async (memberId: string) => {
+		const rows = await admin.execute<{ id: string }>(
+			sql`select pl.id from points_ledger pl
+				join household_members hm on hm.id = pl.member_id
+				where pl.member_id = ${memberId}
+					and pl.adjustment_kind = 'gift'
+					and pl.created_at > coalesce(hm.gifts_seen_at, '-infinity')
+				order by pl.created_at`,
+		);
+		return rows.rows.map((r) => r.id);
+	};
+	const giveGift = (memberId: string, delta: number, note: string) =>
+		authed.withAuth(bob.token, async (tx) => {
+			const [row] = await tx
+				.insert(pointsLedger)
+				.values({
+					householdId: household.id,
+					memberId,
+					delta,
+					reason: 'adjustment',
+					adjustmentKind: 'gift',
+					note,
+					createdBy: bob.id,
+				})
+				.returning();
+			return row;
+		});
+	assert.equal(await giftSeenAt(carolMemberId), null);
+	// Earlier tests left a "Helped with groceries" adjustment with no kind: a
+	// plain correction, not a gift.
+	assert.deepEqual(await unseenGiftIds(carolMemberId), []);
+	const giftA = await giveGift(carolMemberId, 20, 'Helped Grandma');
+	const giftB = await giveGift(carolMemberId, 5, 'Good report card');
+	const miaGift = await giveGift(mia.id, 10, 'Tidied the garden');
+	assert.deepEqual(await unseenGiftIds(carolMemberId), [giftA.id, giftB.id]);
+	ok('Bob (parent) gives gifts; they are unseen until Carol dismisses them');
+	assert.deepEqual(await unseenGiftIds(moved[0].id), []);
+	ok("Zoe's carried-over balance is not a gift");
+
+	await expectRejected(
+		'Carol giving herself a gift',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx.insert(pointsLedger).values({
+					householdId: household.id,
+					memberId: carolMemberId,
+					delta: 50,
+					reason: 'adjustment',
+					adjustmentKind: 'gift',
+					note: 'free points',
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectRejected(
+		'Bob writing a carry-over row directly',
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx.insert(pointsLedger).values({
+					householdId: household.id,
+					memberId: carolMemberId,
+					delta: 50,
+					reason: 'adjustment',
+					adjustmentKind: 'carry_over',
+					note: 'Carried over from nowhere',
+					createdBy: bob.id,
+				}),
+			),
+		RLS_DENIED,
+	);
+	await expectRejected(
+		'a gift that takes points away',
+		() => giveGift(carolMemberId, -5, 'Not a gift'),
+		/points_ledger_adjustment_kind_check/,
+	);
+	await expectRejected(
+		'a completion row with an adjustment kind (owner role, check only)',
+		() =>
+			admin.insert(pointsLedger).values({
+				householdId: household.id,
+				memberId: carolMemberId,
+				delta: 5,
+				reason: 'completion',
+				adjustmentKind: 'gift',
+			}),
+		/points_ledger_adjustment_kind_check/,
+	);
+
+	await expectRejected(
+		'Carol setting gifts_seen_at directly',
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				tx
+					.update(householdMembers)
+					.set({ giftsSeenAt: new Date() })
+					.where(eq(householdMembers.id, carolMemberId)),
+			),
+		/permission denied/,
+	);
+	await expectRejected(
+		"Bob (parent) setting Carol's gifts_seen_at directly",
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				tx
+					.update(householdMembers)
+					.set({ giftsSeenAt: new Date() })
+					.where(eq(householdMembers.id, carolMemberId)),
+			),
+		/permission denied/,
+	);
+	await expectRejected(
+		"Bob (parent) marking Carol's gifts seen",
+		() =>
+			authed.withAuth(bob.token, (tx) =>
+				markGiftsSeen(tx, carolMemberId, [giftA.id]),
+			),
+		/only the member can mark their own gifts/,
+	);
+	await expectRejected(
+		"Alice marking managed kid Mia's gifts seen (kid profiles don't show it)",
+		() =>
+			authed.withAuth(alice.token, (tx) =>
+				markGiftsSeen(tx, mia.id, [miaGift.id]),
+			),
+		/only the member can mark their own gifts/,
+	);
+	await expectRejected(
+		"Carol marking Mia's gifts seen",
+		() =>
+			authed.withAuth(carol.token, (tx) =>
+				markGiftsSeen(tx, mia.id, [miaGift.id]),
+			),
+		/only the member can mark their own gifts/,
+	);
+	assert.equal(await giftSeenAt(carolMemberId), null);
+	assert.equal(await giftSeenAt(mia.id), null);
+	ok('nobody else can mark them seen, and nothing changed');
+
+	assert.equal(
+		await authed.withAuth(carol.token, (tx) =>
+			markGiftsSeen(tx, carolMemberId, [miaGift.id]),
+		),
+		null,
+	);
+	ok("Carol passing Mia's gift id marks nothing");
+
+	const seenB = await authed.withAuth(carol.token, (tx) =>
+		markGiftsSeen(tx, carolMemberId, [giftA.id, giftB.id]),
+	);
+	assert.equal(seenB?.getTime(), giftB.createdAt.getTime());
+	assert.deepEqual(await unseenGiftIds(carolMemberId), []);
+	ok('Carol dismisses both: seen up to the newest one, none left');
+
+	const giftC = await giveGift(carolMemberId, 10, 'Walked the dog');
+	assert.deepEqual(await unseenGiftIds(carolMemberId), [giftC.id]);
+	await authed.withAuth(carol.token, (tx) =>
+		markGiftsSeen(tx, carolMemberId, [giftA.id]),
+	);
+	assert.deepEqual(await unseenGiftIds(carolMemberId), [giftC.id]);
+	ok('a later gift is unseen again, and marking an older one never goes back');
+
+	await authed.withAuth(carol.token, (tx) =>
+		markGiftsSeen(tx, carolMemberId, [giftC.id]),
+	);
+	assert.deepEqual(await unseenGiftIds(carolMemberId), []);
+	assert.equal(
+		(await giftSeenAt(carolMemberId))?.getTime(),
+		giftC.createdAt.getTime(),
+	);
+	ok('stored on her member row, so it stays dismissed on every device');
 
 	console.log('Leaving and removing:');
 	await expectNoRows('Bob removing Alice (owner)', () =>

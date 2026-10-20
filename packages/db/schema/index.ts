@@ -17,6 +17,7 @@ export * from './household-members.table.ts';
 export * from './household-role.ts';
 export * from './households.table.ts';
 export * from './landing-route.ts';
+export * from './points-adjustment-kind.ts';
 export * from './points-ledger.table.ts';
 export * from './points-reason.ts';
 export * from './reward-claims.table.ts';
