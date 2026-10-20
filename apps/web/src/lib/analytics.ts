@@ -193,9 +193,13 @@ export function track<E extends keyof AnalyticsEvents>(
 	event: E,
 	properties: AnalyticsEvents[E],
 ) {
-	return client.then((ph) => {
-		ph?.capture(event, properties);
-	});
+	return client
+		.then((ph) => {
+			ph?.capture(event, properties);
+		})
+		.catch(() => {
+			// Fire-and-forget: a failed SDK load must never break the action.
+		});
 }
 
 /** See `syncIdentity`. */

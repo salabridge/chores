@@ -105,8 +105,12 @@
 						claiming = true;
 						const reward = data.confirming;
 						return async ({ result, update }) => {
-							// A claim that went through redirects to ?claimed=.
-							if (result.type === 'redirect' && reward) {
+							// A claim that went through redirects to ?claimed=; an expired session redirects to sign-in.
+							if (
+								result.type === 'redirect' &&
+								reward &&
+								result.location.startsWith('/rewards?claimed=')
+							) {
 								track('reward_redeemed', { reward_id: reward.id, cost: reward.cost });
 							}
 							await update();

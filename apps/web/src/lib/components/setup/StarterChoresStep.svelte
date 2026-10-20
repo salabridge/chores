@@ -21,14 +21,12 @@
 	} as const;
 	const optionClass =
 		'flex items-center gap-12 rounded-xl border border-border-subtle bg-surface-default p-12 has-focus-visible:outline-2 has-focus-visible:outline-border-orange has-checked:border-border-orange has-checked:bg-surface-accent-orange-subtle';
-	/** Which button sent the form, for analytics: Skip sends no chores. */
-	let skipping = false;
 </script>
 
 <form
 	{...finishSetupStep.enhance(async (form) => {
-		const picked = skipping ? 0 : (finishSetupStep.fields.chores.value()?.length ?? 0);
-		const skipped = skipping;
+		const skipped = Boolean(finishSetupStep.fields.skip.value());
+		const picked = skipped ? 0 : (finishSetupStep.fields.chores.value()?.length ?? 0);
 		if (await form.submit()) {
 			track('setup_completed', { starter_chores: picked, skipped });
 		}
@@ -81,11 +79,7 @@
 	</fieldset>
 
 	<div class="flex flex-col gap-8">
-		<PrimaryButton
-			type="submit"
-			pending={finishSetupStep.pending > 0}
-			onclick={() => (skipping = false)}
-		>
+		<PrimaryButton type="submit" pending={finishSetupStep.pending > 0}>
 			Finish setup
 		</PrimaryButton>
 		<SecondaryButton
@@ -93,7 +87,6 @@
 			name="skip"
 			value="1"
 			formnovalidate
-			onclick={() => (skipping = true)}
 			disabled={finishSetupStep.pending > 0}
 		>
 			Skip for now
