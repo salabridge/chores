@@ -91,7 +91,7 @@ export function parentGuard(state: ProfileState | null): ParentGuardResult {
  * `app.mark_gifts_seen` enforces the same.
  */
 export function seesGiftMoment(state: ProfileState | null) {
-	if (!state || state.member.role !== 'kid') return false;
+	if (state?.member.role !== 'kid') return false;
 	return state.mode === 'kid'
 		? canOpenKidProfile(state.actor, state.member)
 		: state.member.userId !== null;
