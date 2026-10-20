@@ -41,8 +41,10 @@
 							>{rotation.handoff}</span
 						>
 					</div>
+					<!-- A real basis, not flex-1's 0, so on a phone the order wraps
+					     below the title instead of squeezing beside it and overflowing. -->
 					<RotationOrderPreview
-						class="min-w-0 flex-1"
+						class="min-w-0 flex-1 basis-[240px]"
 						members={rotation.order.map((name) => ({ name }))}
 						resetAt={rotation.resetAt}
 					/>
