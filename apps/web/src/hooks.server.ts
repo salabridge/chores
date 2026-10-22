@@ -1,6 +1,7 @@
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { error, redirect } from '@sveltejs/kit';
 import { fetchSession, hasSessionCookie, signInUrl } from '#lib/server/auth.js';
+import { captureServerError } from '#lib/server/error-tracking.js';
 import { isIngestPath, proxyToPostHog } from '#lib/server/posthog-proxy.js';
 import { parentGuard } from '#lib/server/profile-state.js';
 import { getProfileState, getSetupStatus } from '#lib/server/profiles.js';
@@ -60,4 +61,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	return resolve(event);
+};
+
+// Error tracking (SB-89). A 404 is a missing page, not a bug. Awaited so the
+// report is sent before the Vercel function ends.
+export const handleError: HandleServerError = async ({
+	error: thrown,
+	event,
+	status,
+}) => {
+	if (status !== 404) await captureServerError(thrown, event);
 };
