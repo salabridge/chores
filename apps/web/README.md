@@ -100,7 +100,8 @@ session lifetime, the parent signs in again and lands back on the same kid.
 ## Analytics (PostHog)
 
 Product analytics go to PostHog Cloud (US), from the browser only
-(`src/lib/analytics.ts`). It's off unless `PUBLIC_POSTHOG_KEY` is set, and it's
+(`src/lib/analytics.ts`). Errors go there too, from the browser and the server
+(see "Error tracking" below). It's off unless `PUBLIC_POSTHOG_KEY` is set, and it's
 set in Vercel for production only. Without the key, `posthog-js` is never
 imported, nothing is sent, and `/ingest` returns 404. Local dev, e2e and
 previews run like this.
@@ -121,7 +122,7 @@ previews run like this.
   (`mask_all_text`, `mask_all_element_attributes`). Those hold chore names,
   kid names and input values.
 
-Session replay, surveys, feature flags and exception capture are all off.
+Session replay, surveys and feature flags are all off.
 
 **First-party proxy.** The SDK sends to `/ingest` on our own origin, so ad
 blockers don't drop events. `hooks.server.ts` forwards those requests to
@@ -131,7 +132,8 @@ geolocation. The service worker must never cache `/ingest`.
 
 **URLs.** `before_send` (`scrubEvent`) runs on every event. It drops query
 strings and hashes from every URL, because `redirectTo` can carry an invite
-link. It replaces `/invite/<token>` with `/invite/[token]`. It also drops the
+link. That includes URLs and paths inside longer text, such as an error
+message. It replaces `/invite/<token>` with `/invite/[token]`. It also drops the
 page title, because a chore page's title is the chore's name.
 
 **Who is identified (kids use this app).** The root layout's server load works
@@ -163,3 +165,48 @@ shared family device.
    true. With analytics off, `track` does nothing, so components can call it
    in stories and tests.
 3. Add the event to the list above.
+
+### Error tracking
+
+Errors go to PostHog error tracking under the same key, so with
+`PUBLIC_POSTHOG_KEY` unset nothing is captured anywhere, and no SDK loads just
+to report one. 404s are never captured: they're missing pages, not bugs.
+
+- **Browser.** `handleError` in `src/hooks.client.ts` reports errors SvelteKit
+  catches (a load or a component throwing) through `captureException` in
+  `src/lib/analytics.ts`. The SDK's `capture_exceptions` also reports uncaught
+  errors and unhandled promise rejections, such as an event handler throwing.
+  Console errors aren't captured, because anything can be logged, including
+  text people typed. The SDK starts in `hooks.client.ts`'s `init`, so an error
+  in the first page's load is still reported.
+- **Server.** `handleError` in `src/hooks.server.ts` reports errors from server
+  loads, actions, endpoints and remote functions through `posthog-node`
+  (`src/lib/server/error-tracking.ts`). The SDK is imported on the first
+  error, and only when the key is set. It sends straight to
+  `PUBLIC_POSTHOG_HOST` and the hook waits for it, because a Vercel function
+  can stop as soon as the response is out and a queued event would be lost.
+
+**Privacy.** Both sides follow the rules above. Exceptions go through the same
+scrubbing as every other event (`scrubEvent` in the browser,
+`scrubServerEvent` on the server), so URLs in messages and stack frames lose
+their query strings and invite tokens. A server error carries the error, the
+scrubbed URL and the route id. It never carries the request body, form data,
+headers or cookies. It's attributed to whoever the browser's SDK already
+reports (the `distinct_id` in its `ph_<key>_posthog` cookie), which is a
+parent's user id or an anonymous id. The server never looks anyone up from the
+session, so kids still aren't identified. Without that cookie, or when it isn't
+an identified parent, the error is sent with no person profile.
+
+Error messages can still hold text people typed, for example when a message
+quotes the value it rejected. Keep user input out of the messages of errors
+we throw.
+
+**Source maps.** On Vercel production builds, `scripts/upload-sourcemaps.js`
+runs after `vite build`. It uploads the browser build's source maps with the
+PostHog CLI (`sourcemap process`), so stack traces point at our source. The
+CLI tags each chunk with an id the SDK reports, then deletes the maps so
+they're never served. It needs `POSTHOG_CLI_API_KEY` and
+`POSTHOG_CLI_PROJECT_ID` (see the root README). Without the key, Vite writes no
+maps and nothing is uploaded. If the upload fails, the build still passes: the
+maps are deleted and that release's browser stack traces stay minified. The
+server build isn't minified, so its stack traces are readable without maps.

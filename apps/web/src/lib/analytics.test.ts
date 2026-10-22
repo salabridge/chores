@@ -7,6 +7,7 @@ const posthog = vi.hoisted(() => ({
 	init: vi.fn(),
 	register: vi.fn(),
 	capture: vi.fn(),
+	captureException: vi.fn(),
 }));
 vi.mock('posthog-js', () => {
 	posthog.loaded = true;
@@ -14,6 +15,7 @@ vi.mock('posthog-js', () => {
 });
 
 const {
+	captureException,
 	initAnalytics,
 	identify,
 	posthogConfig,
@@ -31,6 +33,7 @@ describe('with no PUBLIC_POSTHOG_KEY', () => {
 		await trackPageview('/(protected)/(app)/today');
 		await track('household_created', {});
 		await identify({ role: 'parent', userId: 'u1', householdId: 'h1' });
+		await captureException(new Error('boom'));
 		expect(posthog.loaded).toBe(false);
 		expect(posthog.init).not.toHaveBeenCalled();
 	});
@@ -45,6 +48,17 @@ describe('scrubUrl', () => {
 			'https://chores.example/invite/[token]',
 		);
 		expect(scrubUrl('/invite/abc_-1')).toBe('/invite/[token]');
+	});
+
+	it('cuts the query from URLs and paths inside other text', () => {
+		expect(
+			scrubUrl(
+				'Failed to fetch https://chores.example/login?redirectTo=%2Finvite%2Fabc (500)',
+			),
+		).toBe('Failed to fetch https://chores.example/login (500)');
+		expect(scrubUrl('GET /invite/abc?x=1#y failed')).toBe(
+			'GET /invite/[token] failed',
+		);
 	});
 
 	it('leaves other text alone', () => {
@@ -84,6 +98,46 @@ describe('scrubEvent', () => {
 		});
 		expect(JSON.stringify(scrubbed)).not.toContain('secret');
 	});
+
+	it('scrubs URLs in exception messages and stack frames', () => {
+		const event = {
+			uuid: 'e2',
+			event: '$exception',
+			properties: {
+				$exception_list: [
+					{
+						type: 'TypeError',
+						value: 'Failed to load /invite/secret?redirectTo=x',
+						stacktrace: {
+							frames: [
+								{
+									filename: 'https://chores.example/_app/immutable/a.js?v=1',
+									lineno: 1,
+								},
+							],
+						},
+					},
+				],
+			},
+		} as unknown as CaptureResult;
+
+		expect(scrubEvent(event)?.properties).toEqual({
+			$exception_list: [
+				{
+					type: 'TypeError',
+					value: 'Failed to load /invite/[token]',
+					stacktrace: {
+						frames: [
+							{
+								filename: 'https://chores.example/_app/immutable/a.js',
+								lineno: 1,
+							},
+						],
+					},
+				},
+			],
+		});
+	});
 });
 
 describe('posthogConfig', () => {
@@ -97,6 +151,16 @@ describe('posthogConfig', () => {
 			disable_session_recording: true,
 			mask_all_text: true,
 			mask_all_element_attributes: true,
+		});
+	});
+
+	it('captures uncaught errors and rejections, but not console errors', () => {
+		expect(
+			posthogConfig('https://us.i.posthog.com').capture_exceptions,
+		).toEqual({
+			capture_unhandled_errors: true,
+			capture_unhandled_rejections: true,
+			capture_console_errors: false,
 		});
 	});
 });
@@ -186,6 +250,12 @@ describe('with a key', () => {
 
 		await trackPageview(null);
 		expect(posthog.register).toHaveBeenLastCalledWith({ route: '(not found)' });
+	});
+
+	it('reports errors', async () => {
+		const error = new Error('boom');
+		await captureException(error);
+		expect(posthog.captureException).toHaveBeenCalledWith(error);
 	});
 
 	it('captures key events with their properties', async () => {

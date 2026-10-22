@@ -3,6 +3,7 @@
 // nothing loads and nothing is sent. Kids use this app, so the rules are
 // strict (see "Analytics" in the web README): only parents are identified,
 // session replay is off, autocapture keeps no text, and URLs are scrubbed.
+// Browser errors go to PostHog error tracking through the same client (SB-89).
 
 import type { CaptureResult, PostHog, PostHogConfig } from 'posthog-js';
 
@@ -29,11 +30,14 @@ const NOT_FOUND_ROUTE = '(not found)';
 
 const INVITE_TOKEN = /\/invite\/[^/?#"'\s]+/g;
 
+/** The query or hash of a URL or path inside longer text, such as an error message. */
+const EMBEDDED_QUERY = /(?<=\/[^\s"'<>?#]*)[?#][^\s"'<>]*/g;
+
 /**
  * A URL or path with nothing in it that acts as a credential: the query and
  * hash are dropped (`redirectTo` can carry an invite link), and an invite
- * token is replaced by its route parameter. Anything that isn't a URL only
- * has invite paths in it replaced.
+ * token is replaced by its route parameter. In any other text, such as an
+ * error message, each URL or path in it is cut short the same way.
  */
 export function scrubUrl(value: string): string {
 	if (/^https?:\/\//i.test(value)) {
@@ -44,10 +48,17 @@ export function scrubUrl(value: string): string {
 			// Not a URL after all; fall through to the path rewrite.
 		}
 	}
-	return value.replace(INVITE_TOKEN, '/invite/[token]');
+	return value
+		.replace(EMBEDDED_QUERY, '')
+		.replace(INVITE_TOKEN, '/invite/[token]');
 }
 
-function scrubValue(value: unknown): unknown {
+/**
+ * `value` with `scrubUrl` applied to every string in it, however deeply
+ * nested. Error messages and stack frames are scrubbed this way too, on the
+ * server as well (`#lib/server/error-tracking.ts`).
+ */
+export function scrubValue(value: unknown): unknown {
 	if (typeof value === 'string') return scrubUrl(value);
 	if (Array.isArray(value)) return value.map(scrubValue);
 	if (value && typeof value === 'object') {
@@ -96,7 +107,15 @@ export function posthogConfig(host: string): Partial<PostHogConfig> {
 		autocapture: true,
 		mask_all_text: true,
 		mask_all_element_attributes: true,
-		capture_exceptions: false,
+		// Errors SvelteKit catches (loads, rendering) come in through
+		// `handleError` in `hooks.client.ts`. These catch the rest, such as an
+		// event handler throwing. Console errors are left out: anything can be
+		// logged, typed text included.
+		capture_exceptions: {
+			capture_unhandled_errors: true,
+			capture_unhandled_rejections: true,
+			capture_console_errors: false,
+		},
 		disable_surveys: true,
 		disable_product_tours: true,
 		disable_conversations: true,
@@ -199,6 +218,21 @@ export function track<E extends keyof AnalyticsEvents>(
 		})
 		.catch(() => {
 			// Fire-and-forget: a failed SDK load must never break the action.
+		});
+}
+
+/**
+ * Sends `error` to PostHog error tracking, through `scrubEvent` like every
+ * other event. Does nothing while analytics is off, and never loads the SDK
+ * just to report an error.
+ */
+export function captureException(error: unknown) {
+	return client
+		.then((ph) => {
+			ph?.captureException(error);
+		})
+		.catch(() => {
+			// Reporting an error must never cause another one.
 		});
 }
 

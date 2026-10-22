@@ -62,6 +62,8 @@ load `packages/db/.env`.
 | `INVITE_EMAIL_FROM`          | `apps/web`                | Optional. From address for invite emails, on a domain verified in Resend. |
 | `PUBLIC_POSTHOG_KEY`         | `apps/web`                | Optional. PostHog project API key. Unset turns analytics off.          |
 | `PUBLIC_POSTHOG_HOST`        | `apps/web`                | Optional. PostHog ingestion host for the `/ingest` proxy. Defaults to US Cloud. |
+| `POSTHOG_CLI_API_KEY`        | `apps/web` build          | Optional. PostHog personal API key for uploading source maps. Unset skips the upload. |
+| `POSTHOG_CLI_PROJECT_ID`     | `apps/web` build          | Optional. PostHog project id the source maps go to.                    |
 | `FIGMA_API_TOKEN`            | `packages/tokens` build   | Optional. Enterprise-only Figma token; without it the build uses the committed snapshot. |
 | `FIGMA_FILE_KEY`             | `packages/tokens` build   | Optional. Defaults to the Chores Figma file.                           |
 
@@ -98,6 +100,13 @@ The Neon project is `salabridge-chores`. It has two branches: `production`
   for production only, from PostHog's **Project settings > Project API key**.
   Leave both unset locally, in e2e and on previews: analytics stays off and
   nothing is sent. See "Analytics" in [apps/web/README.md](apps/web/README.md).
+- **`POSTHOG_CLI_API_KEY`** and **`POSTHOG_CLI_PROJECT_ID`:** build secrets
+  for Vercel production only. Create a personal API key in PostHog under
+  **Settings > Personal API keys**, with the **error tracking write** and
+  **organization read** scopes. It's a different key from
+  `PUBLIC_POSTHOG_KEY`: it can write to the project, so it must never be
+  public. The project id is in PostHog's **Project settings**. See "Error
+  tracking" in [apps/web/README.md](apps/web/README.md).
 - **`FIGMA_API_TOKEN`:** not needed. The tokens build reads the committed
   `packages/tokens/figma-variables.json` snapshot. The token only matters on a
   Figma Enterprise plan, where it switches the build to the live REST API. See

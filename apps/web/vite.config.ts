@@ -5,6 +5,9 @@ import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+	// Only when `scripts/upload-sourcemaps.js` will upload them to PostHog
+	// error tracking (SB-89), which then deletes them from the output.
+	build: { sourcemap: Boolean(process.env.POSTHOG_CLI_API_KEY) },
 	plugins: [
 		tailwindcss(),
 		sveltekit({

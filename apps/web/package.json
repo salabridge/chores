@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build",
+		"build": "vite build && node scripts/upload-sourcemaps.js",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -18,6 +18,7 @@
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
+		"@posthog/cli": "0.18.10",
 		"@storybook/addon-a11y": "^10.6.1",
 		"@storybook/addon-docs": "^10.6.1",
 		"@storybook/addon-svelte-csf": "^5.1.5",
@@ -50,6 +51,7 @@
 		"arktype": "^2.2.5",
 		"better-auth": "^1.7.5",
 		"drizzle-orm": "catalog:",
-		"posthog-js": "1.438.8"
+		"posthog-js": "1.438.8",
+		"posthog-node": "5.56.1"
 	}
 }
