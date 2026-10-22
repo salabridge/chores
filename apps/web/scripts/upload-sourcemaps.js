@@ -8,8 +8,6 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Pinned, like the SDKs. Bump it with them. */
-const CLI = '@posthog/cli@0.18.10';
 /** adapter-vercel's copy of the client build: the files that are deployed. */
 const CLIENT_DIR = '.vercel/output/static/_app/immutable';
 
@@ -23,8 +21,6 @@ if (!existsSync(CLIENT_DIR)) {
 }
 
 const args = [
-	'--yes',
-	CLI,
 	'sourcemap',
 	'process',
 	'--directory',
@@ -39,14 +35,28 @@ if (process.env.VERCEL_GIT_COMMIT_SHA) {
 }
 
 try {
-	execFileSync('npx', args, {
+	// The lockfile-pinned devDependency (`pnpm run` puts its bin on PATH), and
+	// only the env it needs: the build env also holds DATABASE_URL,
+	// NEON_AUTH_URL and RESEND_API_KEY.
+	execFileSync('posthog-cli', args, {
 		stdio: 'inherit',
 		shell: process.platform === 'win32',
+		env: {
+			PATH: process.env.PATH,
+			HOME: process.env.HOME,
+			SystemRoot: process.env.SystemRoot,
+			POSTHOG_CLI_API_KEY: process.env.POSTHOG_CLI_API_KEY,
+			POSTHOG_CLI_PROJECT_ID: process.env.POSTHOG_CLI_PROJECT_ID,
+			POSTHOG_CLI_HOST: process.env.POSTHOG_CLI_HOST,
+		},
 	});
 } catch {
 	// PostHog being down mustn't stop a deploy. Stack traces from this build
-	// stay minified, but the maps must still never be served.
+	// stay minified.
 	console.warn('Source map upload failed; deleting the maps and carrying on.');
+} finally {
+	// Whatever the CLI did, no map is ever served: `--delete-after` is the
+	// CLI's promise, this is ours.
 	for (const file of readdirSync(CLIENT_DIR, { recursive: true })) {
 		if (file.endsWith('.map')) rmSync(join(CLIENT_DIR, file));
 	}

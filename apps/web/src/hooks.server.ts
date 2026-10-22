@@ -70,5 +70,8 @@ export const handleError: HandleServerError = async ({
 	event,
 	status,
 }) => {
-	if (status !== 404) await captureServerError(thrown, event);
+	// `/ingest` only fails when PostHog does; reporting that to PostHog just
+	// waits on the same outage, once per browser batch.
+	if (status === 404 || isIngestPath(event.url.pathname)) return;
+	await captureServerError(thrown, event);
 };

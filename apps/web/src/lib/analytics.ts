@@ -31,7 +31,7 @@ const NOT_FOUND_ROUTE = '(not found)';
 const INVITE_TOKEN = /\/invite\/[^/?#"'\s]+/g;
 
 /** The query or hash of a URL or path inside longer text, such as an error message. */
-const EMBEDDED_QUERY = /((?:https?:\/\/|\/)[^\s"'<>?#]*)[?#][^\s"'<>]*/gi;
+const EMBEDDED_QUERY = /(?<=\/[^\s"'<>?#]*)[?#][^\s"'<>]*/g;
 
 /**
  * A URL or path with nothing in it that acts as a credential: the query and
@@ -49,7 +49,7 @@ export function scrubUrl(value: string): string {
 		}
 	}
 	return value
-		.replace(EMBEDDED_QUERY, '$1')
+		.replace(EMBEDDED_QUERY, '')
 		.replace(INVITE_TOKEN, '/invite/[token]');
 }
 

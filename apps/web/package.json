@@ -18,6 +18,7 @@
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
+		"@posthog/cli": "0.18.10",
 		"@storybook/addon-a11y": "^10.6.1",
 		"@storybook/addon-docs": "^10.6.1",
 		"@storybook/addon-svelte-csf": "^5.1.5",

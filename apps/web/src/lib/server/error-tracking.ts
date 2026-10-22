@@ -58,6 +58,11 @@ function getClient(key: string) {
 			new PostHog(key, {
 				host: PUBLIC_POSTHOG_HOST,
 				flushAt: 1,
+				// `handleError` waits on this send, so it must fail fast. The
+				// defaults (10 s timeout, 3 retries 3 s apart) can hold an
+				// erroring request open for ~49 s while PostHog is slow or down.
+				requestTimeout: 2000,
+				fetchRetryCount: 0,
 				before_send: scrubServerEvent,
 			}),
 	);
