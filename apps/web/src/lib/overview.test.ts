@@ -4,7 +4,6 @@ import {
 	buildWorkload,
 	type ChoreStatusRow,
 	dueText,
-	familyStreakDays,
 	formatTime,
 	handoffText,
 	joinNames,
@@ -82,36 +81,6 @@ describe('percentOf / joinNames', () => {
 		expect(joinNames(['A'])).toBe('A');
 		expect(joinNames(['A', 'B'])).toBe('A and B');
 		expect(joinNames(['A', 'B', 'C'])).toBe('A, B and C');
-	});
-});
-
-describe('familyStreakDays', () => {
-	it('counts consecutive days ending today', () => {
-		expect(
-			familyStreakDays(
-				['2026-10-06', '2026-10-07', '2026-10-08'],
-				'2026-10-08',
-			),
-		).toBe(3);
-	});
-
-	it('keeps the streak alive while today is still empty', () => {
-		expect(familyStreakDays(['2026-10-06', '2026-10-07'], '2026-10-08')).toBe(
-			2,
-		);
-	});
-
-	it('stops at a gap and is 0 once a day was missed', () => {
-		expect(familyStreakDays(['2026-10-05', '2026-10-08'], '2026-10-08')).toBe(
-			1,
-		);
-		expect(familyStreakDays(['2026-10-05'], '2026-10-08')).toBe(0);
-	});
-
-	it('crosses month boundaries', () => {
-		expect(familyStreakDays(['2026-09-30', '2026-10-01'], '2026-10-01')).toBe(
-			2,
-		);
 	});
 });
 

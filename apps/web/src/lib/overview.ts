@@ -55,7 +55,7 @@ export interface OverviewStats {
 	dueToday: number;
 	/** Whole percent, 0 when nothing is due. */
 	completedPercent: number;
-	/** Consecutive days with at least one completion; see `familyStreakDays`. */
+	/** The household's family streak in days (SB-28's `familyStreak`). */
 	streakDays: number;
 	/** Active rotation exclusions (members skipped by a loop). */
 	exceptions: number;
@@ -327,31 +327,6 @@ export function rowActions(row: ChoreStatusRow) {
 		reopen: !isOpen(row),
 		viewLoop: !isOpen(row) && row.isLoop,
 	};
-}
-
-/**
- * Interim family streak until SB-28 lands: how many consecutive local days,
- * counting back from `today` (or from yesterday while today has no
- * completion yet), have at least one completion. `days` are `YYYY-MM-DD`.
- */
-export function familyStreakDays(
-	days: Iterable<string>,
-	today: string,
-): number {
-	const set = new Set(days);
-	let day = set.has(today) ? today : shiftDay(today, -1);
-	let streak = 0;
-	while (set.has(day)) {
-		streak++;
-		day = shiftDay(day, -1);
-	}
-	return streak;
-}
-
-function shiftDay(date: string, delta: number): string {
-	const d = new Date(`${date}T00:00:00Z`);
-	d.setUTCDate(d.getUTCDate() + delta);
-	return d.toISOString().slice(0, 10);
 }
 
 /** The "due" part of a row's context line. */
