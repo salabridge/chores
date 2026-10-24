@@ -3,6 +3,7 @@
 	import AvatarColorPicker from '#lib/components/ui/AvatarColorPicker.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
+	import { withoutValue } from '#lib/form-field.js';
 	import { addManagedKidMember } from '#lib/members.remote.js';
 	import {
 		BIRTH_YEAR_PATTERN,
@@ -71,7 +72,7 @@
 			autocomplete="off"
 		/>
 		<TextInput
-			{...addManagedKidMember.fields.weeklyGoalPoints.as('text')}
+			{...withoutValue(addManagedKidMember.fields.weeklyGoalPoints.as('text'))}
 			label="Weekly points goal"
 			inputmode="numeric"
 			pattern="[0-9]*"

@@ -9,7 +9,13 @@ type Issue = { message: string };
 
 function field(name: string) {
 	return {
-		as: (type: string, value?: string) => ({ name, type, value }),
+		// Like the real `.as()`, `value` is non-configurable, so passing `value`
+		// again after the spread throws when rendered on the server.
+		as: (type: string, value?: string) =>
+			Object.defineProperties(
+				{ name, type },
+				{ value: { value, enumerable: true } },
+			),
 		issues: (): Issue[] | undefined => undefined,
 		/** Nothing was submitted, so no field has a value yet. */
 		value: (): string | undefined => undefined,

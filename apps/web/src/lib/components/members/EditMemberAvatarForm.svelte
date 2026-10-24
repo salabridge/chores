@@ -5,6 +5,7 @@
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
+	import { withoutValue } from '#lib/form-field.js';
 	import type { HouseholdMember } from '#lib/members.js';
 	import { updateMemberAvatar } from '#lib/members.remote.js';
 
@@ -40,7 +41,7 @@
 		<AvatarColorPicker name="avatarColor" bind:value={color} />
 	</div>
 	<TextInput
-		{...form.fields.avatarInitial.as('text')}
+		{...withoutValue(form.fields.avatarInitial.as('text'))}
 		label="Avatar initial (optional)"
 		hint="One or two letters. Leave blank to use the first letter of the name."
 		value={initial}
