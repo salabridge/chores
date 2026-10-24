@@ -122,7 +122,14 @@ previews run like this.
   (`mask_all_text`, `mask_all_element_attributes`). Those hold chore names,
   kid names and input values.
 
-Session replay, surveys and feature flags are all off.
+- Session replays (SB-92), with typed values masked. Replays only record
+  when "Record user sessions" is on in the PostHog project settings. The SDK
+  loads that setting from remote config, which is why the config uses
+  `advanced_disable_feature_flags` and not `advanced_disable_flags`: the
+  latter also skips remote config. Snapshots go through `before_send` like
+  any other event, so the URLs in them are scrubbed.
+
+Surveys and feature flags are off.
 
 **First-party proxy.** The SDK sends to `/ingest` on our own origin, so ad
 blockers don't drop events. `hooks.server.ts` forwards those requests to

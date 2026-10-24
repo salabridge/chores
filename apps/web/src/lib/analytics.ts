@@ -2,7 +2,8 @@
 // PUBLIC_POSTHOG_KEY is set: without it `posthog-js` is never imported, so
 // nothing loads and nothing is sent. Kids use this app, so the rules are
 // strict (see "Analytics" in the web README): only parents are identified,
-// session replay is off, autocapture keeps no text, and URLs are scrubbed.
+// session replay masks typed values, autocapture keeps no text, and URLs are
+// scrubbed.
 // Browser errors go to PostHog error tracking through the same client (SB-89).
 
 import type { CaptureResult, PostHog, PostHogConfig } from 'posthog-js';
@@ -87,7 +88,7 @@ export function scrubEvent(event: CaptureResult | null): CaptureResult | null {
 	};
 }
 
-/** The SDK settings. Everything that could record a kid is off. */
+/** The SDK settings. */
 export function posthogConfig(host: string): Partial<PostHogConfig> {
 	return {
 		api_host: INGEST_PATH,
@@ -101,7 +102,11 @@ export function posthogConfig(host: string): Partial<PostHogConfig> {
 		// SvelteKit's client-side navigation finishes.
 		capture_pageview: false,
 		capture_pageleave: false,
-		disable_session_recording: true,
+		// Session replay is on (SB-92). Whether a session records is still set in
+		// the PostHog project settings. Typed values stay masked, and every
+		// snapshot goes through `before_send`, so URLs in it are scrubbed too.
+		disable_session_recording: false,
+		session_recording: { maskAllInputs: true },
 		// Clicks are still autocaptured, but with no element text or attribute
 		// values: those hold chore and kid names, and input values.
 		autocapture: true,
@@ -120,7 +125,9 @@ export function posthogConfig(host: string): Partial<PostHogConfig> {
 		disable_product_tours: true,
 		disable_conversations: true,
 		disable_web_experiments: true,
-		advanced_disable_flags: true,
+		// Not `advanced_disable_flags`: that also skips remote config, which is
+		// how the recorder learns replay is on for the project.
+		advanced_disable_feature_flags: true,
 		before_send: scrubEvent,
 	};
 }

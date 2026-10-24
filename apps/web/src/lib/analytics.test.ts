@@ -141,14 +141,16 @@ describe('scrubEvent', () => {
 });
 
 describe('posthogConfig', () => {
-	it('sends through /ingest with replay off and no element text', () => {
+	it('sends through /ingest with masked replay and no element text', () => {
 		const config = posthogConfig('https://us.i.posthog.com');
 		expect(config).toMatchObject({
 			api_host: '/ingest',
 			ui_host: 'https://us.posthog.com',
 			person_profiles: 'identified_only',
 			capture_pageview: false,
-			disable_session_recording: true,
+			disable_session_recording: false,
+			session_recording: { maskAllInputs: true },
+			advanced_disable_feature_flags: true,
 			mask_all_text: true,
 			mask_all_element_attributes: true,
 		});
