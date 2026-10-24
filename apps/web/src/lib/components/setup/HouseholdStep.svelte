@@ -3,6 +3,7 @@
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
+	import { withoutValue } from '#lib/form-field.js';
 	import { MAX_HOUSEHOLD_NAME } from '#lib/setup.js';
 	import { saveHouseholdStep } from '#lib/setup.remote.js';
 
@@ -50,7 +51,7 @@
 >
 	<FormAlert issues={saveHouseholdStep.fields.issues()} />
 	<TextInput
-		{...saveHouseholdStep.fields.name.as('text')}
+		{...withoutValue(saveHouseholdStep.fields.name.as('text'))}
 		label="Household name"
 		placeholder="The Smiths"
 		value={name}

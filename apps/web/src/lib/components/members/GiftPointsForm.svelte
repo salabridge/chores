@@ -4,6 +4,7 @@
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
+	import { withoutValue } from '#lib/form-field.js';
 	import {
 		MAX_GIFT_POINTS,
 		MAX_GIFT_REASON,
@@ -66,7 +67,7 @@
 		</div>
 	</fieldset>
 	<TextInput
-		{...form.fields.points.as('text')}
+		{...withoutValue(form.fields.points.as('text'))}
 		label="Points"
 		hint={`A whole number from 1 to ${MAX_GIFT_POINTS}.`}
 		value={points}
@@ -78,7 +79,7 @@
 		required
 	/>
 	<TextInput
-		{...form.fields.reason.as('text')}
+		{...withoutValue(form.fields.reason.as('text'))}
 		label="Reason"
 		hint="Shown to the kid with the points, e.g. Helped Grandma with groceries."
 		value={reason}

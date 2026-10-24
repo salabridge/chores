@@ -15,6 +15,7 @@
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
+	import { withoutValue } from '#lib/form-field.js';
 	import {
 		BIRTH_YEAR_PATTERN,
 		DEFAULT_WEEKLY_GOAL,
@@ -105,7 +106,7 @@
 				autocomplete="off"
 			/>
 			<TextInput
-				{...addKidStep.fields.weeklyGoalPoints.as('text')}
+				{...withoutValue(addKidStep.fields.weeklyGoalPoints.as('text'))}
 				label="Weekly points goal"
 				inputmode="numeric"
 				pattern="[0-9]*"

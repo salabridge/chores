@@ -5,6 +5,7 @@
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
 	import SecondaryButton from '#lib/components/ui/SecondaryButton.svelte';
 	import TextInput from '#lib/components/ui/TextInput.svelte';
+	import { withoutValue } from '#lib/form-field.js';
 	import { type AvatarColor, MAX_DISPLAY_NAME } from '#lib/setup.js';
 	import { saveParentStep } from '#lib/setup.remote.js';
 
@@ -36,7 +37,7 @@
 >
 	<FormAlert issues={saveParentStep.fields.issues()} />
 	<TextInput
-		{...saveParentStep.fields.displayName.as('text')}
+		{...withoutValue(saveParentStep.fields.displayName.as('text'))}
 		label="What should the kids call you?"
 		placeholder="Mom, Dad, ..."
 		value={typedName}
@@ -53,7 +54,7 @@
 		</div>
 	</div>
 	<TextInput
-		{...saveParentStep.fields.avatarInitial.as('text')}
+		{...withoutValue(saveParentStep.fields.avatarInitial.as('text'))}
 		label="Avatar initial (optional)"
 		hint="One or two letters. Leave blank to use the first letter of your name."
 		value={avatarInitial ?? ''}
