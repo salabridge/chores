@@ -127,7 +127,10 @@ previews run like this.
   loads that setting from remote config, which is why the config uses
   `advanced_disable_feature_flags` and not `advanced_disable_flags`: the
   latter also skips remote config. Snapshots go through `before_send` like
-  any other event, so the URLs in them are scrubbed.
+  any other event, so the URLs in them are scrubbed. For that to work,
+  `session_recording.compress_events` is off. A compressed snapshot is gzip
+  bytes held in a string, and scrubbing those bytes corrupts the snapshot,
+  so the recording can't be played.
 
 Surveys and feature flags are off.
 

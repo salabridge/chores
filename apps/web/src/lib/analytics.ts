@@ -105,8 +105,11 @@ export function posthogConfig(host: string): Partial<PostHogConfig> {
 		// Session replay is on (SB-92). Whether a session records is still set in
 		// the PostHog project settings. Typed values stay masked, and every
 		// snapshot goes through `before_send`, so URLs in it are scrubbed too.
+		// That needs `compress_events: false`: compressed snapshots are gzip
+		// bytes in a string, which `scrubUrl` would corrupt, leaving recordings
+		// PostHog can't play. The request as a whole is still gzipped.
 		disable_session_recording: false,
-		session_recording: { maskAllInputs: true },
+		session_recording: { maskAllInputs: true, compress_events: false },
 		// Clicks are still autocaptured, but with no element text or attribute
 		// values: those hold chore and kid names, and input values.
 		autocapture: true,
