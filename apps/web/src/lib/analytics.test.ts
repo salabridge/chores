@@ -138,6 +138,59 @@ describe('scrubEvent', () => {
 			],
 		});
 	});
+
+	it('scrubs URLs in replay snapshots and leaves the rest of them intact', () => {
+		const snapshotData = [
+			{
+				type: 4,
+				data: { href: 'https://chores.example/invite/secret?x=1' },
+				timestamp: 1,
+			},
+			{
+				type: 2,
+				data: {
+					node: {
+						type: 2,
+						tagName: 'a',
+						attributes: { href: '/login?redirectTo=%2Finvite%2Fsecret' },
+						childNodes: [{ type: 3, textContent: 'Sign in' }],
+					},
+					initialOffset: { top: 0, left: 0 },
+				},
+				timestamp: 2,
+			},
+		];
+		const event = {
+			uuid: 'e3',
+			event: '$snapshot',
+			properties: {
+				$snapshot_data: snapshotData,
+				$session_id: 's1',
+			},
+		} as unknown as CaptureResult;
+
+		const scrubbed = scrubEvent(event);
+		expect(scrubbed?.properties).toEqual({
+			$snapshot_data: [
+				{
+					...snapshotData[0],
+					data: { href: 'https://chores.example/invite/[token]' },
+				},
+				{
+					...snapshotData[1],
+					data: {
+						...snapshotData[1].data,
+						node: {
+							...snapshotData[1].data.node,
+							attributes: { href: '/login' },
+						},
+					},
+				},
+			],
+			$session_id: 's1',
+		});
+		expect(JSON.stringify(scrubbed)).not.toContain('secret');
+	});
 });
 
 describe('posthogConfig', () => {
@@ -149,7 +202,7 @@ describe('posthogConfig', () => {
 			person_profiles: 'identified_only',
 			capture_pageview: false,
 			disable_session_recording: false,
-			session_recording: { maskAllInputs: true },
+			session_recording: { maskAllInputs: true, compress_events: false },
 			advanced_disable_feature_flags: true,
 			mask_all_text: true,
 			mask_all_element_attributes: true,
