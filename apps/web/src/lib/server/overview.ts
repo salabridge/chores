@@ -9,8 +9,10 @@ import {
 	chores,
 	householdMembers,
 } from '@chore/db';
+import { householdStreaks } from '@chore/db/household-streaks';
 import { addDays, chorePeriodStart, localDate } from '@chore/db/recurrence';
-import { skipKey } from '@chore/db/streaks';
+import type { AuthenticatedTx } from '@chore/db/rls';
+import { SCREEN_STREAK_LOOKBACK_DAYS, skipKey } from '@chore/db/streaks';
 import { and, eq, gte, inArray, isNull, ne } from 'drizzle-orm';
 import {
 	buildNotes,
@@ -18,7 +20,6 @@ import {
 	type ChoreStatus,
 	type ChoreStatusRow,
 	dueText,
-	familyStreakDays,
 	type HouseholdOverview,
 	handoffText,
 	percentOf,
@@ -34,23 +35,18 @@ import { householdClock } from './household-today.ts';
 // `householdId` from the caller's own profile and the page load must be
 // parent-only.
 
-/** Days of completions to look back over for the interim family streak. */
-const STREAK_LOOKBACK_DAYS = 90;
-
 export async function loadHouseholdOverview(
 	householdId: string,
 	now: Date = new Date(),
 ): Promise<HouseholdOverview> {
-	const since = new Date(now.getTime() - STREAK_LOOKBACK_DAYS * 86_400_000);
-
 	const [
 		choreRows,
 		memberRows,
 		rotationRows,
 		loopMemberRows,
-		recent,
-		{ timeZone, today },
+		{ today },
 		skips,
+		streaks,
 	] = await Promise.all([
 		db
 			.select()
@@ -82,18 +78,6 @@ export async function loadHouseholdOverview(
 			})
 			.from(choreRotationMembers)
 			.where(eq(choreRotationMembers.householdId, householdId)),
-		db
-			.select({ completedAt: choreCompletions.completedAt })
-			.from(choreCompletions)
-			.where(
-				and(
-					eq(choreCompletions.householdId, householdId),
-					isNull(choreCompletions.reopenedAt),
-					// A favour counts once it's approved (SB-79).
-					eq(choreCompletions.approvalStatus, 'approved'),
-					gte(choreCompletions.completedAt, since),
-				),
-			),
 		householdClock(householdId, now),
 		// A parent's Skip of a personal chore (SB-29) takes it off the list for
 		// its period. Only periods that can still be current matter (a weekly
@@ -111,6 +95,13 @@ export async function loadHouseholdOverview(
 					gte(choreSkips.periodStart, addDays(localDate('UTC', now), -8)),
 				),
 			),
+		// The same family streak (SB-28) the kids see on Today, the Rewards Shop
+		// and the Streak tab; see member-stats.ts for why the owner client can
+		// run it.
+		householdStreaks(db as unknown as AuthenticatedTx, householdId, {
+			now,
+			lookbackDays: SCREEN_STREAK_LOOKBACK_DAYS,
+		}),
 	]);
 
 	const names = new Map(memberRows.map((m) => [m.id, m.name]));
@@ -380,11 +371,6 @@ export async function loadHouseholdOverview(
 	);
 	const notes = buildNotes({ exclusions, rows: sorted, currentTurn });
 
-	const streakDays = familyStreakDays(
-		recent.map((c) => localDate(timeZone, c.completedAt)),
-		today,
-	);
-
 	return {
 		workload,
 		rotations: upcoming,
@@ -400,7 +386,7 @@ export async function loadHouseholdOverview(
 			completedToday,
 			dueToday: sorted.length,
 			completedPercent: percentOf(completedToday, sorted.length),
-			streakDays,
+			streakDays: streaks.family.days,
 			exceptions: exclusions.length,
 			firstException: exclusions[0] ?? null,
 		},
