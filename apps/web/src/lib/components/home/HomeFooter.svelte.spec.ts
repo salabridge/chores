@@ -22,4 +22,14 @@ describe('HomeFooter.svelte', () => {
 			.element(page.getByText('ChoreLoop · A little help around the house.'))
 			.toBeInTheDocument();
 	});
+
+	it('links to the privacy policy and terms', async () => {
+		render(HomeFooter);
+		await expect
+			.element(page.getByRole('link', { name: 'Privacy Policy' }))
+			.toHaveAttribute('href', '/privacy');
+		await expect
+			.element(page.getByRole('link', { name: 'Terms of Service' }))
+			.toHaveAttribute('href', '/terms');
+	});
 });
