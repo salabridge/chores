@@ -6,6 +6,7 @@
 	// re-render. Plain objects passed as props (specs, stories) are not reactive.
 	let { draft: initial, ...rest }: ComponentProps<typeof ChoreSetupForm> = $props();
 
+	// svelte-ignore state_referenced_locally -- the draft is seeded once on purpose
 	let draft = $state(structuredClone($state.snapshot(initial)));
 </script>
 

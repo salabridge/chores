@@ -1,6 +1,5 @@
 import { householdMembers } from '@chore/db';
 import { householdStreaks } from '@chore/db/household-streaks';
-import { chorePeriodStart } from '@chore/db/recurrence';
 import type { AuthenticatedTx } from '@chore/db/rls';
 import { SCREEN_STREAK_LOOKBACK_DAYS } from '@chore/db/streaks';
 import { and, eq, isNull } from 'drizzle-orm';
