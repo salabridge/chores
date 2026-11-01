@@ -1,5 +1,5 @@
 import { pointsLedger } from '@chore/db';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getRequestEvent } from '$app/server';
 import { db } from './drizzle.ts';
 

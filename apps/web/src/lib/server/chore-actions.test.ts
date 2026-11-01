@@ -10,7 +10,6 @@ type Insert = {
 	table: unknown;
 	values: unknown;
 	ignoreConflicts: boolean;
-	// biome-ignore lint/suspicious/noThenProperty: drizzle query builders are awaitable
 	then: (resolve: (v: unknown) => void) => void;
 };
 type Execute = { kind: 'execute'; sql: string };
