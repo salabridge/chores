@@ -25,12 +25,16 @@ export interface StageDraft {
 	id?: string;
 	title: string;
 	hint: string;
+	/** Points awarded when this stage is checked off. 0 awards nothing. */
+	points: number;
 }
 
 /**
- * The chore as the parent is filling it in. Stages carry no points of their
- * own: the chore's points are the source of truth and are awarded once, after
- * the last stage.
+ * The chore as the parent is filling it in. Each stage carries its own points,
+ * awarded as the stage is finished; `points` is a bonus on top, awarded once
+ * after the last stage (all of a single-step chore's points). The form can
+ * split a total evenly across the stages (`splitPoints`), but only the
+ * resulting per-stage numbers are saved.
  */
 export interface ChoreDraft {
 	title: string;
@@ -63,6 +67,7 @@ export const emptyStage = (): StageDraft => ({
 	key: newStageKey(),
 	title: '',
 	hint: '',
+	points: 0,
 });
 
 export const emptyDraft = (kind: ChoreKind = 'personal'): ChoreDraft => ({
@@ -88,21 +93,24 @@ export const exampleDraft = (): ChoreDraft => ({
 			key: newStageKey(),
 			title: 'Clear the counter',
 			hint: 'Put toothbrushes and soap back in their spots.',
+			points: 5,
 		},
 		{
 			key: newStageKey(),
 			title: 'Wipe the sink and mirror',
 			hint: 'Use the blue cloth and spray under the cabinet.',
+			points: 5,
 		},
 		{
 			key: newStageKey(),
 			title: 'Clean the toilet and sweep',
 			hint: 'Gloves are under the sink.',
+			points: 5,
 		},
 	],
 	frequency: 'daily',
 	dueWeekday: null,
-	points: 15,
+	points: 0,
 	assigneeId: null,
 });
 
@@ -119,17 +127,20 @@ export const dueWeekdayFor = (
 ): IsoWeekday | null =>
 	frequency === 'weekly' && isIsoWeekday(dueWeekday) ? dueWeekday : null;
 
-/** The green badge on step 4: "Daily • 15 pts", "Weekly · Thu • 15 pts". */
+/**
+ * The green badge on step 4: "Daily • 15 pts", "Weekly · Thu • 15 pts". The
+ * points are the chore's total: its own plus every stage's.
+ */
 export const frequencySummary = (
 	draft: Pick<ChoreDraft, 'frequency' | 'points'> &
-		Partial<Pick<ChoreDraft, 'dueWeekday'>>,
+		Partial<Pick<ChoreDraft, 'dueWeekday' | 'useStages' | 'stages'>>,
 ) =>
-	`${scheduleLabel(draft.frequency, dueWeekdayFor(draft.frequency, draft.dueWeekday))} • ${draft.points} pts`;
+	`${scheduleLabel(draft.frequency, dueWeekdayFor(draft.frequency, draft.dueWeekday))} • ${totalPoints(draft)} pts`;
 
 /** The grey hint under the points chips. */
 export function pointsHint(draft: Pick<ChoreDraft, 'frequency' | 'useStages'>) {
 	const tail = draft.useStages
-		? 'The points are awarded once, after the last stage.'
+		? 'Split evenly across the stages; each stage pays out as it is finished. You can change any stage below.'
 		: 'You can adjust this later.';
 	return `${frequencyLabel(draft.frequency)} chores usually land between 5 and 20 points. ${tail}`;
 }
@@ -138,6 +149,50 @@ export function pointsHint(draft: Pick<ChoreDraft, 'frequency' | 'useStages'>) {
 export const activeStages = (
 	draft: Pick<ChoreDraft, 'useStages' | 'stages'>,
 ) => (draft.useStages ? draft.stages : []);
+
+/**
+ * Splits `total` points across `count` stages as whole numbers that add back
+ * up to `total`. Any remainder goes one point at a time to the earliest
+ * stages, so 50 over 3 is 17, 17, 16: a kid who stops partway has banked a
+ * little more, never a little less.
+ */
+export function splitPoints(total: number, count: number): number[] {
+	if (count <= 0) return [];
+	const whole = Number.isInteger(total) && total > 0 ? total : 0;
+	const base = Math.floor(whole / count);
+	const extra = whole % count;
+	return Array.from({ length: count }, (_, i) => base + (i < extra ? 1 : 0));
+}
+
+/** The stages with `total` points split evenly across them (see `splitPoints`). */
+export function splitAcrossStages(
+	stages: readonly StageDraft[],
+	total: number,
+): StageDraft[] {
+	const shares = splitPoints(total, stages.length);
+	return stages.map((s, i) => ({ ...s, points: shares[i] ?? 0 }));
+}
+
+/** The points the stages are worth together; a stage with an invalid value counts as 0. */
+export const stagePointsTotal = (
+	stages: readonly Pick<StageDraft, 'points'>[],
+) =>
+	stages.reduce(
+		(sum, s) =>
+			sum + (Number.isInteger(s.points) && s.points > 0 ? s.points : 0),
+		0,
+	);
+
+/**
+ * Everything the chore can earn: its own points plus each stage's. This is the
+ * one number the form, the lists, and the kid's screens show as "N pts".
+ */
+export const totalPoints = (
+	draft: Pick<ChoreDraft, 'points'> &
+		Partial<Pick<ChoreDraft, 'useStages' | 'stages'>>,
+) =>
+	draft.points +
+	(draft.useStages && draft.stages ? stagePointsTotal(draft.stages) : 0);
 
 export function addStage(stages: readonly StageDraft[]): StageDraft[] {
 	return stages.length >= MAX_STAGES ? [...stages] : [...stages, emptyStage()];
@@ -165,7 +220,7 @@ export interface DraftErrors {
 	/** The stage list as a whole ("add at least one stage"). */
 	stages?: string;
 	/** By stage key. */
-	stage: Record<string, { title?: string; hint?: string }>;
+	stage: Record<string, { title?: string; hint?: string; points?: string }>;
 	points?: string;
 	assignee?: string;
 }
@@ -197,14 +252,17 @@ export function validateDraft(draft: ChoreDraft): DraftErrors {
 			errors.stages = 'Add at least one stage, or switch to Single Step.';
 		}
 		for (const stage of draft.stages) {
-			const problems: { title?: string; hint?: string } = {};
+			const problems: { title?: string; hint?: string; points?: string } = {};
 			const stageTitle = stage.title.trim();
 			if (!stageTitle) problems.title = 'Give this stage a title.';
 			else if (stageTitle.length > MAX_STAGE_TITLE_LENGTH)
 				problems.title = `Keep it under ${MAX_STAGE_TITLE_LENGTH} characters.`;
 			if (stage.hint.length > MAX_STAGE_HINT_LENGTH)
 				problems.hint = `Keep it under ${MAX_STAGE_HINT_LENGTH} characters.`;
-			if (problems.title || problems.hint) errors.stage[stage.key] = problems;
+			if (!Number.isInteger(stage.points) || stage.points < 0)
+				problems.points = 'Use a whole number of points, 0 or more.';
+			if (problems.title || problems.hint || problems.points)
+				errors.stage[stage.key] = problems;
 		}
 	}
 
@@ -227,7 +285,7 @@ export interface CreateChoreInput {
 	dueWeekday: IsoWeekday | null;
 	points: number;
 	assigneeId: string | null;
-	stages: { title: string; hint: string | null }[];
+	stages: { title: string; hint: string | null; points: number }[];
 	/** A chore this one replaces ("Duplicate as…", SB-64); archived in the same transaction as the create. */
 	archiveSourceId?: string | null;
 }
@@ -244,6 +302,7 @@ export function toCreateInput(draft: ChoreDraft): CreateChoreInput {
 		stages: activeStages(draft).map((s) => ({
 			title: s.title.trim(),
 			hint: s.hint.trim() || null,
+			points: s.points,
 		})),
 	};
 }
@@ -269,6 +328,7 @@ export function createInputError(input: CreateChoreInput): string | null {
 			key: String(i),
 			title: String(s?.title ?? ''),
 			hint: String(s?.hint ?? ''),
+			points: s?.points as number,
 		})),
 		frequency: input.frequency,
 		dueWeekday: null,
@@ -281,7 +341,7 @@ export function createInputError(input: CreateChoreInput): string | null {
 		errors.points ??
 		errors.assignee ??
 		Object.values(errors.stage)
-			.map((s) => s.title ?? s.hint)
+			.map((s) => s.title ?? s.hint ?? s.points)
 			.find(Boolean) ??
 		null
 	);
@@ -297,7 +357,7 @@ export interface EditableChore {
 	points: number;
 	assignedMemberId: string | null;
 	/** In position order. */
-	stages: { id: string; title: string; hint: string | null }[];
+	stages: { id: string; title: string; hint: string | null; points: number }[];
 }
 
 /** Loads a saved chore into the draft the form edits. Each stage keeps its id as its key. */
@@ -311,6 +371,7 @@ export const choreToDraft = (chore: EditableChore): ChoreDraft => ({
 		id: s.id,
 		title: s.title,
 		hint: s.hint ?? '',
+		points: s.points,
 	})),
 	frequency: chore.frequency,
 	dueWeekday: dueWeekdayFor(chore.frequency, chore.dueWeekday),
@@ -327,7 +388,12 @@ export interface UpdateChoreInput extends CreateChoreInput {
 	choreId: string;
 	/** The chore's `updated_at` when the form loaded, so a stale save is refused. */
 	updatedAt: string;
-	stages: { id: string | null; title: string; hint: string | null }[];
+	stages: {
+		id: string | null;
+		title: string;
+		hint: string | null;
+		points: number;
+	}[];
 }
 
 export const toUpdateInput = (
@@ -342,6 +408,7 @@ export const toUpdateInput = (
 		id: s.id ?? null,
 		title: s.title.trim(),
 		hint: s.hint.trim() || null,
+		points: s.points,
 	})),
 });
 
@@ -360,9 +427,10 @@ export const rotationPreviewNote =
 /** "3 stages, 15 total points", for the Eligibility panel's summary (SB-49). */
 export function stagesSummary(draft: ChoreDraft): string {
 	const n = activeStages(draft).length;
+	const total = totalPoints(draft);
 	return n === 0
-		? `Single step, ${draft.points} total points`
-		: `${n} ${n === 1 ? 'stage' : 'stages'}, ${draft.points} total points`;
+		? `Single step, ${total} total points`
+		: `${n} ${n === 1 ? 'stage' : 'stages'}, ${total} total points`;
 }
 
 /** The id of the Chore Setup form, so buttons outside it (the page header) can submit it. */

@@ -16,6 +16,8 @@
 		POINT_OPTIONS,
 		pointsHint,
 		rotationPreviewNote,
+		splitAcrossStages,
+		totalPoints,
 		validateDraft,
 	} from '#lib/chore-creator.js';
 	import { memberTone } from '#lib/rotation-loops.js';
@@ -133,11 +135,35 @@
 		draft.kind = kind as ChoreKind;
 	}
 
-	function setUseStages(value: string) {
-		draft.useStages = value === 'stages';
-		if (draft.useStages && draft.stages.length === 0) {
-			draft.stages = [emptyStage()];
+	/**
+	 * The chips pick the chore's total. With stages, that total is split evenly
+	 * across them and the chore's own points drop to 0: only the per-stage
+	 * numbers are saved, and the stage fields below can still be tweaked.
+	 */
+	function setTotalPoints(value: string | number | undefined) {
+		const total = Number(value);
+		if (draft.useStages && draft.stages.length > 0) {
+			draft.stages = splitAcrossStages(draft.stages, total);
+			draft.points = 0;
+		} else {
+			draft.points = total;
 		}
+	}
+
+	function setUseStages(value: string) {
+		const next = value === 'stages';
+		if (next === draft.useStages) return;
+		if (next) {
+			// The points picked so far become the stages' (all in the first one until
+			// more are added; "Split evenly" spreads them).
+			if (draft.stages.length === 0) draft.stages = [emptyStage()];
+			draft.stages = splitAcrossStages(draft.stages, totalPoints(draft));
+			draft.points = 0;
+		} else {
+			// Back to one step: the chore keeps what the stages were worth together.
+			draft.points = totalPoints(draft);
+		}
+		draft.useStages = next;
 	}
 </script>
 
@@ -315,7 +341,7 @@
 			<ChoiceChips
 				label="Reward Points"
 				options={POINT_OPTIONS.map((value) => ({ value }))}
-				bind:value={() => draft.points, (v) => (draft.points = Number(v))}
+				bind:value={() => totalPoints(draft), setTotalPoints}
 			/>
 			{#if shown.points}
 				<p class="text-[13px] text-text-amber" role="alert">{shown.points}</p>

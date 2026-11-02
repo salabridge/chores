@@ -10,10 +10,12 @@ import {
 	COMPLETE_TURN_LABEL,
 	ctaLabel,
 	eligibilityText,
+	hasStagePoints,
 	howToText,
 	introText,
 	loopHeading,
 	stageStates,
+	stageStatus,
 	waitingText,
 } from './rotation-detail.ts';
 
@@ -88,9 +90,9 @@ describe('rotation detail copy', () => {
 
 	it('marks done stages, then the first open one, then the rest locked', () => {
 		const stages = [
-			{ id: 'a', title: 'A', hint: null },
-			{ id: 'b', title: 'B', hint: null },
-			{ id: 'c', title: 'C', hint: null },
+			{ id: 'a', title: 'A', hint: null, points: 0 },
+			{ id: 'b', title: 'B', hint: null, points: 0 },
+			{ id: 'c', title: 'C', hint: null, points: 0 },
 		];
 		expect(stageStates(stages, new Set(['a'])).map((s) => s.state)).toEqual([
 			'completed',
@@ -102,5 +104,31 @@ describe('rotation detail copy', () => {
 			'locked',
 			'locked',
 		]);
+	});
+});
+
+describe('stageStatus', () => {
+	it('adds what the stage pays to its state line', () => {
+		expect(stageStatus({ state: 'completed', points: 17 })).toBe(
+			'Completed · 17 pts',
+		);
+		expect(stageStatus({ state: 'current', points: 5 })).toBe(
+			'Current stage · 5 pts',
+		);
+		expect(stageStatus({ state: 'locked', points: 16 })).toBe(
+			'Remaining after this stage · 16 pts',
+		);
+	});
+
+	it('keeps the default line for a stage that pays nothing', () => {
+		expect(stageStatus({ state: 'current', points: 0 })).toBeUndefined();
+	});
+});
+
+describe('hasStagePoints', () => {
+	it('is true when any stage pays', () => {
+		expect(hasStagePoints([{ points: 0 }, { points: 3 }])).toBe(true);
+		expect(hasStagePoints([{ points: 0 }, { points: 0 }])).toBe(false);
+		expect(hasStagePoints([])).toBe(false);
 	});
 });

@@ -1,5 +1,9 @@
 import type { PendingFavour } from './favour-approval.ts';
-import type { DetailDoer, DetailStage } from './rotation-detail.ts';
+import {
+	type DetailDoer,
+	type DetailStage,
+	hasStagePoints,
+} from './rotation-detail.ts';
 
 // What the personal chore screen (SB-40) shows, as plain data that the server
 // load, the component, and the tests share. No server imports here: this file
@@ -95,6 +99,8 @@ export function introText(
 ): string {
 	const note = detail.description?.trim();
 	if (note) return note;
+	if (hasStagePoints(detail.stages))
+		return `Earn points on every stage: ${detail.points} in all.`;
 	return detail.stages.length > 0
 		? `Finish all ${detail.stages.length} stages to earn ${detail.points} points.`
 		: `Finish this chore to earn ${detail.points} points.`;
@@ -118,6 +124,11 @@ export function nextText(
 	if (total === 0) {
 		return `Tap Mark Done when you finish to claim the ${detail.points}-point reward.`;
 	}
+	if (hasStagePoints(detail.stages)) {
+		return active === null || active === total
+			? `Finish Stage ${total} to complete the chore. Every stage pays as you go: ${detail.points} points in all.`
+			: `Finish Stage ${active} to earn its points and unlock Stage ${active + 1}. ${detail.points} points in all.`;
+	}
 	if (active === null || active === total) {
 		return `Finish Stage ${total} to complete the chore and claim the full ${detail.points}-point reward.`;
 	}
@@ -126,9 +137,11 @@ export function nextText(
 
 /** Left half of the footer row ("Reward after all 3 stages"). */
 export const rewardLabel = (detail: StageFacts) =>
-	detail.stages.length > 0
-		? `Reward after all ${detail.stages.length} stages`
-		: 'Reward for finishing';
+	detail.stages.length === 0
+		? 'Reward for finishing'
+		: hasStagePoints(detail.stages)
+			? `Points across all ${detail.stages.length} stages`
+			: `Reward after all ${detail.stages.length} stages`;
 
 /** The whole footer line: "Reward after all 3 stages · 15 pts". */
 export const rewardSummary = (

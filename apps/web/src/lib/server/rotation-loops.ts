@@ -11,6 +11,7 @@ import {
 	type SaveLoopInput,
 	saveInputError,
 } from '../rotation-loops.ts';
+import { choreTotalPoints } from './chore-points.ts';
 import { db } from './drizzle.ts';
 
 // Reads and writes for the Rotation Loops Builder (SB-50). The web app talks
@@ -35,7 +36,7 @@ export async function listRotationLoops(
 			choreId: chores.id,
 			title: chores.title,
 			description: chores.description,
-			points: chores.points,
+			points: choreTotalPoints,
 			scope: choreRotations.scope,
 			scopeLabel: choreRotations.scopeLabel,
 			currentMemberId: choreRotations.currentMemberId,

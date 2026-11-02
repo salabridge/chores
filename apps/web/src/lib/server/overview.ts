@@ -27,6 +27,7 @@ import {
 	sortRows,
 	type UpcomingRotation,
 } from '../overview.ts';
+import { choreColumnsWithTotalPoints } from './chore-points.ts';
 import { db } from './drizzle.ts';
 import { householdClock } from './household-today.ts';
 
@@ -49,7 +50,7 @@ export async function loadHouseholdOverview(
 		streaks,
 	] = await Promise.all([
 		db
-			.select()
+			.select(choreColumnsWithTotalPoints)
 			.from(chores)
 			.where(
 				and(eq(chores.householdId, householdId), isNull(chores.archivedAt)),

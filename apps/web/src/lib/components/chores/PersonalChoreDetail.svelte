@@ -22,6 +22,7 @@
 		waitingText,
 	} from '#lib/personal-detail.js';
 	import { completePersonalChore } from '#lib/personal-detail.remote.js';
+	import { stageStatus } from '#lib/rotation-detail.js';
 	import PendingFavourNotice from '../favours/PendingFavourNotice.svelte';
 	import DoneBySelect from './DoneBySelect.svelte';
 	import FavourBanner from './FavourBanner.svelte';
@@ -96,7 +97,11 @@
 
 		<ul class="m-0 flex list-none flex-col gap-16 p-0" aria-label="Stages">
 			{#each detail.stages as stage, i (stage.id)}
-				<StageStep title={stageLabel(i, stage.title)} state={stage.state} />
+				<StageStep
+					title={stageLabel(i, stage.title)}
+					state={stage.state}
+					status={stageStatus(stage)}
+				/>
 			{/each}
 		</ul>
 	{/if}

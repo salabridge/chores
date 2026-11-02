@@ -17,8 +17,8 @@ const personal: DuplicateSource = {
 	dueWeekday: 4,
 	points: 15,
 	stages: [
-		{ title: 'Load', hint: 'Plates first' },
-		{ title: 'Start', hint: null },
+		{ title: 'Load', hint: 'Plates first', points: 5 },
+		{ title: 'Start', hint: null, points: 5 },
 	],
 	assigneeId: 'leo',
 	currentTurnMemberId: null,

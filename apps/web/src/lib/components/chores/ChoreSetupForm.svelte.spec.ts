@@ -113,11 +113,11 @@ describe('ChoreSetupForm.svelte', () => {
 			.toBeChecked();
 	});
 
-	it('requires a stage once stages are on, with no points input', async () => {
+	it('requires a stage once stages are on, each with its own points', async () => {
 		setup();
 		await page.getByRole('radio', { name: 'Use Stages' }).click();
 		await expect.element(page.getByLabelText('Stage 1 title')).toBeVisible();
-		expect(page.getByLabelText(/stage 1 points/i).elements()).toHaveLength(0);
+		await expect.element(page.getByLabelText('Stage 1 points')).toBeVisible();
 		await page.getByRole('button', { name: 'Remove stage 1' }).click();
 		await page.getByRole('button', { name: 'Create Chore' }).click();
 		await expect
@@ -125,6 +125,29 @@ describe('ChoreSetupForm.svelte', () => {
 				page.getByText('Add at least one stage, or switch to Single Step.'),
 			)
 			.toBeVisible();
+	});
+
+	it('splits the chosen total across the stages, remainder to the earliest', async () => {
+		const onsubmit = setup({
+			...exampleDraft(),
+			title: 'Bathroom',
+			points: 0,
+			assigneeId: householdMembers[0].id,
+			kind: 'personal',
+		});
+		// 15 points over 3 stages, then 20 over 3: 7 / 7 / 6.
+		await page.getByRole('radio', { name: '20' }).click();
+		await expect.element(page.getByLabelText('Stage 1 points')).toHaveValue(7);
+		await expect.element(page.getByLabelText('Stage 2 points')).toHaveValue(7);
+		await expect.element(page.getByLabelText('Stage 3 points')).toHaveValue(6);
+		await expect
+			.element(page.getByText('20 pts', { exact: false }).first())
+			.toBeVisible();
+		await page.getByRole('button', { name: 'Create Chore' }).click();
+		expect(onsubmit).toHaveBeenCalledOnce();
+		const saved = onsubmit.mock.calls[0][0] as ChoreDraft;
+		expect(saved.points).toBe(0);
+		expect(saved.stages.map((s) => s.points)).toEqual([7, 7, 6]);
 	});
 
 	it('adds and reorders stages', async () => {

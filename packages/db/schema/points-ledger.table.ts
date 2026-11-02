@@ -13,6 +13,8 @@ import {
 } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.ts';
 import { choreCompletions } from './chore-completions.table.ts';
+import { choreInstances } from './chore-instances.table.ts';
+import { choreStages } from './chore-stages.table.ts';
 import { householdMembers } from './household-members.table.ts';
 import { households } from './households.table.ts';
 import { pointsAdjustmentKind } from './points-adjustment-kind.ts';
@@ -63,6 +65,19 @@ export const pointsLedger = pgTable(
 		completionId: uuid('completion_id').references(() => choreCompletions.id, {
 			onDelete: 'set null',
 		}),
+		/**
+		 * The stage a stage award (`completion`) or its `reversal` belongs to, with
+		 * the instance it was checked off in. Both NULL on every other row, and
+		 * NULL again if the chore or stage was later deleted: the points stay,
+		 * only the link goes.
+		 */
+		stageInstanceId: uuid('stage_instance_id').references(
+			() => choreInstances.id,
+			{ onDelete: 'set null' },
+		),
+		stageId: uuid('stage_id').references(() => choreStages.id, {
+			onDelete: 'set null',
+		}),
 		/** The claim a `reward_claim` row belongs to. NULL if the reward was later deleted. */
 		rewardClaimId: uuid('reward_claim_id').references(() => rewardClaims.id, {
 			onDelete: 'set null',
@@ -93,6 +108,17 @@ export const pointsLedger = pgTable(
 			'points_ledger_source_check',
 			sql`${t.reason} in ('completion', 'reversal') or ${t.completionId} is null`,
 		),
+		// A row with a stage link is a stage award or reversal: it belongs to no
+		// completion and is always a completion or reversal. Either link can go
+		// null on its own when its stage or instance is deleted (the points stay),
+		// so the two columns are not required to be set together.
+		check(
+			'points_ledger_stage_source_check',
+			sql`(${t.stageId} is null and ${t.stageInstanceId} is null)
+				or (${t.completionId} is null
+					and ${t.reason} in ('completion', 'reversal'))`,
+		),
+		index('points_ledger_stage_idx').on(t.stageInstanceId, t.stageId),
 		check(
 			'points_ledger_reward_claim_source_check',
 			sql`${t.rewardClaimId} is null or ${t.reason} = 'reward_claim'`,

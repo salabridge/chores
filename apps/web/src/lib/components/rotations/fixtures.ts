@@ -147,9 +147,27 @@ export const dishwasherDetail: RotationDetail = {
 	title: 'Run Dishwasher',
 	points: 15,
 	stages: [
-		{ id: 's1', title: 'Load the dishwasher', hint: null, state: 'completed' },
-		{ id: 's2', title: 'Run the cycle', hint: null, state: 'current' },
-		{ id: 's3', title: 'Unload and put away', hint: null, state: 'locked' },
+		{
+			id: 's1',
+			title: 'Load the dishwasher',
+			hint: null,
+			points: 5,
+			state: 'completed',
+		},
+		{
+			id: 's2',
+			title: 'Run the cycle',
+			hint: null,
+			points: 5,
+			state: 'current',
+		},
+		{
+			id: 's3',
+			title: 'Unload and put away',
+			hint: null,
+			points: 5,
+			state: 'locked',
+		},
 	],
 };
 

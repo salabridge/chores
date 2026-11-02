@@ -34,15 +34,23 @@ export const roomDetail: PersonalDetail = {
 			id: 's1',
 			title: 'Put away toys & clothes',
 			hint: null,
+			points: 5,
 			state: 'completed',
 		},
 		{
 			id: 's2',
 			title: 'Dust surfaces & wipe desk',
 			hint: null,
+			points: 5,
 			state: 'current',
 		},
-		{ id: 's3', title: 'Vacuum the carpet', hint: null, state: 'locked' },
+		{
+			id: 's3',
+			title: 'Vacuum the carpet',
+			hint: null,
+			points: 5,
+			state: 'locked',
+		},
 	],
 };
 

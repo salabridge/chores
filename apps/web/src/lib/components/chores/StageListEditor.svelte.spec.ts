@@ -4,8 +4,8 @@ import { render } from 'vitest-browser-svelte';
 import StageListEditor from './StageListEditor.svelte';
 
 const stages = () => [
-	{ key: 'a', title: 'Clear counters', hint: 'Scrape plates' },
-	{ key: 'b', title: 'Load the machine', hint: '' },
+	{ key: 'a', title: 'Clear counters', hint: 'Scrape plates', points: 0 },
+	{ key: 'b', title: 'Load the machine', hint: '', points: 0 },
 ];
 
 describe('StageListEditor.svelte', () => {
@@ -18,6 +18,36 @@ describe('StageListEditor.svelte', () => {
 			.element(page.getByLabelText('Stage 1 hint (optional)'))
 			.toHaveValue('Scrape plates');
 		await expect.element(page.getByLabelText('Stage 2 title')).toBeVisible();
+	});
+
+	it('shows what each stage pays and the total', async () => {
+		render(StageListEditor, {
+			stages: [
+				{ key: 'a', title: 'One', hint: '', points: 17 },
+				{ key: 'b', title: 'Two', hint: '', points: 3 },
+			],
+		});
+		await expect.element(page.getByLabelText('Stage 1 points')).toHaveValue(17);
+		await expect.element(page.getByLabelText('Stage 2 points')).toHaveValue(3);
+		await expect
+			.element(page.getByTestId('stage-points-total'))
+			.toHaveTextContent('20 pts together');
+	});
+
+	it('splits the total evenly on request', async () => {
+		render(StageListEditor, {
+			stages: [
+				{ key: 'a', title: 'One', hint: '', points: 17 },
+				{ key: 'b', title: 'Two', hint: '', points: 3 },
+			],
+		});
+		await page.getByRole('button', { name: 'Split 20 pts evenly' }).click();
+		await expect.element(page.getByLabelText('Stage 1 points')).toHaveValue(10);
+		await expect.element(page.getByLabelText('Stage 2 points')).toHaveValue(10);
+		// Already even: nothing left to do.
+		await expect
+			.element(page.getByRole('button', { name: 'Split 20 pts evenly' }))
+			.toBeDisabled();
 	});
 
 	it('removes a stage', async () => {
