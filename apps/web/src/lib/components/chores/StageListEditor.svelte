@@ -61,12 +61,22 @@
 		</div>
 		<ol class="m-0 flex list-none flex-col gap-8 p-0" aria-label="Stages">
 			{#each stages as stage, i (stage.key)}
-				<li class="flex items-start gap-12 rounded-[12px] bg-surface-accent-base p-12">
+				<!-- Mobile: header row (number, label, reorder/remove) above full-width inputs.
+				     From sm up: number | inputs | controls in one row. -->
+				<li
+					class="grid grid-cols-[auto_1fr_auto] items-center gap-x-12 gap-y-8 rounded-[12px] bg-surface-accent-base p-12 sm:items-start"
+				>
 					<span
-						class="mt-[12px] flex size-[24px] shrink-0 items-center justify-center rounded-[12px] border border-border-subtle bg-surface-accent-orange-subtle font-display text-[11px] font-semibold text-text-orange"
+						class="flex size-[24px] sm:mt-[12px] shrink-0 items-center justify-center rounded-[12px] border border-border-subtle bg-surface-accent-orange-subtle font-display text-[11px] font-semibold text-text-orange"
 						aria-hidden="true">{i + 1}</span
 					>
-					<div class="flex min-w-0 flex-1 flex-col gap-8">
+					<span
+						class="font-display text-[13px] font-semibold text-text-primary sm:hidden"
+						aria-hidden="true">Stage {i + 1}</span
+					>
+					<div
+						class="order-last col-span-3 flex min-w-0 flex-col gap-8 sm:order-none sm:col-span-1 sm:col-start-2 sm:row-start-1"
+					>
 						<TextInput
 							label="Stage {i + 1} title"
 							placeholder="Clear counters and scrape plates"
@@ -105,7 +115,9 @@
 							{disabled}
 						/>
 					</div>
-					<div class="mt-[10px] flex shrink-0 items-center gap-8">
+					<div
+						class="col-start-3 row-start-1 flex shrink-0 items-center gap-8 sm:mt-[10px]"
+					>
 						<ReorderButtons
 							name="stage {i + 1}"
 							canMoveUp={i > 0}
