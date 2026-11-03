@@ -14,13 +14,15 @@
 					key: 'a',
 					title: 'Clear counters and scrape plates',
 					hint: 'Good for younger helpers before the machine starts.',
+					points: 4,
 				},
 				{
 					key: 'b',
 					title: 'Load the dishwasher and add detergent',
 					hint: 'Keep fragile items out.',
+					points: 3,
 				},
-				{ key: 'c', title: 'Start the cycle', hint: '' },
+				{ key: 'c', title: 'Start the cycle', hint: '', points: 3 },
 			],
 		},
 	});
@@ -34,8 +36,8 @@
 	name="With problems"
 	args={{
 		stages: [
-			{ key: 'a', title: '', hint: '' },
-			{ key: 'b', title: 'Start the cycle', hint: '' },
+			{ key: 'a', title: '', hint: '', points: 0 },
+			{ key: 'b', title: 'Start the cycle', hint: '', points: 0 },
 		],
 		errors: { a: { title: 'Give this stage a title.' } },
 	}}

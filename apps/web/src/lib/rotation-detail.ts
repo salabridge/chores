@@ -23,6 +23,8 @@ export interface DetailStage {
 	id: string;
 	title: string;
 	hint: string | null;
+	/** What this stage pays when it's checked off. 0 pays nothing on its own. */
+	points: number;
 	state: 'completed' | 'current' | 'locked';
 }
 
@@ -135,7 +137,9 @@ export function howToText(
 			? ` and pass the rotation to ${detail.nextUp.name}`
 			: '';
 	if (detail.stages.length > 0) {
-		return `Check off each stage in order. The last stage claims your ${detail.points} points${handoff}.`;
+		return hasStagePoints(detail.stages)
+			? `Check off each stage in order. Each one pays its points as you finish it, ${detail.points} in all${handoff}.`
+			: `Check off each stage in order. The last stage claims your ${detail.points} points${handoff}.`;
 	}
 	return `Finish the chore, then tap the button below to claim your ${detail.points} points${handoff}.`;
 }
@@ -166,9 +170,36 @@ export function waitingText(
 	return `It's ${detail.activeTurn.name}'s turn.`;
 }
 
+/** Whether any stage pays points of its own (rather than the chore paying once at the end). */
+export const hasStagePoints = (
+	stages: readonly Pick<DetailStage, 'points'>[],
+) => stages.some((s) => s.points > 0);
+
+const STAGE_STATUS = {
+	completed: 'Completed',
+	current: 'Current stage',
+	locked: 'Remaining after this stage',
+} as const;
+
+/**
+ * The line under a stage in the checklist: its state, plus what it pays when it
+ * pays anything ("Current stage · 17 pts"). Undefined keeps the default line.
+ */
+export const stageStatus = (
+	stage: Pick<DetailStage, 'state' | 'points'>,
+): string | undefined =>
+	stage.points > 0
+		? `${STAGE_STATUS[stage.state]} · ${stage.points} pts`
+		: undefined;
+
 /** Stage states for the checklist: done ones, the first open one, then locked. */
 export function stageStates(
-	stages: readonly { id: string; title: string; hint: string | null }[],
+	stages: readonly {
+		id: string;
+		title: string;
+		hint: string | null;
+		points: number;
+	}[],
 	doneIds: ReadonlySet<string>,
 ): DetailStage[] {
 	let currentSeen = false;

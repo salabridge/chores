@@ -19,6 +19,7 @@ import {
 	stageStates,
 } from '../rotation-detail.ts';
 import { scheduleLabel } from '../weekdays.ts';
+import { choreColumnsWithTotalPoints } from './chore-points.ts';
 import { db } from './drizzle.ts';
 import { householdToday } from './household-today.ts';
 import { isParentRole, type ProfileState } from './profile-state.ts';
@@ -54,7 +55,7 @@ export class RotationDetailError extends Error {
 export async function loadChore(householdId: string, choreId: string) {
 	if (!UUID.test(choreId)) return null;
 	const [chore] = await db
-		.select()
+		.select(choreColumnsWithTotalPoints)
 		.from(chores)
 		.where(
 			and(
@@ -206,6 +207,7 @@ export async function loadRotationDetail(
 			id: choreStages.id,
 			title: choreStages.title,
 			hint: choreStages.hint,
+			points: choreStages.points,
 		})
 		.from(choreStages)
 		.where(eq(choreStages.choreId, choreId))

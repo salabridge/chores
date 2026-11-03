@@ -59,11 +59,42 @@ describe('PersonalChoreDetail.svelte', () => {
 		render(PersonalChoreDetail, { detail: roomDetail });
 		await expect.element(page.getByText('What happens next')).toBeVisible();
 		await expect
-			.element(page.getByText(/Finish Stage 2 to unlock Stage 3/))
+			.element(
+				page.getByText(/Finish Stage 2 to earn its points and unlock Stage 3/),
+			)
+			.toBeVisible();
+		await expect
+			.element(page.getByText('Points across all 3 stages · 15 pts'))
+			.toBeVisible();
+	});
+
+	it('shows what each stage pays on the checklist', async () => {
+		render(PersonalChoreDetail, { detail: roomDetail });
+		await expect.element(page.getByText('Completed · 5 pts')).toBeVisible();
+		await expect.element(page.getByText('Current stage · 5 pts')).toBeVisible();
+		await expect
+			.element(page.getByText('Remaining after this stage · 5 pts'))
+			.toBeVisible();
+	});
+
+	it('keeps the pay-at-the-end wording when no stage has points', async () => {
+		render(PersonalChoreDetail, {
+			detail: {
+				...roomDetail,
+				stages: roomDetail.stages.map((s) => ({ ...s, points: 0 })),
+			},
+		});
+		await expect
+			.element(
+				page.getByText(
+					/Complete all 3 stages to claim the full 15-point reward/,
+				),
+			)
 			.toBeVisible();
 		await expect
 			.element(page.getByText('Reward after all 3 stages · 15 pts'))
 			.toBeVisible();
+		await expect.element(page.getByText('Completed')).toBeVisible();
 	});
 
 	it('posts the current stage from a real form, so it works without JavaScript', async () => {

@@ -19,6 +19,7 @@
 		introText,
 		loopHeading,
 		type RotationDetail,
+		stageStatus,
 		waitingText,
 	} from '#lib/rotation-detail.js';
 
@@ -145,7 +146,11 @@
 		<section class="flex flex-col gap-12" aria-label="Stages">
 			<ul class="m-0 flex list-none flex-col gap-8 p-0">
 				{#each detail.stages as stage (stage.id)}
-					<StageStep title={stage.title} state={stage.state} />
+					<StageStep
+						title={stage.title}
+						state={stage.state}
+						status={stageStatus(stage)}
+					/>
 				{/each}
 			</ul>
 		</section>

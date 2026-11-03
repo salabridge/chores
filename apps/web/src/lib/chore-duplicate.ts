@@ -21,7 +21,7 @@ export interface DuplicateSource {
 	/** The weekly chore's due day (SB-71), or null. */
 	dueWeekday: number | null;
 	points: number;
-	stages: { title: string; hint: string | null }[];
+	stages: { title: string; hint: string | null; points: number }[];
 	/** The personal chore's assignee. */
 	assigneeId: string | null;
 	/** For a rotation, the member whose turn it is now. */
@@ -67,6 +67,7 @@ export function duplicateDraft(
 			key: newStageKey(),
 			title: s.title,
 			hint: s.hint ?? '',
+			points: s.points,
 		})),
 		frequency: source.frequency,
 		dueWeekday: dueWeekdayFor(source.frequency, source.dueWeekday),

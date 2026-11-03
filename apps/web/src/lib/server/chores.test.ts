@@ -66,10 +66,14 @@ describe('createRotationChore', () => {
 			id,
 			householdId: 'h1',
 			type: 'rotation',
-			points: 15,
+			// The example's 15 points live on its three stages (5 each), not the chore.
+			points: 0,
 			assignedMemberId: null,
 			createdBy: 'u1',
 		});
+		expect(
+			queries.slice(1, 4).map((q) => (q.values as { points: number }).points),
+		).toEqual([5, 5, 5]);
 		expect(queries[4].values).toMatchObject({
 			choreId: id,
 			scope: 'whole_household',

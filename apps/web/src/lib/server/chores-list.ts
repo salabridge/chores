@@ -8,6 +8,7 @@ import {
 } from '@chore/db';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { ChoreListItem, ChoreListMember } from '../chores-list.ts';
+import { choreTotalPoints } from './chore-points.ts';
 import { db } from './drizzle.ts';
 
 // The read behind the parent chores list (SB-62). As with the other web-side
@@ -34,7 +35,7 @@ export async function loadChoresList(householdId: string): Promise<ChoresList> {
 				type: chores.type,
 				frequency: chores.frequency,
 				dueWeekday: chores.dueWeekday,
-				points: chores.points,
+				points: choreTotalPoints,
 				assignedMemberId: chores.assignedMemberId,
 				archivedAt: chores.archivedAt,
 				stageCount: sql<number>`(select count(*)::int from ${choreStages} where ${choreStages.choreId} = ${chores.id})`,

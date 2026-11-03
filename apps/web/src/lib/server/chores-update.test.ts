@@ -77,9 +77,9 @@ const choreRow = (over: Record<string, unknown> = {}) => ({
 	...over,
 });
 const stageRows = [
-	{ id: S1, title: 'Toys', hint: null, position: 1 },
-	{ id: S2, title: 'Dust', hint: null, position: 2 },
-	{ id: S3, title: 'Vacuum', hint: null, position: 3 },
+	{ id: S1, title: 'Toys', hint: null, points: 0, position: 1 },
+	{ id: S2, title: 'Dust', hint: null, points: 0, position: 2 },
+	{ id: S3, title: 'Vacuum', hint: null, points: 0, position: 3 },
 ];
 
 /**
@@ -162,7 +162,12 @@ describe('updateChoreFromInput', () => {
 				d.stages = [
 					{ ...s3, title: 'Vacuum floor' },
 					s1,
-					{ key: 'new', title: 'Make bed', hint: 'Tuck the corners' },
+					{
+						key: 'new',
+						title: 'Make bed',
+						hint: 'Tuck the corners',
+						points: 0,
+					},
 				];
 			}),
 		);
@@ -181,8 +186,8 @@ describe('updateChoreFromInput', () => {
 			{ position: 1002 },
 		]);
 		expect(queries.slice(4, 6).map((q) => q.set)).toEqual([
-			{ position: 1, title: 'Vacuum floor', hint: null },
-			{ position: 2, title: 'Toys', hint: null },
+			{ position: 1, title: 'Vacuum floor', hint: null, points: 0 },
+			{ position: 2, title: 'Toys', hint: null, points: 0 },
 		]);
 	});
 
@@ -200,6 +205,7 @@ describe('updateChoreFromInput', () => {
 			position: 2,
 			title: 'Dust and wipe',
 			hint: null,
+			points: 0,
 		});
 	});
 

@@ -160,8 +160,7 @@ export async function createPersonalChore(
 			position: i + 1,
 			title: s.title.trim(),
 			hint: s.hint?.trim() || null,
-			// Stages carry no points of their own; the chore's points are awarded once.
-			points: 0,
+			points: s.points,
 		}),
 	);
 	await runBatch(
@@ -231,7 +230,7 @@ export async function createRotationChore(
 			position: i + 1,
 			title: s.title.trim(),
 			hint: s.hint?.trim() || null,
-			points: 0,
+			points: s.points,
 		}),
 	);
 	const insertRotation = db.insert(choreRotations).values({
@@ -303,6 +302,7 @@ export async function loadEditableChore(
 			id: choreStages.id,
 			title: choreStages.title,
 			hint: choreStages.hint,
+			points: choreStages.points,
 			position: choreStages.position,
 		})
 		.from(choreStages)
@@ -510,7 +510,10 @@ export async function updateChoreFromInput(
 		if (!s.id || !before) return [];
 		const position = i + 1;
 		const moved = before.position !== position;
-		const edited = before.title !== s.title || before.hint !== s.hint;
+		const edited =
+			before.title !== s.title ||
+			before.hint !== s.hint ||
+			before.points !== s.points;
 		return moved || edited ? [{ id: s.id, stage: s, position, moved }] : [];
 	});
 	const stageWhere = (id: string) =>
@@ -533,6 +536,7 @@ export async function updateChoreFromInput(
 					position: c.position,
 					title: c.stage.title.trim(),
 					hint: c.stage.hint?.trim() || null,
+					points: c.stage.points,
 				})
 				.where(stageWhere(c.id)),
 		);
@@ -542,7 +546,7 @@ export async function updateChoreFromInput(
 		queries.push(
 			db.execute(
 				sql`insert into chore_stages (household_id, chore_id, position, title, hint, points)
-					select ${actor.householdId}::uuid, ${choreId}::uuid, ${i + 1}, ${s.title.trim()}, ${s.hint?.trim() || null}, 0
+					select ${actor.householdId}::uuid, ${choreId}::uuid, ${i + 1}, ${s.title.trim()}, ${s.hint?.trim() || null}, ${s.points}
 					where ${saved}`,
 			),
 		);

@@ -13,8 +13,12 @@ import {
 	moveStage,
 	pointsHint,
 	removeStage,
+	splitAcrossStages,
+	splitPoints,
+	stagePointsTotal,
 	stagesSummary,
 	toCreateInput,
+	totalPoints,
 	toUpdateInput,
 	validateDraft,
 } from './chore-creator.ts';
@@ -46,7 +50,7 @@ describe('validateDraft', () => {
 		// Stale rows are ignored while stages are off.
 		const off = valid({
 			useStages: false,
-			stages: [{ key: 'a', title: '', hint: '' }],
+			stages: [{ key: 'a', title: '', hint: '', points: 0 }],
 		});
 		expect(hasErrors(validateDraft(off))).toBe(false);
 	});
@@ -55,8 +59,8 @@ describe('validateDraft', () => {
 		const draft = valid({
 			useStages: true,
 			stages: [
-				{ key: 'a', title: 'Load it', hint: '' },
-				{ key: 'b', title: ' ', hint: '' },
+				{ key: 'a', title: 'Load it', hint: '', points: 0 },
+				{ key: 'b', title: ' ', hint: '', points: 0 },
 			],
 		});
 		const errors = validateDraft(draft);
@@ -73,9 +77,9 @@ describe('validateDraft', () => {
 
 describe('stage list', () => {
 	const stages = [
-		{ key: 'a', title: 'A', hint: '' },
-		{ key: 'b', title: 'B', hint: '' },
-		{ key: 'c', title: 'C', hint: '' },
+		{ key: 'a', title: 'A', hint: '', points: 0 },
+		{ key: 'b', title: 'B', hint: '', points: 0 },
+		{ key: 'c', title: 'C', hint: '', points: 0 },
 	];
 	const keys = (list: { key: string }[]) => list.map((s) => s.key);
 
@@ -86,6 +90,7 @@ describe('stage list', () => {
 			key: String(i),
 			title: 'x',
 			hint: '',
+			points: 0,
 		}));
 		expect(addStage(full)).toHaveLength(MAX_STAGES);
 	});
@@ -120,9 +125,9 @@ describe('summaries', () => {
 		).toBe('Daily • 10 pts');
 	});
 
-	it('mentions the single award when stages are on', () => {
+	it('explains that each stage pays out when stages are on', () => {
 		expect(pointsHint({ frequency: 'daily', useStages: true })).toContain(
-			'once, after the last stage',
+			'each stage pays out as it is finished',
 		);
 		expect(pointsHint({ frequency: 'weekly', useStages: false })).toContain(
 			'Weekly chores',
@@ -138,12 +143,13 @@ describe('summaries', () => {
 });
 
 describe('Review Example', () => {
-	it('is a complete, valid rotation chore with no per-stage points', () => {
+	it('is a complete, valid rotation chore whose points live on the stages', () => {
 		const example = exampleDraft();
 		expect(example.kind).toBe('rotation');
 		expect(example.stages).toHaveLength(3);
 		expect(hasErrors(validateDraft(example))).toBe(false);
-		expect(example.stages.every((s) => !('points' in s))).toBe(true);
+		expect(example.points).toBe(0);
+		expect(example.stages.map((s) => s.points)).toEqual([5, 5, 5]);
 	});
 });
 
@@ -154,7 +160,7 @@ describe('toCreateInput', () => {
 				title: '  Run Dishwasher ',
 				note: '  ',
 				useStages: false,
-				stages: [{ key: 'a', title: 'stale', hint: '' }],
+				stages: [{ key: 'a', title: 'stale', hint: '', points: 0 }],
 			}),
 		);
 		expect(input).toEqual({
@@ -192,15 +198,15 @@ describe('toCreateInput', () => {
 				kind: 'rotation',
 				useStages: true,
 				stages: [
-					{ key: 'a', title: ' First ', hint: ' careful ' },
-					{ key: 'b', title: 'Second', hint: '' },
+					{ key: 'a', title: ' First ', hint: ' careful ', points: 0 },
+					{ key: 'b', title: 'Second', hint: '', points: 0 },
 				],
 			}),
 		);
 		expect(input.assigneeId).toBeNull();
 		expect(input.stages).toEqual([
-			{ title: 'First', hint: 'careful' },
-			{ title: 'Second', hint: null },
+			{ title: 'First', hint: 'careful', points: 0 },
+			{ title: 'Second', hint: null, points: 0 },
 		]);
 	});
 });
@@ -219,7 +225,10 @@ describe('createInputError', () => {
 			createInputError({ ...input(), frequency: 'hourly' as never }),
 		).toBeTruthy();
 		expect(
-			createInputError({ ...input(), stages: [{ title: '', hint: null }] }),
+			createInputError({
+				...input(),
+				stages: [{ title: '', hint: null, points: 0 }],
+			}),
 		).toBeTruthy();
 		expect(createInputError({ ...input(), points: -1 })).toBeTruthy();
 	});
@@ -260,8 +269,8 @@ describe('choreToDraft / toUpdateInput', () => {
 		points: 15,
 		assignedMemberId: 'leo',
 		stages: [
-			{ id: 's1', title: 'Toys', hint: 'Bins' },
-			{ id: 's2', title: 'Dust', hint: null },
+			{ id: 's1', title: 'Toys', hint: 'Bins', points: 0 },
+			{ id: 's2', title: 'Dust', hint: null, points: 0 },
 		],
 	};
 
@@ -298,7 +307,7 @@ describe('choreToDraft / toUpdateInput', () => {
 		const draft = choreToDraft(saved);
 		draft.stages = [
 			draft.stages[1],
-			{ key: 'stage-new', title: ' Vacuum ', hint: '' },
+			{ key: 'stage-new', title: ' Vacuum ', hint: '', points: 0 },
 		];
 		const input = toUpdateInput(draft, 'c1', '2026-10-13T00:00:00.000Z');
 		expect(input).toMatchObject({
@@ -306,9 +315,121 @@ describe('choreToDraft / toUpdateInput', () => {
 			updatedAt: '2026-10-13T00:00:00.000Z',
 		});
 		expect(input.stages).toEqual([
-			{ id: 's2', title: 'Dust', hint: null },
-			{ id: null, title: 'Vacuum', hint: null },
+			{ id: 's2', title: 'Dust', hint: null, points: 0 },
+			{ id: null, title: 'Vacuum', hint: null, points: 0 },
 		]);
 		expect(createInputError(input)).toBeNull();
+	});
+});
+
+describe('splitPoints', () => {
+	it('splits evenly when it divides', () => {
+		expect(splitPoints(30, 3)).toEqual([10, 10, 10]);
+	});
+
+	it('gives the remainder to the earliest stages, one point each', () => {
+		expect(splitPoints(50, 3)).toEqual([17, 17, 16]);
+		expect(splitPoints(10, 4)).toEqual([3, 3, 2, 2]);
+		expect(splitPoints(2, 5)).toEqual([1, 1, 0, 0, 0]);
+	});
+
+	it('always adds back up to the total', () => {
+		for (let total = 0; total <= 60; total++) {
+			for (let n = 1; n <= 12; n++) {
+				expect(splitPoints(total, n).reduce((a, b) => a + b, 0)).toBe(total);
+			}
+		}
+	});
+
+	it('is empty with no stages and zero for a bad total', () => {
+		expect(splitPoints(50, 0)).toEqual([]);
+		expect(splitPoints(-5, 2)).toEqual([0, 0]);
+		expect(splitPoints(2.5, 2)).toEqual([0, 0]);
+	});
+});
+
+describe('stage points', () => {
+	const stage = (key: string, points: number) => ({
+		key,
+		title: key,
+		hint: '',
+		points,
+	});
+
+	it('splitAcrossStages overwrites each stage and keeps the rest', () => {
+		const out = splitAcrossStages(
+			[stage('a', 0), stage('b', 9), stage('c', 1)],
+			50,
+		);
+		expect(out.map((s) => s.points)).toEqual([17, 17, 16]);
+		expect(out.map((s) => s.key)).toEqual(['a', 'b', 'c']);
+	});
+
+	it('totals the stages, ignoring invalid values', () => {
+		expect(stagePointsTotal([stage('a', 5), stage('b', 7)])).toBe(12);
+		expect(stagePointsTotal([stage('a', Number.NaN), stage('b', -3)])).toBe(0);
+	});
+
+	it('totalPoints is the chore bonus plus the stages only while stages are on', () => {
+		const stages = [stage('a', 5), stage('b', 5)];
+		expect(totalPoints({ points: 3, useStages: true, stages })).toBe(13);
+		expect(totalPoints({ points: 3, useStages: false, stages })).toBe(3);
+		expect(totalPoints({ points: 3 })).toBe(3);
+	});
+
+	it('rejects a stage with fractional or negative points', () => {
+		for (const points of [-1, 1.5, Number.NaN]) {
+			const errors = validateDraft(
+				valid({
+					useStages: true,
+					stages: [{ ...stage('a', points), title: 'Go' }],
+				}),
+			);
+			expect(errors.stage.a?.points).toBeTruthy();
+		}
+		expect(
+			hasErrors(
+				validateDraft(
+					valid({
+						useStages: true,
+						stages: [{ ...stage('a', 0), title: 'Go' }],
+					}),
+				),
+			),
+		).toBe(false);
+	});
+
+	it('summaries show the chore total, bonus plus stages', () => {
+		const draft = valid({
+			useStages: true,
+			points: 0,
+			stages: [stage('a', 17), stage('b', 17), stage('c', 16)],
+		});
+		expect(frequencySummary(draft)).toContain('50 pts');
+		expect(stagesSummary(draft)).toBe('3 stages, 50 total points');
+	});
+
+	it('the create and edit inputs carry each stage its points', () => {
+		const draft = valid({
+			useStages: true,
+			points: 0,
+			stages: [
+				{ ...stage('a', 5), title: 'One' },
+				{ ...stage('b', 4), title: 'Two' },
+			],
+		});
+		expect(toCreateInput(draft).stages.map((s) => s.points)).toEqual([5, 4]);
+		expect(
+			toUpdateInput(draft, 'c1', '2026-01-01T00:00:00Z').stages.map(
+				(s) => s.points,
+			),
+		).toEqual([5, 4]);
+		expect(createInputError(toCreateInput(draft))).toBeNull();
+		expect(
+			createInputError({
+				...toCreateInput(draft),
+				stages: [{ title: 'One', hint: null, points: -2 }],
+			}),
+		).toBeTruthy();
 	});
 });

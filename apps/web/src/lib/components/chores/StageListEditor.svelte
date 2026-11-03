@@ -7,6 +7,8 @@
 		moveStage,
 		removeStage,
 		type StageDraft,
+		splitAcrossStages,
+		stagePointsTotal,
 	} from '#lib/chore-creator.js';
 	import ReorderButtons from '../ui/ReorderButtons.svelte';
 	import SecondaryButton from '../ui/SecondaryButton.svelte';
@@ -16,7 +18,7 @@
 		/** The stages, in order. Bindable. */
 		stages: StageDraft[];
 		/** Problems by stage key. */
-		errors?: Record<string, { title?: string; hint?: string }>;
+		errors?: Record<string, { title?: string; hint?: string; points?: string }>;
 		/** A problem with the list itself, e.g. "Add at least one stage". */
 		listError?: string;
 		disabled?: boolean;
@@ -28,19 +30,53 @@
 		listError,
 		disabled = false,
 	}: Props = $props();
+
+	const total = $derived(stagePointsTotal(stages));
+	// Evenly split already? Then there is nothing for the button to do.
+	const alreadyEven = $derived(
+		JSON.stringify(stages.map((s) => s.points)) ===
+			JSON.stringify(splitAcrossStages(stages, total).map((s) => s.points)),
+	);
+
+	/** A cleared or half-typed field counts as 0 until it's a whole number. */
+	function parsePoints(raw: string): number {
+		const n = Number(raw);
+		return raw.trim() === '' ? 0 : Number.isFinite(n) ? n : Number.NaN;
+	}
 </script>
 
-<!-- Stages carry no points: the chore's points are awarded once, after the last stage. -->
+<!-- Each stage pays its own points as it is finished; "Split evenly" is a form-only shortcut. -->
 <div class="flex flex-col gap-8">
 	{#if stages.length > 0}
+		<div class="flex items-center justify-between gap-12" data-testid="stage-points-total">
+			<p class="m-0 text-[13px] text-text-secondary">
+				Stages are worth <strong class="text-text-primary">{total} pts</strong> together.
+			</p>
+			<SecondaryButton
+				disabled={disabled || total === 0 || alreadyEven}
+				onclick={() => (stages = splitAcrossStages(stages, total))}
+			>
+				Split {total} pts evenly
+			</SecondaryButton>
+		</div>
 		<ol class="m-0 flex list-none flex-col gap-8 p-0" aria-label="Stages">
 			{#each stages as stage, i (stage.key)}
-				<li class="flex items-start gap-12 rounded-[12px] bg-surface-accent-base p-12">
+				<!-- Mobile: header row (number, label, reorder/remove) above full-width inputs.
+				     From sm up: number | inputs | controls in one row. -->
+				<li
+					class="grid grid-cols-[auto_1fr_auto] items-center gap-x-12 gap-y-8 rounded-[12px] bg-surface-accent-base p-12 sm:items-start"
+				>
 					<span
-						class="mt-[12px] flex size-[24px] shrink-0 items-center justify-center rounded-[12px] border border-border-subtle bg-surface-accent-orange-subtle font-display text-[11px] font-semibold text-text-orange"
+						class="flex size-[24px] sm:mt-[12px] shrink-0 items-center justify-center rounded-[12px] border border-border-subtle bg-surface-accent-orange-subtle font-display text-[11px] font-semibold text-text-orange"
 						aria-hidden="true">{i + 1}</span
 					>
-					<div class="flex min-w-0 flex-1 flex-col gap-8">
+					<span
+						class="font-display text-[13px] font-semibold text-text-primary sm:hidden"
+						aria-hidden="true">Stage {i + 1}</span
+					>
+					<div
+						class="order-last col-span-3 flex min-w-0 flex-col gap-8 sm:order-none sm:col-span-1 sm:col-start-2 sm:row-start-1"
+					>
 						<TextInput
 							label="Stage {i + 1} title"
 							placeholder="Clear counters and scrape plates"
@@ -64,8 +100,24 @@
 								: undefined}
 							{disabled}
 						/>
+						<TextInput
+							label="Stage {i + 1} points"
+							type="number"
+							inputmode="numeric"
+							min="0"
+							step="1"
+							value={String(stage.points)}
+							oninput={(e) => (stage.points = parsePoints(e.currentTarget.value))}
+							aria-invalid={errors[stage.key]?.points ? true : undefined}
+							issues={errors[stage.key]?.points
+								? [{ message: errors[stage.key]?.points as string }]
+								: undefined}
+							{disabled}
+						/>
 					</div>
-					<div class="mt-[10px] flex shrink-0 items-center gap-8">
+					<div
+						class="col-start-3 row-start-1 flex shrink-0 items-center gap-8 sm:mt-[10px]"
+					>
 						<ReorderButtons
 							name="stage {i + 1}"
 							canMoveUp={i > 0}

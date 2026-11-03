@@ -20,6 +20,13 @@ import {
 	waitingText,
 } from './personal-detail.ts';
 
+// The same chore when only the chore pays (once, after the last stage), as
+// every staged chore did before stages carried points.
+const payAtTheEnd = {
+	...roomDetail,
+	stages: roomDetail.stages.map((s) => ({ ...s, points: 0 })),
+};
+
 describe('personal detail copy', () => {
 	it('numbers the stage being worked on', () => {
 		expect(activeStageNumber(roomDetail)).toBe(2);
@@ -45,16 +52,23 @@ describe('personal detail copy', () => {
 	});
 
 	it('explains what happens next', () => {
-		expect(nextText(roomDetail)).toBe(
+		expect(nextText(payAtTheEnd)).toBe(
 			'Finish Stage 2 to unlock Stage 3. Complete all 3 stages to claim the full 15-point reward.',
 		);
+		expect(nextText(roomDetail)).toBe(
+			'Finish Stage 2 to earn its points and unlock Stage 3. 15 points in all.',
+		);
+		expect(nextText(roomLastStage)).toContain('Every stage pays as you go');
 		expect(nextText(roomLastStage)).toContain('Finish Stage 3 to complete');
 		expect(nextText(singleStepDetail)).toContain('Mark Done');
 	});
 
 	it('words the reward footer', () => {
-		expect(rewardSummary(roomDetail)).toBe(
+		expect(rewardSummary(payAtTheEnd)).toBe(
 			'Reward after all 3 stages · 15 pts',
+		);
+		expect(rewardSummary(roomDetail)).toBe(
+			'Points across all 3 stages · 15 pts',
 		);
 		expect(rewardSummary(singleStepDetail)).toBe(
 			'Reward for finishing · 10 pts',
@@ -63,8 +77,11 @@ describe('personal detail copy', () => {
 
 	it("uses the parent's note, or a generated intro", () => {
 		expect(introText(roomDetail)).toContain('three quick stages');
-		expect(introText({ ...roomDetail, description: '  ' })).toBe(
+		expect(introText({ ...payAtTheEnd, description: '  ' })).toBe(
 			'Finish all 3 stages to earn 15 points.',
+		);
+		expect(introText({ ...roomDetail, description: '  ' })).toBe(
+			'Earn points on every stage: 15 in all.',
 		);
 		expect(introText(singleStepDetail)).toBe(
 			'Finish this chore to earn 10 points.',

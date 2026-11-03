@@ -66,7 +66,7 @@ interface PersonalState {
 	/** Who the open completion credited with the points. */
 	creditedMemberId: string | null;
 	doneStageIds: Set<string>;
-	stages: { id: string; title: string; hint: string | null }[];
+	stages: { id: string; title: string; hint: string | null; points: number }[];
 	/** Who this period's chore belongs to right now. */
 	assigneeId: string | null;
 }
@@ -87,6 +87,7 @@ async function loadState(
 				id: choreStages.id,
 				title: choreStages.title,
 				hint: choreStages.hint,
+				points: choreStages.points,
 			})
 			.from(choreStages)
 			.where(eq(choreStages.choreId, chore.id))

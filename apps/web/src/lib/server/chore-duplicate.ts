@@ -33,7 +33,11 @@ export async function loadDuplicateSource(
 	if (!chore) return null;
 
 	const stages = await db
-		.select({ title: choreStages.title, hint: choreStages.hint })
+		.select({
+			title: choreStages.title,
+			hint: choreStages.hint,
+			points: choreStages.points,
+		})
 		.from(choreStages)
 		.where(eq(choreStages.choreId, chore.id))
 		.orderBy(asc(choreStages.position));

@@ -24,6 +24,7 @@ import {
 	type RotationFacts,
 	type TodayData,
 } from '../today.ts';
+import { choreColumnsWithTotalPoints } from './chore-points.ts';
 import { db } from './drizzle.ts';
 import { householdClock } from './household-today.ts';
 import { memberPointsBalance, memberWeekPoints } from './member-stats.ts';
@@ -54,7 +55,7 @@ export async function loadToday(
 		streaks,
 	] = await Promise.all([
 		db
-			.select()
+			.select(choreColumnsWithTotalPoints)
 			.from(chores)
 			.where(
 				and(eq(chores.householdId, householdId), isNull(chores.archivedAt)),
