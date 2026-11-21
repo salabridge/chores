@@ -73,5 +73,10 @@
 				Sign out
 			</button>
 		</form>
+
+		<nav aria-label="Legal" class="flex justify-center gap-24 text-[14px]">
+			<a href="/privacy" class="font-semibold text-text-orange">Privacy Policy</a>
+			<a href="/terms" class="font-semibold text-text-orange">Terms of Service</a>
+		</nav>
 	</div>
 </AuthShell>
