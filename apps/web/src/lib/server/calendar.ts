@@ -35,6 +35,16 @@ export async function getOrCreateCalendarToken(
 	householdId: string,
 	userId: string,
 ): Promise<string> {
+	const read = async () =>
+		(
+			await db
+				.select({ token: householdCalendarTokens.token })
+				.from(householdCalendarTokens)
+				.where(eq(householdCalendarTokens.householdId, householdId))
+		)[0]?.token;
+	// Read first: the row almost always exists, and this runs on every Account view.
+	const existing = await read();
+	if (existing) return existing;
 	await db
 		.insert(householdCalendarTokens)
 		.values({
@@ -43,13 +53,10 @@ export async function getOrCreateCalendarToken(
 			createdBy: userId,
 		})
 		.onConflictDoNothing({ target: householdCalendarTokens.householdId });
-	const [row] = await db
-		.select({ token: householdCalendarTokens.token })
-		.from(householdCalendarTokens)
-		.where(eq(householdCalendarTokens.householdId, householdId));
+	const token = await read();
 	// The insert above guarantees a row unless the household was just deleted.
-	if (!row) throw new Error('Calendar token is missing');
-	return row.token;
+	if (!token) throw new Error('Calendar token is missing');
+	return token;
 }
 
 /** Replaces the token, which stops the old link working. Returns the new one. */

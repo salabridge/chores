@@ -13,7 +13,9 @@ export function createCalendarToken(): string {
 
 /**
  * Whether `value` has the shape of a calendar token. The feed route checks
- * this before it touches the database, so random paths cost nothing.
+ * this first, so malformed paths skip the database. Any 43 characters from the
+ * alphabet pass, so it doesn't stop guessing or load: the token's entropy and
+ * rate limiting do that.
  */
 export function isCalendarToken(value: string): boolean {
 	return CALENDAR_TOKEN.test(value);

@@ -223,18 +223,29 @@ function utcStamp(at: Date): string {
 	return `${at.toISOString().slice(0, 19).replace(/[-:]/g, '')}Z`;
 }
 
+/** One formatter per time zone: building an `Intl.DateTimeFormat` is slow. */
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+function offsetFormatter(timeZone: string): Intl.DateTimeFormat {
+	let formatter = offsetFormatters.get(timeZone);
+	if (!formatter) {
+		formatter = new Intl.DateTimeFormat('en-US', {
+			timeZone,
+			hourCycle: 'h23',
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+		});
+		offsetFormatters.set(timeZone, formatter);
+	}
+	return formatter;
+}
+
 /** The offset of `timeZone` from UTC at `instant`, in milliseconds. */
 function offsetMs(timeZone: string, instant: number): number {
-	const parts = new Intl.DateTimeFormat('en-US', {
-		timeZone,
-		hourCycle: 'h23',
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-		hour: '2-digit',
-		minute: '2-digit',
-		second: '2-digit',
-	}).formatToParts(new Date(instant));
+	const parts = offsetFormatter(timeZone).formatToParts(new Date(instant));
 	const get = (type: string) =>
 		Number(parts.find((p) => p.type === type)?.value);
 	const asUtc = Date.UTC(
