@@ -851,6 +851,24 @@ column, its check and the narrowed `points_ledger_insert` policy, then
 hand-written: the backfill from note prefixes, `app.merge_household_via_invite`
 and `app.remove_household_member` again (as in `0026`, except that their
 moved-balance rows are `carry_over` and `transfer`) and `app.mark_gifts_seen`.
+`0029_household_calendar_tokens.sql` (SB-101) is generated for
+`household_calendar_tokens`, with grants added at the end. It's numbered 0029
+because drizzle-kit names a migration after the journal's entry count, and
+with no `0025` that proposes `0028`, which `0028_stage_points` already has (and
+it would overwrite `0028_snapshot.json`). After `generate`, check the new
+file's number and move its snapshot to match.
+
+### Calendar feed token (SB-101)
+
+`household_calendar_tokens` holds one secret per household, behind the
+calendar subscription link `/calendar/<token>.ics`. Calendar apps fetch the
+feed with no login, so the token is the credential. It's a separate table,
+not a column on `households`, because every member can read their household
+row, and kids shouldn't see the link: RLS lets only parents read or change it.
+It's stored as the token itself (not a hash) so a parent can copy the link
+again later. `createCalendarToken()` / `isCalendarToken()` are in
+`src/calendar-token.ts`. The feed route runs on the owner connection, so RLS
+doesn't apply to it; regenerating replaces `token`, which stops the old link.
 
 **Two connection strings** (see `.env.example`):
 

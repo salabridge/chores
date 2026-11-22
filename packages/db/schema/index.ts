@@ -11,6 +11,7 @@ export * from './chore-type.ts';
 export * from './chores.table.ts';
 export * from './completion-approval.ts';
 export * from './device-profiles.table.ts';
+export * from './household-calendar-tokens.table.ts';
 export * from './household-invites.table.ts';
 export * from './household-member-pins.table.ts';
 export * from './household-members.table.ts';

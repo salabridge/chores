@@ -26,6 +26,12 @@ const config: StorybookConfig = {
 				),
 			},
 			{
+				find: /^#lib\/calendar\.remote\.js$/,
+				replacement: fileURLToPath(
+					new URL('./mocks/calendar-remote.ts', import.meta.url),
+				),
+			},
+			{
 				find: /^#lib\/setup\.remote\.js$/,
 				replacement: fileURLToPath(
 					new URL('./mocks/setup-remote.ts', import.meta.url),
