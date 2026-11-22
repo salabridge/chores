@@ -3,6 +3,7 @@
 	import AuthHeading from '#lib/components/auth/AuthHeading.svelte';
 	import AuthShell from '#lib/components/auth/AuthShell.svelte';
 	import FormAlert from '#lib/components/auth/FormAlert.svelte';
+	import CalendarLinkCard from '#lib/components/profiles/CalendarLinkCard.svelte';
 	import LandingRouteForm from '#lib/components/profiles/LandingRouteForm.svelte';
 	import Logo from '#lib/components/ui/Logo.svelte';
 	import PrimaryButton from '#lib/components/ui/PrimaryButton.svelte';
@@ -63,6 +64,8 @@
 		</form>
 
 		<LandingRouteForm landingRoute={data.landingRoute} />
+
+		<CalendarLinkCard url={data.calendarUrl} />
 
 		<form {...signOut}>
 			<button
